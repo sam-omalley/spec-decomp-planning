@@ -67,7 +67,11 @@ Single `ProjectGraph` = `nodes` + `edges` + `plans` (see `src/model/types.ts`).
    `coalesce` key so typing a title is one undo step; roots are ordered
    by `createdAt` — root-level reordering deferred, everything else
    carries `order` on its `contains` edge)
-3. Plans + planning view (create epics, assign tasks, switch plans)
+3. ✅ Plans + planning view (`PlanningView.tsx`; plan tabs + epic board +
+   draggable read-only spec tree, native HTML5 DnD; plan-scoped coverage
+   and same-plan overlap badge helpers in `planning.ts`, unit-tested;
+   selection lifted to `App` and synced across views; active plan is
+   view state, healed in `App` when the plan disappears)
 4. Graph view (React Flow / `@xyflow/react`)
 5. Dependency edges + blocked/cycle highlighting (Tarjan SCC)
 6. IndexedDB autosave + `.json` file save/load

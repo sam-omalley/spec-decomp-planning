@@ -93,6 +93,31 @@ body {
   text-align: center;
 }
 
+.view-tabs {
+  display: flex;
+  gap: 2px;
+  background: #ededeb;
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.view-tab {
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.view-tab-active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
 /* ------------------------------- outliner ------------------------------ */
 
 .outliner {
@@ -226,4 +251,251 @@ body {
 
 .button-primary:hover {
   filter: brightness(1.08);
+}
+
+/* ------------------------------- planning ------------------------------ */
+
+.app-main-wide {
+  max-width: 1280px;
+}
+
+.plan-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.plan-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.plan-tab:hover {
+  color: var(--text);
+}
+
+.plan-tab-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  cursor: default;
+}
+
+.plan-tab-new {
+  padding: 4px 10px;
+  font-weight: 600;
+}
+
+.plan-name-input {
+  font: inherit;
+  font-size: 13px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+}
+
+.icon-button {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text);
+}
+
+.planning-body {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.plan-tree {
+  flex: 0 0 340px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.pane-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.pane-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.plan-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  border-radius: 6px;
+  cursor: grab;
+  font-size: 13px;
+}
+
+.plan-tree-row:hover {
+  background: #f2f2f0;
+}
+
+.plan-tree-row.row-selected {
+  background: var(--accent-soft);
+}
+
+.plan-tree-title {
+  padding: 3px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.epic-tag {
+  flex: none;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 8px;
+  color: var(--epic-color);
+  background: color-mix(in srgb, var(--epic-color) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--epic-color) 30%, white);
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.epic-tag-inherited {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.plan-board {
+  flex: 1;
+  min-width: 0;
+}
+
+.epic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.epic-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+
+.epic-card-drop {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.epic-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.epic-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.epic-title-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  padding: 2px 0;
+}
+
+.overlap-badge {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #fdf1d7;
+  color: #8a5a00;
+  border: 1px solid #f0d9a3;
+  cursor: help;
+}
+
+.epic-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.member-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 3px 4px 3px 9px;
+  border-radius: 12px;
+  background: #f1f1ef;
+  border: 1px solid var(--border);
+  cursor: grab;
+  max-width: 100%;
+}
+
+.member-chip:hover {
+  background: #eaeae7;
+}
+
+.member-chip-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.member-chip-overlap {
+  border-color: #f0d9a3;
+  background: #fdf6e4;
 }

@@ -27,10 +27,14 @@ import {
 } from './outline.ts';
 import { OutlinerRow, type RowActions } from './OutlinerRow.tsx';
 
-export function Outliner() {
+interface OutlinerProps {
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}
+
+export function Outliner({ selectedId, onSelect }: OutlinerProps) {
   const graph = useProjectGraph();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   // Bumped to re-run the focus effect when the DOM may have dropped focus
   // (row reorders) even though selectedId itself is unchanged.
   const [focusTick, setFocusTick] = useState(0);
@@ -48,7 +52,7 @@ export function Outliner() {
   }, [selectedId, focusTick]);
 
   function requestFocus(id: string) {
-    setSelectedId(id);
+    onSelect(id);
     setFocusTick((t) => t + 1);
   }
 
@@ -71,9 +75,10 @@ export function Outliner() {
   }
 
   function remove(id: string) {
-    const node = graph.nodes[id];
+    const current = store.getState();
+    const node = current.nodes[id];
     if (!node) return;
-    const count = subtreeIds(graph, id).size;
+    const count = subtreeIds(current, id).size;
     if (count > 1) {
       const label = node.title.trim() === '' ? 'this item' : `“${node.title}”`;
       const ok = window.confirm(
@@ -87,7 +92,7 @@ export function Outliner() {
     const nextRows = visibleRows(next, collapsed);
     const target = nextRows[Math.min(Math.max(index - 1, 0), nextRows.length - 1)];
     if (target) requestFocus(target.id);
-    else setSelectedId(null);
+    else onSelect(null);
   }
 
   const actions: RowActions = {
@@ -95,24 +100,38 @@ export function Outliner() {
       store.commit((g) => updateNode(g, id, { title }), { coalesce: `title:${id}` });
     },
     createAfter,
+    // Targets are computed inside the commit callback, on the graph
+    // actually being mutated — the rendered `graph` can lag a keystroke
+    // behind when events arrive faster than React re-renders.
     indent(id) {
-      const target = indentTarget(graph, id);
+      let target: string | null = null;
+      store.commit((g) => {
+        target = indentTarget(g, id);
+        return target === null ? g : moveNode(g, id, target);
+      });
       if (target === null) return;
-      store.commit((g) => moveNode(g, id, target));
       expand(target);
       requestFocus(id);
     },
     outdent(id) {
-      const target = outdentTarget(graph, id);
-      if (target === null) return;
-      store.commit((g) => moveNode(g, id, target.parentId, target.index));
-      requestFocus(id);
+      let moved = false;
+      store.commit((g) => {
+        const target = outdentTarget(g, id);
+        if (target === null) return g;
+        moved = true;
+        return moveNode(g, id, target.parentId, target.index);
+      });
+      if (moved) requestFocus(id);
     },
     reorder(id, delta) {
-      const target = reorderTarget(graph, id, delta);
-      if (target === null) return;
-      store.commit((g) => moveNode(g, id, target.parentId, target.index));
-      requestFocus(id);
+      let moved = false;
+      store.commit((g) => {
+        const target = reorderTarget(g, id, delta);
+        if (target === null) return g;
+        moved = true;
+        return moveNode(g, id, target.parentId, target.index);
+      });
+      if (moved) requestFocus(id);
     },
     remove,
     toggleCollapse(id) {
@@ -127,7 +146,7 @@ export function Outliner() {
       if (target) requestFocus(target.id);
     },
     select(id) {
-      setSelectedId(id);
+      onSelect(id);
     },
     endEditing() {
       store.breakCoalescing();
