@@ -67,4 +67,10 @@ export interface ProjectGraph {
   nodes: Record<string, WorkNode>;
   edges: Record<string, Edge>;
   plans: Record<string, Plan>;
+  /**
+   * Display order of the spec-tree roots (parentless non-epic nodes).
+   * Roots have no 'contains' edge to carry an `order`, so it lives here.
+   * Maintained by every mutation; always exactly the set of roots.
+   */
+  rootOrder: string[];
 }

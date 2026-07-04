@@ -1,11 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createNode, emptyGraph, moveNode } from '../model/graph.ts';
+import { createNode, emptyGraph, moveNode, rootsOf } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
 import {
   indentTarget,
   insertionPointAfter,
-  orderedRoots,
   outdentTarget,
   reorderTarget,
   visibleRows,
@@ -65,8 +64,13 @@ describe('visibleRows', () => {
     );
   });
 
-  it('orders roots by createdAt', () => {
-    assert.deepEqual(orderedRoots(fixture()), ['app', 'docs']);
+  it('orders roots by rootOrder, not creation time', () => {
+    assert.deepEqual(rootsOf(fixture()), ['app', 'docs']);
+    const g = moveNode(fixture(), 'docs', null, 0);
+    assert.deepEqual(
+      visibleRows(g, none).map((r) => r.id),
+      ['docs', 'app', 'auth', 'login', 'signup', 'billing'],
+    );
   });
 });
 
@@ -94,7 +98,37 @@ describe('keyboard operation targets', () => {
     assert.deepEqual(reorderTarget(fixture(), 'billing', -1), { parentId: 'app', index: 0 });
     assert.equal(reorderTarget(fixture(), 'billing', 1), null);
     assert.equal(reorderTarget(fixture(), 'auth', -1), null);
-    assert.equal(reorderTarget(fixture(), 'app', 1), null, 'roots are not reorderable');
+    assert.deepEqual(
+      reorderTarget(fixture(), 'app', 1),
+      { parentId: null, index: 1 },
+      'roots reorder within rootOrder',
+    );
+    assert.equal(reorderTarget(fixture(), 'app', -1), null);
+    assert.equal(reorderTarget(fixture(), 'docs', 1), null);
+  });
+
+  // Regression: Enter on an earlier root used to append the new sibling
+  // at the end of the list instead of right after the cursor.
+  it('creating a sibling after an earlier root inserts it there, not at the end', () => {
+    let g = fixture();
+    const { parentId, index } = insertionPointAfter(g, 'app');
+    g = createNode(g, { id: 'new', title: 'New' });
+    g = moveNode(g, 'new', parentId, index);
+    assert.deepEqual(rootsOf(g), ['app', 'new', 'docs']);
+  });
+
+  // Regression: outdenting to root level used to lose the node's
+  // position (it jumped to wherever createdAt sorted it).
+  it('outdenting to root level lands right after the former parent', () => {
+    let g = fixture();
+    const target = outdentTarget(g, 'auth')!;
+    assert.deepEqual(target, { parentId: null, index: 1 });
+    g = moveNode(g, 'auth', target.parentId, target.index);
+    assert.deepEqual(rootsOf(g), ['app', 'auth', 'docs']);
+    assert.deepEqual(
+      visibleRows(g, none).map((r) => `${r.depth}:${r.id}`),
+      ['0:app', '1:billing', '0:auth', '1:login', '1:signup', '0:docs'],
+    );
   });
 
   it('indent then outdent round-trips the tree shape', () => {

@@ -30,7 +30,7 @@ export function createId(): string {
 }
 
 export function emptyGraph(): ProjectGraph {
-  return { nodes: {}, edges: {}, plans: {} };
+  return { nodes: {}, edges: {}, plans: {}, rootOrder: [] };
 }
 
 function nowIso(): string {
@@ -41,6 +41,24 @@ function requireNode(graph: ProjectGraph, id: string): WorkNode {
   const node = graph.nodes[id];
   if (!node) throw new GraphError(`Node not found: ${id}`);
   return node;
+}
+
+function withoutRoot(graph: ProjectGraph, id: string): ProjectGraph {
+  if (!graph.rootOrder.includes(id)) return graph;
+  return { ...graph, rootOrder: graph.rootOrder.filter((r) => r !== id) };
+}
+
+function withRootAppended(graph: ProjectGraph, id: string): ProjectGraph {
+  if (graph.rootOrder.includes(id)) return graph;
+  return { ...graph, rootOrder: [...graph.rootOrder, id] };
+}
+
+/** Repositions `id` within rootOrder (it must already be a root). */
+function setRootIndex(graph: ProjectGraph, id: string, index: number): ProjectGraph {
+  const others = graph.rootOrder.filter((r) => r !== id);
+  const clamped = Math.max(0, Math.min(index, others.length));
+  others.splice(clamped, 0, id);
+  return { ...graph, rootOrder: others };
 }
 
 /* ------------------------------------------------------------------ */
@@ -67,15 +85,9 @@ export function childrenOf(graph: ProjectGraph, id: string): string[] {
     .map((e) => e.to);
 }
 
-/** Non-epic nodes with no parent, i.e. the spec-tree roots. */
+/** The spec-tree roots (parentless non-epic nodes), in display order. */
 export function rootsOf(graph: ProjectGraph): string[] {
-  const hasParent = new Set<string>();
-  for (const edge of Object.values(graph.edges)) {
-    if (edge.type === 'contains') hasParent.add(edge.to);
-  }
-  return Object.values(graph.nodes)
-    .filter((n) => n.type !== 'epic' && !hasParent.has(n.id))
-    .map((n) => n.id);
+  return [...graph.rootOrder];
 }
 
 /** `id` plus all its descendants via 'contains'. */
@@ -180,7 +192,9 @@ export function createNode(
     ...graph,
     nodes: { ...graph.nodes, [node.id]: node },
   };
-  if (parentId !== undefined) {
+  if (parentId === undefined) {
+    next = withRootAppended(next, node.id);
+  } else {
     next = addEdge(next, { type: 'contains', from: parentId, to: node.id });
   }
   return next;
@@ -214,12 +228,14 @@ export function deleteNode(graph: ProjectGraph, id: string): ProjectGraph {
   for (const [edgeId, edge] of Object.entries(graph.edges)) {
     if (!removed.has(edge.from) && !removed.has(edge.to)) edges[edgeId] = edge;
   }
-  return { ...graph, nodes, edges };
+  const rootOrder = graph.rootOrder.filter((id) => !removed.has(id));
+  return { ...graph, nodes, edges, rootOrder };
 }
 
 /**
- * Reparents `id` under `newParentId` (or to root when null), optionally
- * at a specific sibling index. Planning data is untouched by design.
+ * Reparents `id` under `newParentId` (or to root level when null),
+ * optionally at a specific sibling index — for roots the index is a
+ * position in `rootOrder`. Planning data is untouched by design.
  */
 export function moveNode(
   graph: ProjectGraph,
@@ -234,9 +250,9 @@ export function moveNode(
 
   if (newParentId !== null) {
     next = addEdge(next, { type: 'contains', from: newParentId, to: id });
-  }
-  if (newParentId !== null && index !== undefined) {
-    next = setChildIndex(next, newParentId, id, index);
+    if (index !== undefined) next = setChildIndex(next, newParentId, id, index);
+  } else if (index !== undefined) {
+    next = setRootIndex(next, id, index);
   }
   return next;
 }
@@ -322,14 +338,21 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
     to: input.to,
     ...(order !== undefined ? { order } : {}),
   };
-  return { ...graph, edges: { ...graph.edges, [edge.id]: edge } };
+  let next: ProjectGraph = { ...graph, edges: { ...graph.edges, [edge.id]: edge } };
+  // Gaining a parent removes the child from the root order.
+  if (edge.type === 'contains') next = withoutRoot(next, edge.to);
+  return next;
 }
 
 export function removeEdge(graph: ProjectGraph, edgeId: string): ProjectGraph {
-  if (!graph.edges[edgeId]) throw new GraphError(`Edge not found: ${edgeId}`);
+  const edge = graph.edges[edgeId];
+  if (!edge) throw new GraphError(`Edge not found: ${edgeId}`);
   const edges = { ...graph.edges };
   delete edges[edgeId];
-  return { ...graph, edges };
+  let next: ProjectGraph = { ...graph, edges };
+  // Losing its parent makes the child a root.
+  if (edge.type === 'contains') next = withRootAppended(next, edge.to);
+  return next;
 }
 
 /* ------------------------------------------------------------------ */
