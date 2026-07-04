@@ -1,0 +1,229 @@
+:root {
+  --bg: #fbfbfa;
+  --panel: #ffffff;
+  --text: #1f2328;
+  --muted: #767b83;
+  --accent: #4667d4;
+  --accent-soft: #eef1fc;
+  --border: #e4e5e9;
+  --bullet: #b6bac1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.app-header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.app-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.app-spacer {
+  flex: 1;
+}
+
+.app-header button {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.app-header button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.app-header button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+.app-hints {
+  position: sticky;
+  bottom: 0;
+  padding: 6px 20px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+/* ------------------------------- outliner ------------------------------ */
+
+.outliner {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+  min-height: 30px;
+}
+
+.row:hover {
+  background: #f2f2f0;
+}
+
+.row-selected,
+.row-selected:hover {
+  background: var(--accent-soft);
+}
+
+.chevron {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 18px;
+  cursor: pointer;
+  border-radius: 4px;
+  visibility: hidden;
+  transition: transform 80ms ease;
+}
+
+.row:hover .chevron,
+.row-selected .chevron,
+.chevron-closed {
+  visibility: visible;
+}
+
+.chevron:hover {
+  background: #e6e6e3;
+}
+
+.chevron-closed {
+  transform: rotate(-90deg);
+}
+
+.chevron-spacer {
+  visibility: hidden;
+}
+
+.bullet {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 6px;
+  border-radius: 50%;
+  background: var(--bullet);
+}
+
+.bullet-parent {
+  box-shadow: 0 0 0 3px #e8e8e5;
+}
+
+.row-input {
+  flex: 1;
+  font: inherit;
+  font-size: 14px;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 5px 6px;
+  color: var(--text);
+}
+
+.row-input::placeholder {
+  color: #c0c3c9;
+}
+
+.row-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  background: #ececea;
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-right: 8px;
+}
+
+.add-row {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.add-row:hover {
+  background: #f2f2f0;
+  color: var(--text);
+}
+
+.outliner-empty {
+  margin-top: 80px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.button-primary {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.button-primary:hover {
+  filter: brightness(1.08);
+}

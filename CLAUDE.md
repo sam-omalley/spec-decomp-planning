@@ -62,7 +62,11 @@ Single `ProjectGraph` = `nodes` + `edges` + `plans` (see `src/model/types.ts`).
 ## Slice plan
 
 1. ✅ Data model + store + undo/redo + tests (33 tests)
-2. Outliner spec view (create/indent/collapse/edit, keyboard-first)
+2. ✅ Outliner spec view (`src/ui/`; pure row/keyboard-target helpers in
+   `outline.ts` are unit-tested; store commits gained an optional
+   `coalesce` key so typing a title is one undo step; roots are ordered
+   by `createdAt` — root-level reordering deferred, everything else
+   carries `order` on its `contains` edge)
 3. Plans + planning view (create epics, assign tasks, switch plans)
 4. Graph view (React Flow / `@xyflow/react`)
 5. Dependency edges + blocked/cycle highlighting (Tarjan SCC)

@@ -10,6 +10,10 @@
  * mutations (e.g. remove from one epic + add to another) and they will
  * undo atomically.
  *
+ * Consecutive commits sharing a `coalesce` key collapse into one undo
+ * step (e.g. keystrokes while editing a title). Any other commit,
+ * undo/redo, reset, or an explicit breakCoalescing() ends the run.
+ *
  * React binding (later slice) is useSyncExternalStore(store.subscribe,
  * store.getState) — no state library needed.
  */
@@ -21,11 +25,17 @@ const HISTORY_LIMIT = 200;
 
 export type Mutation = (graph: ProjectGraph) => ProjectGraph;
 
+export interface CommitOptions {
+  /** Commits with the same key in a row collapse into one undo step. */
+  coalesce?: string;
+}
+
 export class ProjectStore {
   #state: ProjectGraph;
   #undoStack: ProjectGraph[] = [];
   #redoStack: ProjectGraph[] = [];
   #listeners = new Set<() => void>();
+  #lastCoalesceKey: string | null = null;
 
   constructor(initial?: ProjectGraph) {
     this.#state = initial ?? emptyGraph();
@@ -42,15 +52,25 @@ export class ProjectStore {
    * Applies a mutation as a single undoable step. If the mutation throws,
    * state and history are unchanged. Returns the new graph.
    */
-  commit(mutate: Mutation): ProjectGraph {
+  commit(mutate: Mutation, options?: CommitOptions): ProjectGraph {
     const next = mutate(this.#state);
     if (next === this.#state) return next;
-    this.#undoStack.push(this.#state);
-    if (this.#undoStack.length > HISTORY_LIMIT) this.#undoStack.shift();
+    const key = options?.coalesce ?? null;
+    const coalesced = key !== null && key === this.#lastCoalesceKey;
+    if (!coalesced) {
+      this.#undoStack.push(this.#state);
+      if (this.#undoStack.length > HISTORY_LIMIT) this.#undoStack.shift();
+    }
+    this.#lastCoalesceKey = key;
     this.#redoStack = [];
     this.#state = next;
     this.#notify();
     return next;
+  }
+
+  /** Ends the current coalescing run (e.g. when a text field blurs). */
+  breakCoalescing(): void {
+    this.#lastCoalesceKey = null;
   }
 
   /** Replaces the whole project (file load). Clears history. */
@@ -58,6 +78,7 @@ export class ProjectStore {
     this.#state = graph;
     this.#undoStack = [];
     this.#redoStack = [];
+    this.#lastCoalesceKey = null;
     this.#notify();
   }
 
@@ -74,6 +95,7 @@ export class ProjectStore {
     if (!previous) return false;
     this.#redoStack.push(this.#state);
     this.#state = previous;
+    this.#lastCoalesceKey = null;
     this.#notify();
     return true;
   }
@@ -83,6 +105,7 @@ export class ProjectStore {
     if (!next) return false;
     this.#undoStack.push(this.#state);
     this.#state = next;
+    this.#lastCoalesceKey = null;
     this.#notify();
     return true;
   }
