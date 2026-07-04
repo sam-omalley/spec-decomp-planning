@@ -70,6 +70,51 @@ describe('commits', () => {
   });
 });
 
+describe('coalesced commits', () => {
+  it('commits sharing a coalesce key form one undo step', () => {
+    const store = seeded();
+    store.commit((g) => updateNode(g, 'coupons', { title: 'C' }), { coalesce: 'title:coupons' });
+    store.commit((g) => updateNode(g, 'coupons', { title: 'Co' }), { coalesce: 'title:coupons' });
+    store.commit((g) => updateNode(g, 'coupons', { title: 'Code' }), { coalesce: 'title:coupons' });
+    store.undo();
+    assert.equal(store.getState().nodes['coupons']!.title, 'Coupons');
+    store.redo();
+    assert.equal(store.getState().nodes['coupons']!.title, 'Code');
+  });
+
+  it('a different key or a plain commit ends the run', () => {
+    const store = seeded();
+    store.commit((g) => updateNode(g, 'coupons', { title: 'A' }), { coalesce: 'title:coupons' });
+    store.commit((g) => updateNode(g, 'pricing', { title: 'B' }), { coalesce: 'title:pricing' });
+    store.commit((g) => updateNode(g, 'pricing', { title: 'BB' }), { coalesce: 'title:pricing' });
+    store.commit((g) => updateNode(g, 'coupons', { status: 'done' }));
+    store.undo();
+    store.undo();
+    assert.equal(store.getState().nodes['pricing']!.title, 'Pricing');
+    assert.equal(store.getState().nodes['coupons']!.title, 'A');
+  });
+
+  it('breakCoalescing splits an editing session into two steps', () => {
+    const store = seeded();
+    store.commit((g) => updateNode(g, 'coupons', { title: 'A' }), { coalesce: 'title:coupons' });
+    store.breakCoalescing();
+    store.commit((g) => updateNode(g, 'coupons', { title: 'AB' }), { coalesce: 'title:coupons' });
+    store.undo();
+    assert.equal(store.getState().nodes['coupons']!.title, 'A');
+    store.undo();
+    assert.equal(store.getState().nodes['coupons']!.title, 'Coupons');
+  });
+
+  it('undo ends the run: typing after undo does not merge into the reverted step', () => {
+    const store = seeded();
+    store.commit((g) => updateNode(g, 'coupons', { title: 'A' }), { coalesce: 'title:coupons' });
+    store.undo();
+    store.commit((g) => updateNode(g, 'coupons', { title: 'Z' }), { coalesce: 'title:coupons' });
+    store.undo();
+    assert.equal(store.getState().nodes['coupons']!.title, 'Coupons');
+  });
+});
+
 describe('undo and redo', () => {
   it('round-trips a delete', () => {
     const store = seeded();
