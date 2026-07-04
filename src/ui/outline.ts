@@ -1,12 +1,9 @@
 /**
  * Pure helpers behind the outliner view: flatten the 'contains' forest
  * into visible rows and compute the structural targets for keyboard
- * operations (indent, outdent, reorder, insert-after).
- *
- * Root-level nodes have no 'contains' edge to carry an order, so roots
- * are shown in (createdAt, id) order. Consequence: new/outdented roots
- * sort by creation time rather than by where the cursor was. Fine for
- * the common single-root spec; revisit if multi-root reordering matters.
+ * operations (indent, outdent, reorder, insert-after). Root order is
+ * authoritative in the graph (`rootOrder`), so every operation works
+ * the same at root level as anywhere else.
  */
 
 import { childrenOf, parentOf, rootsOf } from '../model/graph.ts';
@@ -19,18 +16,10 @@ export interface OutlineRow {
   collapsed: boolean;
 }
 
-export function orderedRoots(graph: ProjectGraph): string[] {
-  return rootsOf(graph).sort((a, b) => {
-    const na = graph.nodes[a]!;
-    const nb = graph.nodes[b]!;
-    return na.createdAt.localeCompare(nb.createdAt) || a.localeCompare(b);
-  });
-}
-
 /** Siblings of `id` in display order, including `id` itself. */
 export function siblingsOf(graph: ProjectGraph, id: string): string[] {
   const parent = parentOf(graph, id);
-  return parent === null ? orderedRoots(graph) : childrenOf(graph, parent);
+  return parent === null ? rootsOf(graph) : childrenOf(graph, parent);
 }
 
 /** Depth-first flattening of the forest, skipping collapsed subtrees. */
@@ -47,15 +36,11 @@ export function visibleRows(
       for (const child of children) visit(child, depth + 1);
     }
   };
-  for (const root of orderedRoots(graph)) visit(root, 0);
+  for (const root of rootsOf(graph)) visit(root, 0);
   return rows;
 }
 
-/**
- * Where a new sibling created "after `id`" goes. At root level the
- * index is meaningless (roots are creation-ordered); callers only need
- * parentId there.
- */
+/** Where a new sibling created "after `id`" goes. */
 export function insertionPointAfter(
   graph: ProjectGraph,
   id: string,
@@ -81,16 +66,14 @@ export function outdentTarget(
   return insertionPointAfter(graph, parent);
 }
 
-/** Swap target for Alt+Up/Down. Null when at the edge or at root level. */
+/** Swap target for Alt+Up/Down. Null when already at the edge. */
 export function reorderTarget(
   graph: ProjectGraph,
   id: string,
   delta: -1 | 1,
-): { parentId: string; index: number } | null {
-  const parentId = parentOf(graph, id);
-  if (parentId === null) return null;
-  const siblings = childrenOf(graph, parentId);
+): { parentId: string | null; index: number } | null {
+  const siblings = siblingsOf(graph, id);
   const index = siblings.indexOf(id) + delta;
   if (index < 0 || index >= siblings.length) return null;
-  return { parentId, index };
+  return { parentId: parentOf(graph, id), index };
 }

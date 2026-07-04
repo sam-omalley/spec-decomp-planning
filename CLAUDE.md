@@ -22,7 +22,9 @@ Single `ProjectGraph` = `nodes` + `edges` + `plans` (see `src/model/types.ts`).
   all relationships are edges.
 - **Edges**: typed — `contains`, `depends_on`, `implements`,
   `belongs_to_epic`, `blocks`, `duplicates`, `related_to`. `contains` edges
-  carry `order` for sibling ordering.
+  carry `order` for sibling ordering; root order lives in
+  `ProjectGraph.rootOrder` (maintained by every mutation, reconciled on
+  file load — file version 2, v1 migrates by createdAt).
 - **Plans**: named alternative organizations (e.g. "MVP-first",
   "Infra-first"). Epics are nodes with `planId`; membership is a
   `belongs_to_epic` edge from member → epic.
@@ -64,9 +66,7 @@ Single `ProjectGraph` = `nodes` + `edges` + `plans` (see `src/model/types.ts`).
 1. ✅ Data model + store + undo/redo + tests (33 tests)
 2. ✅ Outliner spec view (`src/ui/`; pure row/keyboard-target helpers in
    `outline.ts` are unit-tested; store commits gained an optional
-   `coalesce` key so typing a title is one undo step; roots are ordered
-   by `createdAt` — root-level reordering deferred, everything else
-   carries `order` on its `contains` edge)
+   `coalesce` key so typing a title is one undo step)
 3. ✅ Plans + planning view (`PlanningView.tsx`; plan tabs + epic board +
    draggable read-only spec tree, native HTML5 DnD; plan-scoped coverage
    and same-plan overlap badge helpers in `planning.ts`, unit-tested;

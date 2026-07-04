@@ -69,7 +69,7 @@ export function Outliner({ selectedId, onSelect }: OutlinerProps) {
       if (afterId === null) return createNode(g, { id: newId, title: '' });
       const { parentId, index } = insertionPointAfter(g, afterId);
       g = createNode(g, { id: newId, title: '' }, parentId ?? undefined);
-      return parentId === null ? g : moveNode(g, newId, parentId, index);
+      return moveNode(g, newId, parentId, index);
     });
     requestFocus(newId);
   }
