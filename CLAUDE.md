@@ -79,6 +79,12 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
   drop moves (single membership), drag a chip to the spec pane or × to
   unassign. Spec pane shows coverage tags (solid = direct, dashed =
   inherited via ancestor), colored per root group.
+- Details, Things3-style: every node (both sides) has Title + optional
+  Details (the `description` field). Titles only until expanded — ⌘↩
+  or the ≡ indicator opens an inline card (one per outliner, closes on
+  selection move / Esc / ⌘↩). Details edits coalesce per editor visit;
+  opening/closing the card breaks coalescing explicitly because the
+  textarea's blur handler does not fire on unmount.
 
 ## Slice plan
 

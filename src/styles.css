@@ -420,3 +420,56 @@ body {
   border-color: #f0d9a3;
   background: #fdf6e4;
 }
+
+/* --------------------------- details (Things3) ------------------------- */
+
+.details-indicator {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.details-indicator:hover {
+  background: #e6e6e3;
+  color: var(--text);
+}
+
+.details-indicator-static {
+  cursor: help;
+  padding: 0 4px;
+}
+
+.row-open,
+.row-open:hover {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  margin: 4px 0;
+}
+
+.row-details {
+  flex-basis: 100%;
+  margin: 0 10px 8px 44px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  min-height: 44px;
+  field-sizing: content;
+}
+
+.row-details::placeholder {
+  color: #c0c3c9;
+}
