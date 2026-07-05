@@ -74,13 +74,13 @@ export function App() {
       <footer className="app-hints">
         {view === 'spec' ? (
           <>
-            Enter sibling · Tab indent · ⇧Tab outdent · ⌥↑↓ move · ⌘. fold · ⌫ on empty /
-            ⌘⌫ delete · ⌘Z undo
+            Enter sibling · Tab indent · ⇧Tab outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details ·
+            ⌫ on empty / ⌘⌫ delete · ⌘Z undo
           </>
         ) : (
           <>
-            Groups edit like the outliner (Enter · Tab · ⌥↑↓) · drag spec items onto groups ·
-            drop moves, drag to spec pane or × unassigns
+            Groups edit like the outliner (Enter · Tab · ⌥↑↓ · ⌘↩ details) · drag spec items
+            onto groups · drop moves, drag to spec pane or × unassigns
           </>
         )}
       </footer>

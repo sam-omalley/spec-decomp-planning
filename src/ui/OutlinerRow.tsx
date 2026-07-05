@@ -10,6 +10,8 @@ export interface RowDropProps {
 
 export interface RowActions {
   setTitle: (id: string, title: string) => void;
+  setDetails: (id: string, details: string) => void;
+  toggleDetails: (id: string) => void;
   createAfter: (id: string) => void;
   indent: (id: string) => void;
   outdent: (id: string) => void;
@@ -24,6 +26,10 @@ export interface RowActions {
 interface OutlinerRowProps {
   row: OutlineRow;
   title: string;
+  /** The node's details text (description field). */
+  details: string;
+  /** Whether the Things3-style details card is open for this row. */
+  expanded: boolean;
   childCount: number;
   selected: boolean;
   actions: RowActions;
@@ -37,6 +43,8 @@ interface OutlinerRowProps {
 export function OutlinerRow({
   row,
   title,
+  details,
+  expanded,
   childCount,
   selected,
   actions,
@@ -48,7 +56,10 @@ export function OutlinerRow({
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     const mod = event.metaKey || event.ctrlKey;
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' && mod) {
+      event.preventDefault();
+      actions.toggleDetails(id);
+    } else if (event.key === 'Enter') {
       event.preventDefault();
       actions.createAfter(id);
     } else if (event.key === 'Tab') {
@@ -72,9 +83,10 @@ export function OutlinerRow({
   }
 
   const dropClass = dropProps?.dropping ? ' row-drop' : '';
+  const openClass = expanded ? ' row-open' : '';
   return (
     <div
-      className={`row${selected ? ' row-selected' : ''}${dropClass}`}
+      className={`row${selected ? ' row-selected' : ''}${dropClass}${openClass}`}
       style={{ paddingLeft: `${row.depth * 22 + 8}px` }}
       onDragOver={dropProps?.onDragOver}
       onDragLeave={dropProps?.onDragLeave}
@@ -104,8 +116,35 @@ export function OutlinerRow({
         onFocus={() => actions.select(id)}
         onBlur={() => actions.endEditing()}
       />
+      {!expanded && details.trim() !== '' && (
+        <button
+          className="details-indicator"
+          title="Show details (⌘↩)"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => actions.toggleDetails(id)}
+        >
+          ≡
+        </button>
+      )}
       {row.collapsed && <span className="row-count">{childCount}</span>}
       {extras}
+      {expanded && (
+        <textarea
+          className="row-details"
+          value={details}
+          placeholder="Details…"
+          autoFocus
+          onChange={(e) => actions.setDetails(id, e.target.value)}
+          onBlur={() => actions.endEditing()}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
+              e.preventDefault();
+              actions.toggleDetails(id);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

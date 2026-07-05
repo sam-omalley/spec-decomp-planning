@@ -180,6 +180,11 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
               <span className="plan-tree-title">
                 {node.title.trim() === '' ? 'Untitled' : node.title}
               </span>
+              {node.description.trim() !== '' && (
+                <span className="details-indicator details-indicator-static" title={node.description}>
+                  ≡
+                </span>
+              )}
               {coverage.map(({ groupId, via }) => (
                 <span
                   key={groupId}

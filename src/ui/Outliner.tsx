@@ -58,6 +58,8 @@ export function Outliner({
 }: OutlinerProps) {
   const graph = useProjectGraph();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // Things3-style: at most one row shows its details card.
+  const [detailsId, setDetailsId] = useState<string | null>(null);
   // Bumped to re-run the focus effect when the DOM may have dropped focus
   // (row reorders) even though selectedId itself is unchanged.
   const [focusTick, setFocusTick] = useState(0);
@@ -68,14 +70,24 @@ export function Outliner({
     [graph, collapsed, side],
   );
 
+  // Moving the selection away closes the open details card.
+  useEffect(() => {
+    if (detailsId !== null && selectedId !== detailsId) {
+      setDetailsId(null);
+      store.breakCoalescing();
+    }
+  }, [selectedId, detailsId]);
+
   useEffect(() => {
     if (selectedId === null) return;
+    // The details textarea owns focus while its card is open (autoFocus).
+    if (detailsId === selectedId) return;
     const el = inputRefs.current.get(selectedId);
     if (el && document.activeElement !== el) {
       el.focus();
       el.setSelectionRange(el.value.length, el.value.length);
     }
-  }, [selectedId, focusTick]);
+  }, [selectedId, focusTick, detailsId]);
 
   function requestFocus(id: string) {
     onSelect(id);
@@ -133,6 +145,24 @@ export function Outliner({
   const actions: RowActions = {
     setTitle(id, title) {
       store.commit((g) => updateNode(g, id, { title }), { coalesce: `title:${id}` });
+    },
+    setDetails(id, details) {
+      store.commit((g) => updateNode(g, id, { description: details }), {
+        coalesce: `details:${id}`,
+      });
+    },
+    toggleDetails(id) {
+      // Opening or closing the card ends the current typing session, so
+      // each visit to the details editor is its own undo step (the
+      // textarea's blur handler does not fire when it unmounts).
+      store.breakCoalescing();
+      if (detailsId === id) {
+        setDetailsId(null);
+        requestFocus(id);
+      } else {
+        setDetailsId(id);
+        onSelect(id);
+      }
     },
     createAfter,
     // Targets are computed inside the commit callback, on the graph
@@ -206,6 +236,8 @@ export function Outliner({
           key={row.id}
           row={row}
           title={graph.nodes[row.id]?.title ?? ''}
+          details={graph.nodes[row.id]?.description ?? ''}
+          expanded={row.id === detailsId}
           childCount={row.collapsed ? subtreeIds(graph, row.id).size - 1 : 0}
           selected={row.id === selectedId}
           actions={actions}
