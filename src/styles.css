@@ -473,3 +473,12 @@ body {
 .row-details::placeholder {
   color: #c0c3c9;
 }
+
+.details-indicator-empty {
+  visibility: hidden;
+  color: #c0c3c9;
+}
+
+.row:hover .details-indicator-empty {
+  visibility: visible;
+}

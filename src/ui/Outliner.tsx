@@ -78,6 +78,21 @@ export function Outliner({
     }
   }, [selectedId, detailsId]);
 
+  // So does clicking anywhere outside the card — not just on another
+  // row. pointerdown (not click) so it fires before whatever was
+  // clicked handles the event.
+  useEffect(() => {
+    if (detailsId === null) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.row-open')) return;
+      setDetailsId(null);
+      store.breakCoalescing();
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [detailsId]);
+
   useEffect(() => {
     if (selectedId === null) return;
     // The details textarea owns focus while its card is open (autoFocus).

@@ -116,10 +116,12 @@ export function OutlinerRow({
         onFocus={() => actions.select(id)}
         onBlur={() => actions.endEditing()}
       />
-      {!expanded && details.trim() !== '' && (
+      {!expanded && (
         <button
-          className="details-indicator"
-          title="Show details (⌘↩)"
+          className={`details-indicator${
+            details.trim() === '' ? ' details-indicator-empty' : ''
+          }`}
+          title={details.trim() === '' ? 'Add details (⌘↩)' : 'Show details (⌘↩)'}
           tabIndex={-1}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => actions.toggleDetails(id)}
