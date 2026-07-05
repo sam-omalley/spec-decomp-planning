@@ -140,8 +140,8 @@ export function App() {
       <footer className="app-hints">
         {view === 'spec' && (
           <>
-            Enter sibling · Tab indent · ⇧Tab outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details ·
-            ⌫ on empty / ⌘⌫ delete · ⌘Z undo
+            Enter sibling · Tab indent · ⇧Tab outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details
+            &amp; dependencies · bullet click = status · ⌫ on empty / ⌘⌫ delete · ⌘Z undo
           </>
         )}
         {view === 'planning' && (

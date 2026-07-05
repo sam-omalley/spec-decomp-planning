@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import {
   createGroup,
   createId,
@@ -22,6 +23,8 @@ import {
   subtreeIds,
   updateNode,
 } from '../model/graph.ts';
+import type { Status } from '../model/types.ts';
+import { DependencyEditor } from './DependencyEditor.tsx';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import {
   indentTarget,
@@ -68,6 +71,15 @@ export function Outliner({
   const rows = useMemo(
     () => visibleRows(graph, collapsed, side),
     [graph, collapsed, side],
+  );
+
+  // Dependency signals (work side only): who is waiting, who cycles.
+  const depInfo = useMemo(
+    () =>
+      side === 'work'
+        ? { waiting: waitingMap(graph), cycles: cycleIndexOf(graph) }
+        : null,
+    [graph, side],
   );
 
   // Moving the selection away closes the open details card.
@@ -233,6 +245,43 @@ export function Outliner({
     },
   };
 
+  const STATUS_CYCLE: Status[] = ['not_started', 'in_progress', 'done'];
+  function cycleStatus(id: string) {
+    store.commit((g) => {
+      const current = g.nodes[id]?.status ?? 'not_started';
+      const at = STATUS_CYCLE.indexOf(current);
+      const next = STATUS_CYCLE[(at + 1) % STATUS_CYCLE.length]!;
+      return updateNode(g, id, { status: next });
+    });
+  }
+
+  function depBadges(id: string): ReactNode {
+    if (depInfo === null) return null;
+    const inCycle = depInfo.cycles.has(id);
+    const waiting = depInfo.waiting.get(id);
+    if (!inCycle && waiting === undefined) return null;
+    return (
+      <>
+        {inCycle && (
+          <span className="dep-badge dep-badge-cycle" title="Part of a dependency cycle">
+            ⟳ cycle
+          </span>
+        )}
+        {waiting !== undefined && (
+          <span
+            className="dep-badge"
+            title={
+              'Waiting on ' +
+              waiting.map((w) => `“${graph.nodes[w]?.title ?? '?'}”`).join(', ')
+            }
+          >
+            ⧗ {waiting.length}
+          </span>
+        )}
+      </>
+    );
+  }
+
   if (rows.length === 0) {
     return (
       <div className="outliner-empty">
@@ -256,8 +305,16 @@ export function Outliner({
           childCount={row.collapsed ? subtreeIds(graph, row.id).size - 1 : 0}
           selected={row.id === selectedId}
           actions={actions}
-          extras={rowExtras?.(row.id)}
+          extras={
+            <>
+              {depBadges(row.id)}
+              {rowExtras?.(row.id)}
+            </>
+          }
           dropProps={rowDropProps?.(row.id)}
+          status={side === 'work' ? graph.nodes[row.id]?.status : undefined}
+          onCycleStatus={side === 'work' ? cycleStatus : undefined}
+          detailsExtras={side === 'work' ? <DependencyEditor id={row.id} /> : undefined}
           registerInput={(id, el) => {
             if (el) inputRefs.current.set(id, el);
             else inputRefs.current.delete(id);

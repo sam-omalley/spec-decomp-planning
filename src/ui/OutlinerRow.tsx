@@ -1,4 +1,5 @@
 import type { DragEvent, KeyboardEvent, ReactNode } from 'react';
+import type { Status } from '../model/types.ts';
 import type { OutlineRow } from './outline.ts';
 
 export interface RowDropProps {
@@ -38,6 +39,11 @@ interface OutlinerRowProps {
   extras?: ReactNode;
   /** Present when the row is a drop target (planning view). */
   dropProps?: RowDropProps;
+  /** Work rows: current status; the bullet becomes a status control. */
+  status?: Status;
+  onCycleStatus?: (id: string) => void;
+  /** Extra content inside the expanded details card (dependency editor). */
+  detailsExtras?: ReactNode;
 }
 
 export function OutlinerRow({
@@ -51,6 +57,9 @@ export function OutlinerRow({
   registerInput,
   extras,
   dropProps,
+  status,
+  onCycleStatus,
+  detailsExtras,
 }: OutlinerRowProps) {
   const { id } = row;
 
@@ -105,10 +114,22 @@ export function OutlinerRow({
       ) : (
         <span className="chevron chevron-spacer" />
       )}
-      <span className={`bullet${row.hasChildren ? ' bullet-parent' : ''}`} />
+      {onCycleStatus !== undefined && status !== undefined ? (
+        <button
+          className={`bullet bullet-status status-${status}${
+            row.hasChildren ? ' bullet-parent' : ''
+          }`}
+          title={`Status: ${status.replace('_', ' ')} — click to change`}
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onCycleStatus(id)}
+        />
+      ) : (
+        <span className={`bullet${row.hasChildren ? ' bullet-parent' : ''}`} />
+      )}
       <input
         ref={(el) => registerInput(id, el)}
-        className="row-input"
+        className={`row-input${status === 'done' ? ' row-input-done' : ''}`}
         value={title}
         placeholder="Untitled"
         onChange={(e) => actions.setTitle(id, e.target.value)}
@@ -132,20 +153,23 @@ export function OutlinerRow({
       {row.collapsed && <span className="row-count">{childCount}</span>}
       {extras}
       {expanded && (
-        <textarea
-          className="row-details"
-          value={details}
-          placeholder="Details…"
-          autoFocus
-          onChange={(e) => actions.setDetails(id, e.target.value)}
-          onBlur={() => actions.endEditing()}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
-              e.preventDefault();
-              actions.toggleDetails(id);
-            }
-          }}
-        />
+        <>
+          <textarea
+            className="row-details"
+            value={details}
+            placeholder="Details…"
+            autoFocus
+            onChange={(e) => actions.setDetails(id, e.target.value)}
+            onBlur={() => actions.endEditing()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
+                e.preventDefault();
+                actions.toggleDetails(id);
+              }
+            }}
+          />
+          {detailsExtras}
+        </>
       )}
     </div>
   );

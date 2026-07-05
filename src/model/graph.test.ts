@@ -259,6 +259,18 @@ describe('cascade delete', () => {
 });
 
 describe('dependencies', () => {
+  it('rejects dependencies touching groups', () => {
+    const g = planned();
+    assert.throws(
+      () => addEdge(g, { type: 'depends_on', from: 'oauth', to: 'epicA' }),
+      /connect work nodes/,
+    );
+    assert.throws(
+      () => addEdge(g, { type: 'blocks', from: 'block1', to: 'oauth' }),
+      /connect work nodes/,
+    );
+  });
+
   it('allows dependency cycles (they are visualized, not forbidden)', () => {
     let g = fixture();
     g = addEdge(g, { type: 'depends_on', from: 'oauth', to: 'password' });
