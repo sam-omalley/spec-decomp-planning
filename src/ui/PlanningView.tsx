@@ -15,26 +15,15 @@ import type { DragEvent, ReactNode } from 'react';
 import {
   assignToGroup,
   groupOf,
-  groupRootsOf,
   membersOfGroup,
   removeFromGroup,
 } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { rootGroupColor } from './colors.ts';
 import { visibleRows } from './outline.ts';
-import { coveringGroups, overlappingMembers, rootGroupOf } from './planning.ts';
+import { coveringGroups, overlappingMembers } from './planning.ts';
 import { Outliner } from './Outliner.tsx';
 import type { RowDropProps } from './OutlinerRow.tsx';
-
-const GROUP_COLORS = [
-  '#4667d4',
-  '#0e9f6e',
-  '#c2410c',
-  '#8a63d2',
-  '#0e8fa5',
-  '#b42318',
-  '#a16207',
-  '#be3a8f',
-];
 
 const NO_COLLAPSE: ReadonlySet<string> = new Set();
 
@@ -49,11 +38,9 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
   const [specDropping, setSpecDropping] = useState(false);
 
   const specRows = visibleRows(graph, NO_COLLAPSE, 'work');
-  const groupRoots = groupRootsOf(graph);
 
   function colorOf(groupId: string): string {
-    const index = groupRoots.indexOf(rootGroupOf(graph, groupId));
-    return GROUP_COLORS[(index < 0 ? 0 : index) % GROUP_COLORS.length]!;
+    return rootGroupColor(graph, groupId);
   }
 
   function startDrag(event: DragEvent, source: 'spec' | 'chip', nodeId: string) {

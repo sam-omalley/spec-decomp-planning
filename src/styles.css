@@ -482,3 +482,74 @@ body {
 .row:hover .details-indicator-empty {
   visibility: visible;
 }
+
+.header-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+/* ------------------------------ graph view ----------------------------- */
+
+.graph-wrap {
+  height: calc(100vh - 150px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.gnode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 7px 12px;
+  font-size: 13px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.gnode-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gnode-details {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.gnode-group {
+  border-left: 4px solid var(--group-color, var(--accent));
+  background: color-mix(in srgb, var(--group-color, var(--accent)) 6%, white);
+  font-weight: 600;
+}
+
+.gnode-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ghandle {
+  width: 6px;
+  height: 6px;
+  background: var(--bullet);
+  border: none;
+}
+
+.gedge-contains .react-flow__edge-path {
+  stroke: #d3d4d8;
+  stroke-width: 1.5;
+}
+
+.gedge-assigned .react-flow__edge-path {
+  stroke: inherit;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  opacity: 0.75;
+}
