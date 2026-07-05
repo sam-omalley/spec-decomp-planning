@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createNode, emptyGraph, moveNode, rootsOf } from '../model/graph.ts';
+import { createGroup, createNode, emptyGraph, moveNode, rootsOf } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
 import {
   indentTarget,
@@ -70,6 +70,27 @@ describe('visibleRows', () => {
     assert.deepEqual(
       visibleRows(g, none).map((r) => r.id),
       ['docs', 'app', 'auth', 'login', 'signup', 'billing'],
+    );
+  });
+});
+
+describe('group-side outlining', () => {
+  it('flattens the delivery tree and computes targets with group root order', () => {
+    let g = fixture();
+    g = createGroup(g, { id: 'block1', title: 'Block 1' });
+    g = createGroup(g, { id: 'epicA', title: 'Epic A' }, 'block1');
+    g = createGroup(g, { id: 'block2', title: 'Block 2' });
+    assert.deepEqual(
+      visibleRows(g, none, 'group').map((r) => `${r.depth}:${r.id}`),
+      ['0:block1', '1:epicA', '0:block2'],
+    );
+    assert.equal(indentTarget(g, 'block2'), 'block1');
+    assert.deepEqual(outdentTarget(g, 'epicA'), { parentId: null, index: 1 });
+    assert.deepEqual(reorderTarget(g, 'block2', -1), { parentId: null, index: 0 });
+    assert.deepEqual(
+      visibleRows(g, none).map((r) => r.id),
+      ['app', 'auth', 'login', 'signup', 'billing', 'docs'],
+      'work side unaffected',
     );
   });
 });

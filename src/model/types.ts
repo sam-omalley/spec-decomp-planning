@@ -1,7 +1,15 @@
 /**
- * Core data model. The entire application state is a single graph:
- * nodes (work items), typed edges (relationships), and plans (named
- * scenarios that scope epics). Every view is a projection of this graph.
+ * Core data model. The entire application state is a single graph of
+ * nodes and typed edges. Nodes have two sides:
+ *
+ * - work nodes (requirement, feature, task, …) — the inputs. They form
+ *   the spec tree via 'contains'.
+ * - group nodes — the outputs. They form the delivery tree via
+ *   'contains' (blocks of epics, epics of sub-epics, any depth).
+ *
+ * The only bridge between the sides is 'assigned_to': a work node is
+ * assigned to at most one group, at any depth. Every view is a
+ * projection of this graph.
  */
 
 export type NodeType =
@@ -13,13 +21,13 @@ export type NodeType =
   | 'task'
   | 'research'
   | 'bug'
-  | 'epic';
+  | 'group';
 
 export type EdgeType =
   | 'contains'
   | 'depends_on'
   | 'implements'
-  | 'belongs_to_epic'
+  | 'assigned_to'
   | 'blocks'
   | 'duplicates'
   | 'related_to';
@@ -39,8 +47,6 @@ export interface WorkNode {
   effort: number | null;
   tags: string[];
   notes: string;
-  /** Only set on nodes of type 'epic': the plan this epic belongs to. */
-  planId?: string;
   createdAt: string;
   modifiedAt: string;
 }
@@ -48,29 +54,23 @@ export interface WorkNode {
 export interface Edge {
   id: string;
   type: EdgeType;
-  /** Source. For 'contains': the parent. For 'belongs_to_epic': the member. */
+  /** Source. For 'contains': the parent. For 'assigned_to': the work node. */
   from: string;
-  /** Target. For 'contains': the child. For 'belongs_to_epic': the epic. */
+  /** Target. For 'contains': the child. For 'assigned_to': the group. */
   to: string;
   /** Sibling sort position; only meaningful on 'contains' edges. */
   order?: number;
 }
 
-/** A named alternative organization of work into epics. */
-export interface Plan {
-  id: string;
-  name: string;
-  createdAt: string;
-}
-
 export interface ProjectGraph {
   nodes: Record<string, WorkNode>;
   edges: Record<string, Edge>;
-  plans: Record<string, Plan>;
   /**
-   * Display order of the spec-tree roots (parentless non-epic nodes).
+   * Display order of the spec-tree roots (parentless work nodes).
    * Roots have no 'contains' edge to carry an `order`, so it lives here.
-   * Maintained by every mutation; always exactly the set of roots.
+   * Maintained by every mutation; always exactly the set of work roots.
    */
   rootOrder: string[];
+  /** Same, for the delivery tree: parentless group nodes. */
+  groupRootOrder: string[];
 }

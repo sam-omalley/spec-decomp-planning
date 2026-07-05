@@ -4,10 +4,13 @@
  * what makes snapshot-based undo/redo cheap.
  *
  * Invariants enforced here:
- * - 'contains' forms a forest: every node has at most one parent, no
- *   cycles, and epics never participate (epics group work via
- *   'belongs_to_epic' edges only, so planning never mutates the tree).
- * - 'belongs_to_epic' points from a non-epic node to an epic node.
+ * - 'contains' forms two forests: every node has at most one parent and
+ *   no cycles, and containment never crosses sides — work nodes nest in
+ *   work nodes (the spec tree), groups nest in groups (the delivery
+ *   tree). The bridge between the sides is 'assigned_to' only, so
+ *   planning never mutates the spec and vice versa.
+ * - 'assigned_to' points from a work node to a group, and each work
+ *   node is assigned to at most one group (assignToGroup moves).
  * - No duplicate edge of the same (type, from, to).
  * - Dependency cycles ('depends_on', 'blocks') are deliberately allowed;
  *   they are detected and visualized, not forbidden.
@@ -16,7 +19,6 @@
 import type {
   Edge,
   EdgeType,
-  Plan,
   Priority,
   ProjectGraph,
   Status,
@@ -30,7 +32,7 @@ export function createId(): string {
 }
 
 export function emptyGraph(): ProjectGraph {
-  return { nodes: {}, edges: {}, plans: {}, rootOrder: [] };
+  return { nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [] };
 }
 
 function nowIso(): string {
@@ -43,22 +45,37 @@ function requireNode(graph: ProjectGraph, id: string): WorkNode {
   return node;
 }
 
+export function isGroup(node: WorkNode): boolean {
+  return node.type === 'group';
+}
+
+/* ------------------------------------------------------------------ */
+/* Root order maintenance (side-aware)                                 */
+/* ------------------------------------------------------------------ */
+
+function rootKeyFor(graph: ProjectGraph, id: string): 'rootOrder' | 'groupRootOrder' {
+  return graph.nodes[id]?.type === 'group' ? 'groupRootOrder' : 'rootOrder';
+}
+
 function withoutRoot(graph: ProjectGraph, id: string): ProjectGraph {
-  if (!graph.rootOrder.includes(id)) return graph;
-  return { ...graph, rootOrder: graph.rootOrder.filter((r) => r !== id) };
+  const key = rootKeyFor(graph, id);
+  if (!graph[key].includes(id)) return graph;
+  return { ...graph, [key]: graph[key].filter((r) => r !== id) };
 }
 
 function withRootAppended(graph: ProjectGraph, id: string): ProjectGraph {
-  if (graph.rootOrder.includes(id)) return graph;
-  return { ...graph, rootOrder: [...graph.rootOrder, id] };
+  const key = rootKeyFor(graph, id);
+  if (graph[key].includes(id)) return graph;
+  return { ...graph, [key]: [...graph[key], id] };
 }
 
-/** Repositions `id` within rootOrder (it must already be a root). */
+/** Repositions `id` within its side's root order (it must be a root). */
 function setRootIndex(graph: ProjectGraph, id: string, index: number): ProjectGraph {
-  const others = graph.rootOrder.filter((r) => r !== id);
+  const key = rootKeyFor(graph, id);
+  const others = graph[key].filter((r) => r !== id);
   const clamped = Math.max(0, Math.min(index, others.length));
   others.splice(clamped, 0, id);
-  return { ...graph, rootOrder: others };
+  return { ...graph, [key]: others };
 }
 
 /* ------------------------------------------------------------------ */
@@ -85,9 +102,14 @@ export function childrenOf(graph: ProjectGraph, id: string): string[] {
     .map((e) => e.to);
 }
 
-/** The spec-tree roots (parentless non-epic nodes), in display order. */
+/** The spec-tree roots (parentless work nodes), in display order. */
 export function rootsOf(graph: ProjectGraph): string[] {
   return [...graph.rootOrder];
+}
+
+/** The delivery-tree roots (parentless group nodes), in display order. */
+export function groupRootsOf(graph: ProjectGraph): string[] {
+  return [...graph.groupRootOrder];
 }
 
 /** `id` plus all its descendants via 'contains'. */
@@ -118,24 +140,23 @@ export function isInSubtreeOf(
   return false;
 }
 
-export function epicsOfPlan(graph: ProjectGraph, planId: string): string[] {
-  return Object.values(graph.nodes)
-    .filter((n) => n.type === 'epic' && n.planId === planId)
-    .map((n) => n.id);
+/** The 'assigned_to' edge of a work node, if any (at most one exists). */
+export function assignmentEdgeOf(graph: ProjectGraph, nodeId: string): Edge | undefined {
+  return Object.values(graph.edges).find(
+    (e) => e.type === 'assigned_to' && e.from === nodeId,
+  );
 }
 
-/** Ids of nodes that belong to the given epic. */
-export function membersOfEpic(graph: ProjectGraph, epicId: string): string[] {
+/** The group a work node is directly assigned to, if any. */
+export function groupOf(graph: ProjectGraph, nodeId: string): string | null {
+  return assignmentEdgeOf(graph, nodeId)?.to ?? null;
+}
+
+/** Ids of work nodes directly assigned to the given group. */
+export function membersOfGroup(graph: ProjectGraph, groupId: string): string[] {
   return Object.values(graph.edges)
-    .filter((e) => e.type === 'belongs_to_epic' && e.to === epicId)
+    .filter((e) => e.type === 'assigned_to' && e.to === groupId)
     .map((e) => e.from);
-}
-
-/** Ids of epics the given node belongs to (across all plans). */
-export function epicsOfNode(graph: ProjectGraph, nodeId: string): string[] {
-  return Object.values(graph.edges)
-    .filter((e) => e.type === 'belongs_to_epic' && e.from === nodeId)
-    .map((e) => e.to);
 }
 
 export function edgeBetween(
@@ -157,7 +178,7 @@ export interface NodeInput {
   id: string;
   title: string;
   description?: string;
-  type?: Exclude<WorkNode['type'], 'epic'>;
+  type?: Exclude<WorkNode['type'], 'group'>;
   status?: Status;
   priority?: Priority;
   effort?: number | null;
@@ -200,8 +221,50 @@ export function createNode(
   return next;
 }
 
+export interface GroupInput {
+  id: string;
+  title: string;
+  description?: string;
+  createdAt?: string;
+}
+
+/** Creates a group node, optionally nested under another group. */
+export function createGroup(
+  graph: ProjectGraph,
+  input: GroupInput,
+  parentGroupId?: string,
+): ProjectGraph {
+  if (graph.nodes[input.id]) {
+    throw new GraphError(`Node id already exists: ${input.id}`);
+  }
+  const timestamp = input.createdAt ?? nowIso();
+  const group: WorkNode = {
+    id: input.id,
+    title: input.title,
+    description: input.description ?? '',
+    type: 'group',
+    status: 'not_started',
+    priority: 'medium',
+    effort: null,
+    tags: [],
+    notes: '',
+    createdAt: timestamp,
+    modifiedAt: timestamp,
+  };
+  let next: ProjectGraph = {
+    ...graph,
+    nodes: { ...graph.nodes, [group.id]: group },
+  };
+  if (parentGroupId === undefined) {
+    next = withRootAppended(next, group.id);
+  } else {
+    next = addEdge(next, { type: 'contains', from: parentGroupId, to: group.id });
+  }
+  return next;
+}
+
 export type NodePatch = Partial<
-  Omit<WorkNode, 'id' | 'type' | 'planId' | 'createdAt' | 'modifiedAt'>
+  Omit<WorkNode, 'id' | 'type' | 'createdAt' | 'modifiedAt'>
 >;
 
 export function updateNode(
@@ -216,7 +279,8 @@ export function updateNode(
 
 /**
  * Deletes `id` and its entire 'contains' subtree, plus every edge that
- * touches a removed node (dependencies, epic memberships, everything).
+ * touches a removed node. Deleting a group subtree removes assignments
+ * into it but never the assigned work nodes.
  */
 export function deleteNode(graph: ProjectGraph, id: string): ProjectGraph {
   const removed = subtreeIds(graph, id);
@@ -228,14 +292,20 @@ export function deleteNode(graph: ProjectGraph, id: string): ProjectGraph {
   for (const [edgeId, edge] of Object.entries(graph.edges)) {
     if (!removed.has(edge.from) && !removed.has(edge.to)) edges[edgeId] = edge;
   }
-  const rootOrder = graph.rootOrder.filter((id) => !removed.has(id));
-  return { ...graph, nodes, edges, rootOrder };
+  return {
+    ...graph,
+    nodes,
+    edges,
+    rootOrder: graph.rootOrder.filter((r) => !removed.has(r)),
+    groupRootOrder: graph.groupRootOrder.filter((r) => !removed.has(r)),
+  };
 }
 
 /**
  * Reparents `id` under `newParentId` (or to root level when null),
  * optionally at a specific sibling index — for roots the index is a
- * position in `rootOrder`. Planning data is untouched by design.
+ * position in the side's root order. Works on both sides; assignments
+ * are untouched by design.
  */
 export function moveNode(
   graph: ProjectGraph,
@@ -305,9 +375,9 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
 
   let order: number | undefined;
   if (input.type === 'contains') {
-    if (from.type === 'epic' || to.type === 'epic') {
+    if (isGroup(from) !== isGroup(to)) {
       throw new GraphError(
-        "Epics cannot participate in 'contains'; use 'belongs_to_epic'",
+        "'contains' cannot cross sides: work nests in work, groups in groups; use 'assigned_to' to bridge",
       );
     }
     if (parentEdgeOf(graph, input.to)) {
@@ -322,12 +392,18 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
     order = siblings.length;
   }
 
-  if (input.type === 'belongs_to_epic') {
-    if (to.type !== 'epic') {
-      throw new GraphError(`Target of 'belongs_to_epic' must be an epic: ${to.id}`);
+  if (input.type === 'assigned_to') {
+    if (isGroup(from)) {
+      throw new GraphError('Groups cannot be assigned; only work nodes can');
     }
-    if (from.type === 'epic') {
-      throw new GraphError('An epic cannot belong to another epic');
+    if (!isGroup(to)) {
+      throw new GraphError(`Assignment target must be a group: ${to.id}`);
+    }
+    const existing = assignmentEdgeOf(graph, input.from);
+    if (existing) {
+      throw new GraphError(
+        `Node ${input.from} is already assigned to ${existing.to}; use assignToGroup to move it`,
+      );
     }
   }
 
@@ -339,7 +415,7 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
     ...(order !== undefined ? { order } : {}),
   };
   let next: ProjectGraph = { ...graph, edges: { ...graph.edges, [edge.id]: edge } };
-  // Gaining a parent removes the child from the root order.
+  // Gaining a parent removes the child from its side's root order.
   if (edge.type === 'contains') next = withoutRoot(next, edge.to);
   return next;
 }
@@ -350,108 +426,36 @@ export function removeEdge(graph: ProjectGraph, edgeId: string): ProjectGraph {
   const edges = { ...graph.edges };
   delete edges[edgeId];
   let next: ProjectGraph = { ...graph, edges };
-  // Losing its parent makes the child a root.
+  // Losing its parent makes the child a root of its side.
   if (edge.type === 'contains') next = withRootAppended(next, edge.to);
   return next;
 }
 
 /* ------------------------------------------------------------------ */
-/* Plans and epics                                                     */
+/* Assignment (work → group)                                           */
 /* ------------------------------------------------------------------ */
 
-export interface PlanInput {
-  id: string;
-  name: string;
-  createdAt?: string;
-}
-
-export function createPlan(graph: ProjectGraph, input: PlanInput): ProjectGraph {
-  if (graph.plans[input.id]) {
-    throw new GraphError(`Plan id already exists: ${input.id}`);
-  }
-  const plan: Plan = {
-    id: input.id,
-    name: input.name,
-    createdAt: input.createdAt ?? nowIso(),
-  };
-  return { ...graph, plans: { ...graph.plans, [plan.id]: plan } };
-}
-
-export function renamePlan(
-  graph: ProjectGraph,
-  planId: string,
-  name: string,
-): ProjectGraph {
-  const plan = graph.plans[planId];
-  if (!plan) throw new GraphError(`Plan not found: ${planId}`);
-  return { ...graph, plans: { ...graph.plans, [planId]: { ...plan, name } } };
-}
-
 /**
- * Deletes a plan and all of its epics (and their membership edges).
- * The spec tree and all non-epic nodes are untouched.
+ * Assigns a work node to a group. If it is already assigned elsewhere,
+ * the assignment moves (single membership). Assigning to the current
+ * group is a no-op that returns the same graph.
  */
-export function deletePlan(graph: ProjectGraph, planId: string): ProjectGraph {
-  if (!graph.plans[planId]) throw new GraphError(`Plan not found: ${planId}`);
+export function assignToGroup(
+  graph: ProjectGraph,
+  nodeId: string,
+  groupId: string,
+): ProjectGraph {
+  const existing = assignmentEdgeOf(graph, nodeId);
+  if (existing?.to === groupId) return graph;
   let next = graph;
-  for (const epicId of epicsOfPlan(graph, planId)) {
-    next = deleteNode(next, epicId);
-  }
-  const plans = { ...next.plans };
-  delete plans[planId];
-  return { ...next, plans };
+  if (existing) next = removeEdge(next, existing.id);
+  return addEdge(next, { type: 'assigned_to', from: nodeId, to: groupId });
 }
 
-export interface EpicInput {
-  id: string;
-  title: string;
-  description?: string;
-  createdAt?: string;
-}
-
-export function createEpic(
-  graph: ProjectGraph,
-  planId: string,
-  input: EpicInput,
-): ProjectGraph {
-  if (!graph.plans[planId]) throw new GraphError(`Plan not found: ${planId}`);
-  if (graph.nodes[input.id]) {
-    throw new GraphError(`Node id already exists: ${input.id}`);
-  }
-  const timestamp = input.createdAt ?? nowIso();
-  const epic: WorkNode = {
-    id: input.id,
-    title: input.title,
-    description: input.description ?? '',
-    type: 'epic',
-    status: 'not_started',
-    priority: 'medium',
-    effort: null,
-    tags: [],
-    notes: '',
-    planId,
-    createdAt: timestamp,
-    modifiedAt: timestamp,
-  };
-  return { ...graph, nodes: { ...graph.nodes, [epic.id]: epic } };
-}
-
-export function assignToEpic(
-  graph: ProjectGraph,
-  nodeId: string,
-  epicId: string,
-): ProjectGraph {
-  return addEdge(graph, { type: 'belongs_to_epic', from: nodeId, to: epicId });
-}
-
-export function removeFromEpic(
-  graph: ProjectGraph,
-  nodeId: string,
-  epicId: string,
-): ProjectGraph {
-  const edge = edgeBetween(graph, 'belongs_to_epic', nodeId, epicId);
+export function removeFromGroup(graph: ProjectGraph, nodeId: string): ProjectGraph {
+  const edge = assignmentEdgeOf(graph, nodeId);
   if (!edge) {
-    throw new GraphError(`Node ${nodeId} is not a member of epic ${epicId}`);
+    throw new GraphError(`Node ${nodeId} is not assigned to a group`);
   }
   return removeEdge(graph, edge.id);
 }
