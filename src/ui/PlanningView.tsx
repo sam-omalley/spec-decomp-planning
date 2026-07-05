@@ -1,38 +1,31 @@
 /**
- * Planning view: a projection of 'belongs_to_epic' edges for the active
- * plan. Left pane shows the spec tree (read-only here); drag a node onto
- * an epic to assign it — assigning a parent covers its whole subtree.
- * Dragging a chip between epics moves the assignment atomically.
+ * Planning view: the delivery tree (groups all the way down — blocks,
+ * epics, whatever depth you need) as a keyboard-first outliner, plus a
+ * read-only spec pane to drag work items from. Dropping a work item on
+ * a group assigns it; a work item lives in at most one group, so a
+ * second drop moves it. Dragging a chip back onto the spec pane
+ * unassigns it.
  *
- * Overlaps (a member with a descendant in another epic of the same plan)
- * are allowed and badged, never forbidden.
+ * Overlaps (a member with a spec-descendant assigned outside the
+ * member's group subtree) are allowed and badged, never forbidden.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import type { DragEvent } from 'react';
+import { useState } from 'react';
+import type { DragEvent, ReactNode } from 'react';
 import {
-  assignToEpic,
-  createEpic,
-  createId,
-  createPlan,
-  deleteNode,
-  deletePlan,
-  edgeBetween,
-  membersOfEpic,
-  removeFromEpic,
-  renamePlan,
-  updateNode,
+  assignToGroup,
+  groupOf,
+  groupRootsOf,
+  membersOfGroup,
+  removeFromGroup,
 } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { visibleRows } from './outline.ts';
-import {
-  coveringEpicsInPlan,
-  epicsOfPlanOrdered,
-  overlappingMembers,
-  plansOrdered,
-} from './planning.ts';
+import { coveringGroups, overlappingMembers, rootGroupOf } from './planning.ts';
+import { Outliner } from './Outliner.tsx';
+import type { RowDropProps } from './OutlinerRow.tsx';
 
-const EPIC_COLORS = [
+const GROUP_COLORS = [
   '#4667d4',
   '#0e9f6e',
   '#c2410c',
@@ -46,284 +39,178 @@ const EPIC_COLORS = [
 const NO_COLLAPSE: ReadonlySet<string> = new Set();
 
 interface PlanningViewProps {
-  activePlanId: string | null;
-  onSwitchPlan: (planId: string | null) => void;
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
 }
 
-export function PlanningView({
-  activePlanId,
-  onSwitchPlan,
-  selectedId,
-  onSelect,
-}: PlanningViewProps) {
+export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
   const graph = useProjectGraph();
-  const [dropEpicId, setDropEpicId] = useState<string | null>(null);
-  const [focusEpicId, setFocusEpicId] = useState<string | null>(null);
-  const epicTitleRefs = useRef(new Map<string, HTMLInputElement>());
+  const [dropGroupId, setDropGroupId] = useState<string | null>(null);
+  const [specDropping, setSpecDropping] = useState(false);
 
-  useEffect(() => {
-    if (focusEpicId === null) return;
-    const el = epicTitleRefs.current.get(focusEpicId);
-    if (el) {
-      el.focus();
-      el.select();
-      setFocusEpicId(null);
-    }
-  }, [focusEpicId]);
+  const specRows = visibleRows(graph, NO_COLLAPSE, 'work');
+  const groupRoots = groupRootsOf(graph);
 
-  const plans = plansOrdered(graph);
-  const plan = activePlanId !== null ? graph.plans[activePlanId] : undefined;
-
-  function addPlan() {
-    const id = createId();
-    store.commit((g) => createPlan(g, { id, name: `Plan ${plans.length + 1}` }));
-    onSwitchPlan(id);
+  function colorOf(groupId: string): string {
+    const index = groupRoots.indexOf(rootGroupOf(graph, groupId));
+    return GROUP_COLORS[(index < 0 ? 0 : index) % GROUP_COLORS.length]!;
   }
 
-  if (plan === undefined) {
-    return (
-      <div className="outliner-empty">
-        <p>No plans yet. A plan is a named way of grouping the spec into epics.</p>
-        <button className="button-primary" onClick={addPlan}>
-          Create the first plan
-        </button>
-      </div>
-    );
-  }
-
-  const planId = plan.id;
-  const epicIds = epicsOfPlanOrdered(graph, planId);
-  const colorOf = new Map(epicIds.map((id, i) => [id, EPIC_COLORS[i % EPIC_COLORS.length]!]));
-  const rows = visibleRows(graph, NO_COLLAPSE);
-
-  function removeActivePlan() {
-    const ok = window.confirm(
-      `Delete plan “${plan!.name}” and its ${epicIds.length} epic${
-        epicIds.length === 1 ? '' : 's'
-      }? The spec itself is untouched.`,
-    );
-    if (!ok) return;
-    store.commit((g) => deletePlan(g, planId));
-    onSwitchPlan(null);
-  }
-
-  function addEpic() {
-    const id = createId();
-    store.commit((g) => createEpic(g, planId, { id, title: 'New epic' }));
-    setFocusEpicId(id);
-  }
-
-  function removeEpic(epicId: string) {
-    const members = membersOfEpic(graph, epicId);
-    if (members.length > 0) {
-      const title = graph.nodes[epicId]?.title ?? 'epic';
-      const ok = window.confirm(
-        `Delete epic “${title}”? Its ${members.length} assignment${
-          members.length === 1 ? '' : 's'
-        } are removed; the tasks stay in the spec.`,
-      );
-      if (!ok) return;
-    }
-    store.commit((g) => deleteNode(g, epicId));
-  }
-
-  function onDragStartNode(event: DragEvent, nodeId: string, fromEpicId?: string) {
-    event.dataTransfer.setData('text/plain', `${nodeId}:${fromEpicId ?? ''}`);
+  function startDrag(event: DragEvent, source: 'spec' | 'chip', nodeId: string) {
+    event.dataTransfer.setData('text/plain', `${source}:${nodeId}`);
     event.dataTransfer.effectAllowed = 'move';
   }
 
-  function onDropOnEpic(event: DragEvent, epicId: string) {
+  function payloadOf(event: DragEvent): { source: string; nodeId: string } | null {
+    const [source, nodeId] = event.dataTransfer.getData('text/plain').split(':');
+    return source && nodeId ? { source, nodeId } : null;
+  }
+
+  function dropOnGroup(event: DragEvent, groupId: string) {
     event.preventDefault();
-    setDropEpicId(null);
-    const [nodeId, fromEpicId] = event.dataTransfer.getData('text/plain').split(':');
-    if (!nodeId || fromEpicId === epicId) return;
+    setDropGroupId(null);
+    const payload = payloadOf(event);
+    if (!payload) return;
+    const { nodeId } = payload;
     store.commit((g) => {
       const node = g.nodes[nodeId];
-      if (!node || node.type === 'epic') return g;
-      if (edgeBetween(g, 'belongs_to_epic', nodeId, epicId)) return g;
-      if (fromEpicId) g = removeFromEpic(g, nodeId, fromEpicId);
-      return assignToEpic(g, nodeId, epicId);
+      if (!node || node.type === 'group' || !g.nodes[groupId]) return g;
+      return assignToGroup(g, nodeId, groupId);
     });
     onSelect(nodeId);
   }
 
-  return (
-    <div className="planning">
-      <div className="plan-bar">
-        {plans.map((p) =>
-          p.id === planId ? (
-            <div key={p.id} className="plan-tab plan-tab-active">
-              <input
-                className="plan-name-input"
-                value={p.name}
-                style={{ width: `${Math.max(p.name.length, 4) + 1}ch` }}
-                onChange={(e) =>
-                  store.commit((g) => renamePlan(g, p.id, e.target.value), {
-                    coalesce: `plan:${p.id}`,
-                  })
-                }
-                onBlur={() => store.breakCoalescing()}
-              />
+  function dropOnSpec(event: DragEvent) {
+    event.preventDefault();
+    setSpecDropping(false);
+    const payload = payloadOf(event);
+    if (!payload || payload.source !== 'chip') return;
+    store.commit((g) =>
+      groupOf(g, payload.nodeId) === null ? g : removeFromGroup(g, payload.nodeId),
+    );
+  }
+
+  function rowDropProps(groupId: string): RowDropProps {
+    return {
+      dropping: dropGroupId === groupId,
+      onDragOver: (e) => {
+        e.preventDefault();
+        setDropGroupId(groupId);
+      },
+      onDragLeave: () => setDropGroupId((current) => (current === groupId ? null : current)),
+      onDrop: (e) => dropOnGroup(e, groupId),
+    };
+  }
+
+  function rowExtras(groupId: string): ReactNode {
+    const members = membersOfGroup(graph, groupId);
+    const overlaps = new Set(overlappingMembers(graph, groupId));
+    if (members.length === 0) return null;
+    return (
+      <>
+        {overlaps.size > 0 && (
+          <span
+            className="overlap-badge"
+            title={
+              'Overlap: descendants of ' +
+              [...overlaps].map((id) => `“${graph.nodes[id]?.title}”`).join(', ') +
+              ' are assigned outside this group'
+            }
+          >
+            ⚠ {overlaps.size}
+          </span>
+        )}
+        <div className="row-chips">
+          {members.map((memberId) => (
+            <span
+              key={memberId}
+              className={`member-chip${
+                memberId === selectedId ? ' member-chip-selected' : ''
+              }${overlaps.has(memberId) ? ' member-chip-overlap' : ''}`}
+              draggable
+              onDragStart={(e) => startDrag(e, 'chip', memberId)}
+              onClick={() => onSelect(memberId)}
+            >
+              {graph.nodes[memberId]?.title.trim() || 'Untitled'}
               <button
                 className="icon-button"
-                title="Delete plan"
-                onClick={removeActivePlan}
+                title="Remove from group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  store.commit((g) => removeFromGroup(g, memberId));
+                }}
               >
                 ×
               </button>
-            </div>
-          ) : (
-            <button key={p.id} className="plan-tab" onClick={() => onSwitchPlan(p.id)}>
-              {p.name}
-            </button>
-          ),
+            </span>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="planning-body">
+      <div
+        className={`plan-tree${specDropping ? ' plan-tree-drop' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setSpecDropping(true);
+        }}
+        onDragLeave={() => setSpecDropping(false)}
+        onDrop={dropOnSpec}
+      >
+        <div className="pane-title">Spec — drag items onto groups</div>
+        {specRows.length === 0 && (
+          <p className="pane-hint">The spec is empty. Add items in the Spec view first.</p>
         )}
-        <button className="plan-tab plan-tab-new" title="New plan" onClick={addPlan}>
-          +
-        </button>
+        {specRows.map((row) => {
+          const node = graph.nodes[row.id]!;
+          const coverage = coveringGroups(graph, row.id);
+          return (
+            <div
+              key={row.id}
+              className={`plan-tree-row${row.id === selectedId ? ' row-selected' : ''}`}
+              style={{ paddingLeft: `${row.depth * 18 + 8}px` }}
+              draggable
+              onDragStart={(e) => startDrag(e, 'spec', row.id)}
+              onClick={() => onSelect(row.id)}
+            >
+              <span className="bullet" />
+              <span className="plan-tree-title">
+                {node.title.trim() === '' ? 'Untitled' : node.title}
+              </span>
+              {coverage.map(({ groupId, via }) => (
+                <span
+                  key={groupId}
+                  className={`epic-tag${via === row.id ? '' : ' epic-tag-inherited'}`}
+                  style={{ ['--epic-color' as string]: colorOf(groupId) }}
+                  title={
+                    via === row.id
+                      ? graph.nodes[groupId]?.title
+                      : `${graph.nodes[groupId]?.title} — via ${graph.nodes[via]?.title}`
+                  }
+                >
+                  {graph.nodes[groupId]?.title.trim() || 'Untitled'}
+                </span>
+              ))}
+            </div>
+          );
+        })}
       </div>
 
-      <div className="planning-body">
-        <div className="plan-tree">
-          <div className="pane-title">Spec — drag items onto epics</div>
-          {rows.length === 0 && (
-            <p className="pane-hint">The spec is empty. Add items in the Spec view first.</p>
-          )}
-          {rows.map((row) => {
-            const node = graph.nodes[row.id]!;
-            const coverage = coveringEpicsInPlan(graph, row.id, planId);
-            return (
-              <div
-                key={row.id}
-                className={`plan-tree-row${row.id === selectedId ? ' row-selected' : ''}`}
-                style={{ paddingLeft: `${row.depth * 18 + 8}px` }}
-                draggable
-                onDragStart={(e) => onDragStartNode(e, row.id)}
-                onClick={() => onSelect(row.id)}
-              >
-                <span className="bullet" />
-                <span className="plan-tree-title">
-                  {node.title.trim() === '' ? 'Untitled' : node.title}
-                </span>
-                {coverage.map(({ epicId, via }) => (
-                  <span
-                    key={epicId}
-                    className={`epic-tag${via === row.id ? '' : ' epic-tag-inherited'}`}
-                    style={{ ['--epic-color' as string]: colorOf.get(epicId) }}
-                    title={
-                      via === row.id
-                        ? graph.nodes[epicId]?.title
-                        : `${graph.nodes[epicId]?.title} — via ${graph.nodes[via]?.title}`
-                    }
-                  >
-                    {graph.nodes[epicId]?.title}
-                  </span>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="plan-board">
-          <div className="pane-title">
-            Epics
-            <button className="add-row" onClick={addEpic}>
-              + New epic
-            </button>
-          </div>
-          {epicIds.length === 0 && (
-            <p className="pane-hint">No epics yet. Create one, then drag spec items onto it.</p>
-          )}
-          <div className="epic-grid">
-            {epicIds.map((epicId) => {
-              const epic = graph.nodes[epicId]!;
-              const members = membersOfEpic(graph, epicId);
-              const overlaps = new Set(overlappingMembers(graph, epicId));
-              return (
-                <div
-                  key={epicId}
-                  className={`epic-card${dropEpicId === epicId ? ' epic-card-drop' : ''}`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDropEpicId(epicId);
-                  }}
-                  onDragLeave={() => setDropEpicId(null)}
-                  onDrop={(e) => onDropOnEpic(e, epicId)}
-                >
-                  <div className="epic-header">
-                    <span
-                      className="epic-dot"
-                      style={{ background: colorOf.get(epicId) }}
-                    />
-                    <input
-                      ref={(el) => {
-                        if (el) epicTitleRefs.current.set(epicId, el);
-                        else epicTitleRefs.current.delete(epicId);
-                      }}
-                      className="epic-title-input"
-                      value={epic.title}
-                      onChange={(e) =>
-                        store.commit((g) => updateNode(g, epicId, { title: e.target.value }), {
-                          coalesce: `title:${epicId}`,
-                        })
-                      }
-                      onBlur={() => store.breakCoalescing()}
-                    />
-                    {overlaps.size > 0 && (
-                      <span
-                        className="overlap-badge"
-                        title={
-                          'Overlap: descendants of ' +
-                          [...overlaps]
-                            .map((id) => `“${graph.nodes[id]?.title}”`)
-                            .join(', ') +
-                          ' are also in other epics of this plan'
-                        }
-                      >
-                        ⚠ {overlaps.size}
-                      </span>
-                    )}
-                    <button
-                      className="icon-button"
-                      title="Delete epic"
-                      onClick={() => removeEpic(epicId)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="epic-members">
-                    {members.length === 0 && <span className="pane-hint">Drop items here</span>}
-                    {members.map((memberId) => (
-                      <span
-                        key={memberId}
-                        className={`member-chip${
-                          memberId === selectedId ? ' member-chip-selected' : ''
-                        }${overlaps.has(memberId) ? ' member-chip-overlap' : ''}`}
-                        draggable
-                        onDragStart={(e) => onDragStartNode(e, memberId, epicId)}
-                        onClick={() => onSelect(memberId)}
-                      >
-                        {graph.nodes[memberId]?.title.trim() || 'Untitled'}
-                        <button
-                          className="icon-button"
-                          title="Remove from epic"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            store.commit((g) => removeFromEpic(g, memberId, epicId));
-                          }}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <div className="plan-board">
+        <div className="pane-title">Delivery plan</div>
+        <Outliner
+          side="group"
+          selectedId={selectedId}
+          onSelect={onSelect}
+          emptyHint="No delivery plan yet. Groups nest freely — blocks of epics, epics of sub-epics."
+          emptyButtonLabel="Add the first group"
+          addLabel="+ Add group"
+          rowExtras={rowExtras}
+          rowDropProps={rowDropProps}
+        />
       </div>
     </div>
   );

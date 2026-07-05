@@ -7,45 +7,58 @@ original conversation; the essentials are encoded here.
 
 ## Core principle
 
-Decomposition and delivery planning are **independent projections of one
-underlying graph**. A task never "moves" to belong to a different epic.
+Decomposition (nested inputs) and delivery planning (nested outputs) are
+**independent projections of one underlying graph**, symmetric by design.
 Changing the spec hierarchy must never destroy planning information;
-changing epic membership must never change the decomposition.
+changing assignments must never change the decomposition. Deliberately
+NOT overspecialised: there is no "plan"/"epic"/"block" entity — just
+groups nesting in groups (Sam's call, 2026-07: he needs blocks of epics,
+not multiple plans).
 
-## Data model (implemented, slice 1)
+## Data model
 
-Single `ProjectGraph` = `nodes` + `edges` + `plans` (see `src/model/types.ts`).
+Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
+(see `src/model/types.ts`). Nodes have two sides:
 
-- **Nodes** (`WorkNode`): work items — requirement, feature, capability,
-  component, user_story, task, research, bug, epic. Intrinsic data only
-  (title, status, priority, effort, tags…). No children/parent/deps fields —
-  all relationships are edges.
+- **Work nodes** — requirement, feature, capability, component,
+  user_story, task, research, bug. The spec tree. Intrinsic data only
+  (title, status, priority, effort, tags…); all relationships are edges.
+- **Group nodes** (`type: 'group'`) — the delivery tree: blocks of
+  epics, epics of sub-epics, any depth. Bare groups; depth conveys
+  meaning, no kind labels.
 - **Edges**: typed — `contains`, `depends_on`, `implements`,
-  `belongs_to_epic`, `blocks`, `duplicates`, `related_to`. `contains` edges
+  `assigned_to`, `blocks`, `duplicates`, `related_to`. `contains` edges
   carry `order` for sibling ordering; root order lives in
-  `ProjectGraph.rootOrder` (maintained by every mutation, reconciled on
-  file load — file version 2, v1 migrates by createdAt).
-- **Plans**: named alternative organizations (e.g. "MVP-first",
-  "Infra-first"). Epics are nodes with `planId`; membership is a
-  `belongs_to_epic` edge from member → epic.
+  `ProjectGraph.rootOrder` (work side) and `groupRootOrder` (group
+  side), maintained by every mutation, reconciled on file load.
+  File version 3; v1/v2 migrate (plans → root groups, epics → child
+  groups, `belongs_to_epic` → `assigned_to`, first membership wins).
 
 ### Invariants (enforced in `src/model/graph.ts`, tested)
 
-- `contains` is a single-parent, acyclic forest (mind-map style).
-- Epics never participate in `contains`; tasks may belong to any number of
-  epics across plans; non-leaf nodes may be assigned to epics.
-- `belongs_to_epic` must point from a non-epic to an epic; no duplicate
-  (type, from, to) edges; no self-edges.
+- `contains` is a single-parent, acyclic forest on each side and never
+  crosses sides — work nests in work, groups in groups.
+- `assigned_to` is the only bridge: work node → group, at any depth.
+  **Single membership** — `assignToGroup` moves an existing assignment
+  atomically; raw `addEdge` rejects a second one. Non-leaf work nodes
+  may be assigned (covers the subtree).
+- No duplicate (type, from, to) edges; no self-edges.
 - Dependency cycles are **allowed** — they get detected (Tarjan) and
   visualized, never forbidden. `contains` cycles are rejected.
-- Deletes cascade: subtree + every touching edge. Deleting a plan removes
-  only its epics. UI must confirm before cascade deletes.
+- Deletes cascade: subtree + every touching edge. Deleting a group
+  subtree removes assignments into it, never work nodes. UI must
+  confirm before cascade deletes.
+- Overlap vs refinement: a member's descendant assigned *within* the
+  member's group subtree is refinement (fine, no badge); assigned
+  outside it (sibling group, other block, coarser ancestor group) the
+  member gets the overlap badge. Visible, never forbidden.
 
 ## Architecture decisions
 
-- Views are pure projections of the graph: spec tree reads `contains`,
-  planning view reads `belongs_to_epic` for the active plan, graph view
-  reads everything. Never store view-specific copies of data.
+- Views are pure projections of the graph: spec view reads the work
+  side of `contains`, planning view reads the group side plus
+  `assigned_to`, graph view reads everything. Never store view-specific
+  copies of data.
 - **Dependency-free core.** No zustand, no immer (also: sandbox npm was
   blocked when built). Mutations are immutable with structural sharing;
   undo/redo is a snapshot stack in `src/store/projectStore.ts`. One
@@ -56,22 +69,26 @@ Single `ProjectGraph` = `nodes` + `edges` + `plans` (see `src/model/types.ts`).
 - Persistence: versioned JSON envelope (`src/model/serialize.ts`),
   IndexedDB autosave + explicit `.json` save/load planned for slice 6.
 - Primary editing surface is the **outliner** (Enter = sibling, Tab =
-  indent); the graph view is for understanding/navigation, read-mostly in v1.
-  Selection syncs between views.
-- UI shows a badge when an epic contains a node whose descendants are in
-  other epics (overlaps visible, not forbidden).
+  indent). One generic `Outliner` component drives both sides via a
+  `side` prop (`outline.ts` helpers are side-aware); the planning view
+  augments group rows with member chips + drop targets via `rowExtras`
+  / `rowDropProps`. Graph view is for understanding/navigation,
+  read-mostly in v1. Selection is lifted to `App`, syncs between views,
+  healed there when the node disappears.
+- Assignment UX: drag spec row onto a group row (native HTML5 DnD);
+  drop moves (single membership), drag a chip to the spec pane or × to
+  unassign. Spec pane shows coverage tags (solid = direct, dashed =
+  inherited via ancestor), colored per root group.
 
 ## Slice plan
 
-1. ✅ Data model + store + undo/redo + tests (33 tests)
+1. ✅ Data model + store + undo/redo + tests
 2. ✅ Outliner spec view (`src/ui/`; pure row/keyboard-target helpers in
    `outline.ts` are unit-tested; store commits gained an optional
    `coalesce` key so typing a title is one undo step)
-3. ✅ Plans + planning view (`PlanningView.tsx`; plan tabs + epic board +
-   draggable read-only spec tree, native HTML5 DnD; plan-scoped coverage
-   and same-plan overlap badge helpers in `planning.ts`, unit-tested;
-   selection lifted to `App` and synced across views; active plan is
-   view state, healed in `App` when the plan disappears)
+3. ✅ Planning view — originally plans/epics, reworked 2026-07 into the
+   symmetric group forest (`PlanningView.tsx`, coverage/overlap helpers
+   in `planning.ts`, unit-tested)
 4. Graph view (React Flow / `@xyflow/react`)
 5. Dependency edges + blocked/cycle highlighting (Tarjan SCC)
 6. IndexedDB autosave + `.json` file save/load

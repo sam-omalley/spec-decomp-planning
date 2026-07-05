@@ -128,6 +128,7 @@ body {
 .row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 2px;
   border-radius: 6px;
   min-height: 30px;
@@ -259,54 +260,6 @@ body {
   max-width: 1280px;
 }
 
-.plan-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-
-.plan-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: inherit;
-  font-size: 13px;
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--panel);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.plan-tab:hover {
-  color: var(--text);
-}
-
-.plan-tab-active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--text);
-  cursor: default;
-}
-
-.plan-tab-new {
-  padding: 4px 10px;
-  font-weight: 600;
-}
-
-.plan-name-input {
-  font: inherit;
-  font-size: 13px;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  padding: 0;
-}
-
 .icon-button {
   font: inherit;
   font-size: 13px;
@@ -338,8 +291,14 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 180px);
   overflow-y: auto;
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+
+.plan-tree-drop {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .pane-title {
@@ -409,50 +368,10 @@ body {
   min-width: 0;
 }
 
-.epic-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-}
-
-.epic-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  transition: border-color 80ms ease, box-shadow 80ms ease;
-}
-
-.epic-card-drop {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.epic-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.epic-dot {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.epic-title-input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  padding: 2px 0;
+.row-drop {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-soft);
 }
 
 .overlap-badge {
@@ -464,13 +383,15 @@ body {
   color: #8a5a00;
   border: 1px solid #f0d9a3;
   cursor: help;
+  margin-right: 6px;
 }
 
-.epic-members {
+.row-chips {
+  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  min-height: 30px;
+  padding: 0 8px 7px 44px;
 }
 
 .member-chip {

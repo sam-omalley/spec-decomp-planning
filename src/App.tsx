@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { store, useProjectGraph } from './store/appStore.ts';
 import { Outliner } from './ui/Outliner.tsx';
 import { PlanningView } from './ui/PlanningView.tsx';
-import { plansOrdered } from './ui/planning.ts';
 
 type View = 'spec' | 'planning';
 
@@ -10,18 +9,14 @@ export function App() {
   const graph = useProjectGraph();
   const [view, setView] = useState<View>('spec');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activePlanId, setActivePlanId] = useState<string | null>(null);
 
-  const itemCount = Object.values(graph.nodes).filter((n) => n.type !== 'epic').length;
+  const itemCount = Object.values(graph.nodes).filter((n) => n.type !== 'group').length;
 
-  // Selection and active plan are view state; heal them when the
-  // underlying graph entry disappears (delete, undo, plan removal).
+  // Selection is view state; heal it when the node disappears
+  // (delete, undo).
   useEffect(() => {
     if (selectedId !== null && !graph.nodes[selectedId]) setSelectedId(null);
-    if (activePlanId === null || !graph.plans[activePlanId]) {
-      setActivePlanId(plansOrdered(graph)[0]?.id ?? null);
-    }
-  }, [graph, selectedId, activePlanId]);
+  }, [graph, selectedId]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -73,12 +68,7 @@ export function App() {
         {view === 'spec' ? (
           <Outliner selectedId={selectedId} onSelect={setSelectedId} />
         ) : (
-          <PlanningView
-            activePlanId={activePlanId}
-            onSwitchPlan={setActivePlanId}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
+          <PlanningView selectedId={selectedId} onSelect={setSelectedId} />
         )}
       </main>
       <footer className="app-hints">
@@ -88,7 +78,10 @@ export function App() {
             ⌘⌫ delete · ⌘Z undo
           </>
         ) : (
-          <>Drag spec items onto epics · drag chips between epics · × removes an assignment</>
+          <>
+            Groups edit like the outliner (Enter · Tab · ⌥↑↓) · drag spec items onto groups ·
+            drop moves, drag to spec pane or × unassigns
+          </>
         )}
       </footer>
     </div>

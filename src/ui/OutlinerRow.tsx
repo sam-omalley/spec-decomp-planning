@@ -1,5 +1,12 @@
-import type { KeyboardEvent } from 'react';
+import type { DragEvent, KeyboardEvent, ReactNode } from 'react';
 import type { OutlineRow } from './outline.ts';
+
+export interface RowDropProps {
+  dropping: boolean;
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onDragLeave: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+}
 
 export interface RowActions {
   setTitle: (id: string, title: string) => void;
@@ -21,6 +28,10 @@ interface OutlinerRowProps {
   selected: boolean;
   actions: RowActions;
   registerInput: (id: string, el: HTMLInputElement | null) => void;
+  /** Extra content after the title: member chips, badges. */
+  extras?: ReactNode;
+  /** Present when the row is a drop target (planning view). */
+  dropProps?: RowDropProps;
 }
 
 export function OutlinerRow({
@@ -30,6 +41,8 @@ export function OutlinerRow({
   selected,
   actions,
   registerInput,
+  extras,
+  dropProps,
 }: OutlinerRowProps) {
   const { id } = row;
 
@@ -58,10 +71,14 @@ export function OutlinerRow({
     }
   }
 
+  const dropClass = dropProps?.dropping ? ' row-drop' : '';
   return (
     <div
-      className={`row${selected ? ' row-selected' : ''}`}
+      className={`row${selected ? ' row-selected' : ''}${dropClass}`}
       style={{ paddingLeft: `${row.depth * 22 + 8}px` }}
+      onDragOver={dropProps?.onDragOver}
+      onDragLeave={dropProps?.onDragLeave}
+      onDrop={dropProps?.onDrop}
     >
       {row.hasChildren ? (
         <button
@@ -88,6 +105,7 @@ export function OutlinerRow({
         onBlur={() => actions.endEditing()}
       />
       {row.collapsed && <span className="row-count">{childCount}</span>}
+      {extras}
     </div>
   );
 }

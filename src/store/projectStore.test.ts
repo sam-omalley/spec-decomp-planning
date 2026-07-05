@@ -4,14 +4,12 @@ import { ProjectStore } from './projectStore.ts';
 import {
   GraphError,
   addEdge,
-  assignToEpic,
-  createEpic,
+  assignToGroup,
+  createGroup,
   createNode,
-  createPlan,
   deleteNode,
-  membersOfEpic,
+  membersOfGroup,
   parentOf,
-  removeFromEpic,
   updateNode,
 } from '../model/graph.ts';
 
@@ -140,21 +138,16 @@ describe('undo and redo', () => {
   it('undo/redo restore planning data atomically', () => {
     const store = seeded();
     store.commit((g) => {
-      g = createPlan(g, { id: 'p1', name: 'MVP' });
-      g = createEpic(g, 'p1', { id: 'e1', title: 'Checkout MVP' });
-      g = createEpic(g, 'p1', { id: 'e2', title: 'Later' });
-      g = assignToEpic(g, 'coupons', 'e1');
-      return g;
+      g = createGroup(g, { id: 'block', title: 'Block 1' });
+      g = createGroup(g, { id: 'e1', title: 'Checkout MVP' }, 'block');
+      g = createGroup(g, { id: 'e2', title: 'Later' }, 'block');
+      return assignToGroup(g, 'coupons', 'e1');
     });
-    store.commit((g) => {
-      g = removeFromEpic(g, 'coupons', 'e1');
-      g = assignToEpic(g, 'coupons', 'e2');
-      return g;
-    });
-    assert.deepEqual(membersOfEpic(store.getState(), 'e2'), ['coupons']);
+    store.commit((g) => assignToGroup(g, 'coupons', 'e2'));
+    assert.deepEqual(membersOfGroup(store.getState(), 'e2'), ['coupons']);
     store.undo();
-    assert.deepEqual(membersOfEpic(store.getState(), 'e1'), ['coupons']);
-    assert.deepEqual(membersOfEpic(store.getState(), 'e2'), []);
+    assert.deepEqual(membersOfGroup(store.getState(), 'e1'), ['coupons']);
+    assert.deepEqual(membersOfGroup(store.getState(), 'e2'), []);
     assert.equal(parentOf(store.getState(), 'coupons'), 'pricing', 'tree untouched throughout');
   });
 

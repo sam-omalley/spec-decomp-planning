@@ -1,15 +1,20 @@
 /**
- * Keyboard-first outliner over the 'contains' forest — the primary
- * editing surface. Enter = sibling after, Tab/Shift+Tab = indent/outdent,
- * Alt+Up/Down = reorder, Cmd/Ctrl+. = fold, Backspace on an empty row or
- * Cmd/Ctrl+Backspace = delete (confirming before cascade deletes).
+ * Keyboard-first outliner over one side of the 'contains' graph — the
+ * spec tree (work nodes) or the delivery tree (group nodes). Enter =
+ * sibling after, Tab/Shift+Tab = indent/outdent, Alt+Up/Down = reorder,
+ * Cmd/Ctrl+. = fold, Backspace on an empty row or Cmd/Ctrl+Backspace =
+ * delete (confirming before cascade deletes).
  *
  * Collapse state and selection are view state, not graph data, so they
- * live here and never enter the store or undo history.
+ * live here and never enter the store or undo history. The planning
+ * view augments rows with member chips and drop targets via rowExtras /
+ * rowDropProps.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
+  createGroup,
   createId,
   createNode,
   deleteNode,
@@ -24,15 +29,33 @@ import {
   outdentTarget,
   reorderTarget,
   visibleRows,
+  type OutlineSide,
 } from './outline.ts';
-import { OutlinerRow, type RowActions } from './OutlinerRow.tsx';
+import { OutlinerRow, type RowActions, type RowDropProps } from './OutlinerRow.tsx';
 
 interface OutlinerProps {
+  side?: OutlineSide;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  emptyHint?: string;
+  emptyButtonLabel?: string;
+  addLabel?: string;
+  /** Extra content rendered inside a row, after the title (chips, badges). */
+  rowExtras?: (id: string) => ReactNode;
+  /** Native DnD handlers to make a row a drop target. */
+  rowDropProps?: (id: string) => RowDropProps | undefined;
 }
 
-export function Outliner({ selectedId, onSelect }: OutlinerProps) {
+export function Outliner({
+  side = 'work',
+  selectedId,
+  onSelect,
+  emptyHint = 'No spec yet.',
+  emptyButtonLabel = 'Add the first item',
+  addLabel = '+ Add item',
+  rowExtras,
+  rowDropProps,
+}: OutlinerProps) {
   const graph = useProjectGraph();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   // Bumped to re-run the focus effect when the DOM may have dropped focus
@@ -40,7 +63,10 @@ export function Outliner({ selectedId, onSelect }: OutlinerProps) {
   const [focusTick, setFocusTick] = useState(0);
   const inputRefs = useRef(new Map<string, HTMLInputElement>());
 
-  const rows = useMemo(() => visibleRows(graph, collapsed), [graph, collapsed]);
+  const rows = useMemo(
+    () => visibleRows(graph, collapsed, side),
+    [graph, collapsed, side],
+  );
 
   useEffect(() => {
     if (selectedId === null) return;
@@ -63,12 +89,18 @@ export function Outliner({ selectedId, onSelect }: OutlinerProps) {
     setCollapsed(next);
   }
 
+  function createEmpty(g: ReturnType<typeof store.getState>, id: string, parentId?: string) {
+    return side === 'group'
+      ? createGroup(g, { id, title: '' }, parentId)
+      : createNode(g, { id, title: '' }, parentId);
+  }
+
   function createAfter(afterId: string | null) {
     const newId = createId();
     store.commit((g) => {
-      if (afterId === null) return createNode(g, { id: newId, title: '' });
+      if (afterId === null) return createEmpty(g, newId);
       const { parentId, index } = insertionPointAfter(g, afterId);
-      g = createNode(g, { id: newId, title: '' }, parentId ?? undefined);
+      g = createEmpty(g, newId, parentId ?? undefined);
       return moveNode(g, newId, parentId, index);
     });
     requestFocus(newId);
@@ -81,15 +113,18 @@ export function Outliner({ selectedId, onSelect }: OutlinerProps) {
     const count = subtreeIds(current, id).size;
     if (count > 1) {
       const label = node.title.trim() === '' ? 'this item' : `“${node.title}”`;
-      const ok = window.confirm(
-        `Delete ${label} and ${count - 1} nested item${count > 2 ? 's' : ''}? ` +
-          'Dependencies and epic assignments of deleted items are removed too.',
-      );
-      if (!ok) return;
+      const nested = `${count - 1} nested ${side === 'group' ? 'group' : 'item'}${
+        count > 2 ? 's' : ''
+      }`;
+      const consequence =
+        side === 'group'
+          ? 'Their assignments are removed; work items stay in the spec.'
+          : 'Dependencies and assignments of deleted items are removed too.';
+      if (!window.confirm(`Delete ${label} and ${nested}? ${consequence}`)) return;
     }
     const index = rows.findIndex((r) => r.id === id);
     const next = store.commit((g) => deleteNode(g, id));
-    const nextRows = visibleRows(next, collapsed);
+    const nextRows = visibleRows(next, collapsed, side);
     const target = nextRows[Math.min(Math.max(index - 1, 0), nextRows.length - 1)];
     if (target) requestFocus(target.id);
     else onSelect(null);
@@ -156,9 +191,9 @@ export function Outliner({ selectedId, onSelect }: OutlinerProps) {
   if (rows.length === 0) {
     return (
       <div className="outliner-empty">
-        <p>No spec yet.</p>
+        <p>{emptyHint}</p>
         <button className="button-primary" onClick={() => createAfter(null)}>
-          Add the first item
+          {emptyButtonLabel}
         </button>
       </div>
     );
@@ -174,6 +209,8 @@ export function Outliner({ selectedId, onSelect }: OutlinerProps) {
           childCount={row.collapsed ? subtreeIds(graph, row.id).size - 1 : 0}
           selected={row.id === selectedId}
           actions={actions}
+          extras={rowExtras?.(row.id)}
+          dropProps={rowDropProps?.(row.id)}
           registerInput={(id, el) => {
             if (el) inputRefs.current.set(id, el);
             else inputRefs.current.delete(id);
@@ -181,7 +218,7 @@ export function Outliner({ selectedId, onSelect }: OutlinerProps) {
         />
       ))}
       <button className="add-row" onClick={() => createAfter(null)}>
-        + Add item
+        {addLabel}
       </button>
     </div>
   );

@@ -1,27 +1,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  assignToEpic,
-  createEpic,
+  assignToGroup,
+  createGroup,
   createNode,
-  createPlan,
   emptyGraph,
 } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
-import {
-  coveringEpicsInPlan,
-  epicsOfPlanOrdered,
-  overlappingMembers,
-  plansOrdered,
-} from './planning.ts';
+import { coveringGroups, overlappingMembers, rootGroupOf } from './planning.ts';
 
 /**
- * app
- * ├─ auth
- * │  ├─ login
- * │  └─ signup
- * └─ billing
- * Plans: p1 (e1, e2), p2 (e3).
+ * Spec:  app ─┬─ auth ─┬─ login
+ *             │        └─ signup
+ *             └─ billing
+ * Delivery:  block1 ─┬─ epicA
+ *                    └─ epicB
+ *            block2
  */
 function fixture(): ProjectGraph {
   let g = emptyGraph();
@@ -30,85 +24,78 @@ function fixture(): ProjectGraph {
   g = createNode(g, { id: 'login', title: 'Login' }, 'auth');
   g = createNode(g, { id: 'signup', title: 'Signup' }, 'auth');
   g = createNode(g, { id: 'billing', title: 'Billing' }, 'app');
-  g = createPlan(g, { id: 'p1', name: 'MVP first', createdAt: '2026-01-01T00:00:00Z' });
-  g = createPlan(g, { id: 'p2', name: 'Infra first', createdAt: '2026-01-02T00:00:00Z' });
-  g = createEpic(g, 'p1', { id: 'e1', title: 'Sprint 1', createdAt: '2026-01-01T00:00:00Z' });
-  g = createEpic(g, 'p1', { id: 'e2', title: 'Sprint 2', createdAt: '2026-01-02T00:00:00Z' });
-  g = createEpic(g, 'p2', { id: 'e3', title: 'Foundations' });
+  g = createGroup(g, { id: 'block1', title: 'Block 1' });
+  g = createGroup(g, { id: 'epicA', title: 'Epic A' }, 'block1');
+  g = createGroup(g, { id: 'epicB', title: 'Epic B' }, 'block1');
+  g = createGroup(g, { id: 'block2', title: 'Block 2' });
   return g;
 }
 
-describe('ordering helpers', () => {
-  it('plans and epics are ordered by creation time', () => {
-    const g = fixture();
-    assert.deepEqual(plansOrdered(g).map((p) => p.id), ['p1', 'p2']);
-    assert.deepEqual(epicsOfPlanOrdered(g, 'p1'), ['e1', 'e2']);
-    assert.deepEqual(epicsOfPlanOrdered(g, 'p2'), ['e3']);
-  });
-});
-
-describe('coveringEpicsInPlan', () => {
-  it('reports direct assignments as via-self', () => {
-    const g = assignToEpic(fixture(), 'login', 'e1');
-    assert.deepEqual(coveringEpicsInPlan(g, 'login', 'p1'), [
-      { epicId: 'e1', via: 'login' },
-    ]);
+describe('coveringGroups', () => {
+  it('reports the direct assignment as via-self', () => {
+    const g = assignToGroup(fixture(), 'login', 'epicA');
+    assert.deepEqual(coveringGroups(g, 'login'), [{ groupId: 'epicA', via: 'login' }]);
+    assert.deepEqual(coveringGroups(g, 'signup'), []);
   });
 
-  it('inherits coverage from ancestors, scoped to the plan', () => {
+  it('deduplicates by group: nearest carrier wins', () => {
     let g = fixture();
-    g = assignToEpic(g, 'auth', 'e1');
-    g = assignToEpic(g, 'auth', 'e3');
-    assert.deepEqual(coveringEpicsInPlan(g, 'login', 'p1'), [
-      { epicId: 'e1', via: 'auth' },
-    ]);
-    assert.deepEqual(coveringEpicsInPlan(g, 'login', 'p2'), [
-      { epicId: 'e3', via: 'auth' },
-    ]);
-    assert.deepEqual(coveringEpicsInPlan(g, 'billing', 'p1'), []);
+    g = assignToGroup(g, 'auth', 'epicA');
+    g = assignToGroup(g, 'login', 'epicA');
+    assert.deepEqual(coveringGroups(g, 'login'), [{ groupId: 'epicA', via: 'login' }]);
   });
 
-  it('direct assignment wins over an ancestor for the same epic', () => {
+  it('inherits coverage from spec ancestors, nearest first', () => {
     let g = fixture();
-    g = assignToEpic(g, 'auth', 'e1');
-    g = assignToEpic(g, 'login', 'e1');
-    assert.deepEqual(coveringEpicsInPlan(g, 'login', 'p1'), [
-      { epicId: 'e1', via: 'login' },
+    g = assignToGroup(g, 'app', 'block1');
+    g = assignToGroup(g, 'auth', 'epicA');
+    assert.deepEqual(coveringGroups(g, 'login'), [
+      { groupId: 'epicA', via: 'auth' },
+      { groupId: 'block1', via: 'app' },
     ]);
-  });
-
-  it('lists distinct epics, direct before inherited', () => {
-    let g = fixture();
-    g = assignToEpic(g, 'auth', 'e1');
-    g = assignToEpic(g, 'login', 'e2');
-    assert.deepEqual(coveringEpicsInPlan(g, 'login', 'p1'), [
-      { epicId: 'e2', via: 'login' },
-      { epicId: 'e1', via: 'auth' },
-    ]);
+    assert.deepEqual(coveringGroups(g, 'billing'), [{ groupId: 'block1', via: 'app' }]);
   });
 });
 
 describe('overlappingMembers', () => {
-  it('flags a member whose descendant sits in another epic of the same plan', () => {
+  it('flags a member whose descendant is assigned to a sibling group', () => {
     let g = fixture();
-    g = assignToEpic(g, 'auth', 'e1');
-    g = assignToEpic(g, 'login', 'e2');
-    assert.deepEqual(overlappingMembers(g, 'e1'), ['auth']);
-    assert.deepEqual(overlappingMembers(g, 'e2'), []);
+    g = assignToGroup(g, 'auth', 'epicA');
+    g = assignToGroup(g, 'login', 'epicB');
+    assert.deepEqual(overlappingMembers(g, 'epicA'), ['auth']);
+    assert.deepEqual(overlappingMembers(g, 'epicB'), []);
   });
 
-  it('ignores assignments in other plans', () => {
+  it('treats assignment within the member group subtree as refinement, not overlap', () => {
     let g = fixture();
-    g = assignToEpic(g, 'auth', 'e1');
-    g = assignToEpic(g, 'login', 'e3');
-    assert.deepEqual(overlappingMembers(g, 'e1'), []);
+    g = assignToGroup(g, 'auth', 'block1');
+    g = assignToGroup(g, 'login', 'epicA');
+    assert.deepEqual(overlappingMembers(g, 'block1'), [], 'epicA is inside block1');
   });
 
-  it('ignores the member itself being in two epics (only descendants count)', () => {
+  it('flags assignment to a coarser ancestor group or another block', () => {
     let g = fixture();
-    g = assignToEpic(g, 'login', 'e1');
-    g = assignToEpic(g, 'login', 'e2');
-    assert.deepEqual(overlappingMembers(g, 'e1'), []);
-    assert.deepEqual(overlappingMembers(g, 'e2'), []);
+    g = assignToGroup(g, 'auth', 'epicA');
+    g = assignToGroup(g, 'login', 'block1');
+    assert.deepEqual(overlappingMembers(g, 'epicA'), ['auth'], 'block1 is above epicA');
+
+    let h = fixture();
+    h = assignToGroup(h, 'auth', 'epicA');
+    h = assignToGroup(h, 'signup', 'block2');
+    assert.deepEqual(overlappingMembers(h, 'epicA'), ['auth'], 'block2 is unrelated');
+  });
+
+  it('ignores unassigned descendants', () => {
+    const g = assignToGroup(fixture(), 'app', 'block1');
+    assert.deepEqual(overlappingMembers(g, 'block1'), []);
+  });
+});
+
+describe('rootGroupOf', () => {
+  it('walks up to the delivery-tree root', () => {
+    const g = fixture();
+    assert.equal(rootGroupOf(g, 'epicA'), 'block1');
+    assert.equal(rootGroupOf(g, 'block1'), 'block1');
+    assert.equal(rootGroupOf(g, 'block2'), 'block2');
   });
 });
