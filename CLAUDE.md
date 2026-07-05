@@ -116,6 +116,14 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
    struck through); ⧗/⟳ badges on waiting/cycling rows; graph view
    draws dep edges dependent → prerequisite with arrowheads, cycles
    red + animated)
+7. ✅ Markdown view (`MarkdownView.tsx` + pure `planMarkdown.ts`,
+   unit-tested: the delivery plan as Markdown — groups are depth
+   headings (clamped h6), assigned work items a bullet list with
+   spec sub-items nested, titles verbatim, optional Backlog of
+   uncovered work. Builds one block model → both a copyable source
+   string and the rendered preview so they can't drift. Per-section
+   toggles (details / sub-items / backlog); read-only, Copy to export.
+   Members ordered by spec pre-order.)
 
 - v2+: merge/split nodes, bulk edit, critical path, richer graph editing.
 
