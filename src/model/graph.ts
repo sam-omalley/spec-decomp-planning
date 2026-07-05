@@ -392,6 +392,14 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
     order = siblings.length;
   }
 
+  if (input.type === 'depends_on' || input.type === 'blocks') {
+    if (isGroup(from) || isGroup(to)) {
+      throw new GraphError(
+        'Dependencies connect work nodes; groups sequence by sibling order',
+      );
+    }
+  }
+
   if (input.type === 'assigned_to') {
     if (isGroup(from)) {
       throw new GraphError('Groups cannot be assigned; only work nodes can');

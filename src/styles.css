@@ -553,3 +553,167 @@ body {
   stroke-dasharray: 6 4;
   opacity: 0.75;
 }
+
+/* ----------------------------- dependencies ---------------------------- */
+
+.bullet-status {
+  cursor: pointer;
+  padding: 0;
+  border: none;
+  width: 10px;
+  height: 10px;
+  margin: 0 4px;
+  border-radius: 50%;
+  background: var(--bullet);
+  box-sizing: border-box;
+}
+
+.bullet-status.status-in_progress {
+  background: var(--panel);
+  border: 3px solid var(--accent);
+}
+
+.bullet-status.status-done {
+  background: #0e9f6e;
+}
+
+.bullet-status:hover {
+  box-shadow: 0 0 0 3px #e8e8e5;
+}
+
+.row-input-done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.dep-badge {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #fdf1d7;
+  color: #8a5a00;
+  border: 1px solid #f0d9a3;
+  cursor: help;
+  margin-right: 4px;
+}
+
+.dep-badge-cycle {
+  background: #fde8e6;
+  color: #b42318;
+  border-color: #f2c5c0;
+}
+
+.dep-editor {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 10px 10px 44px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.dep-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.dep-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 4px 2px 9px;
+  border-radius: 12px;
+  background: #fdf6e4;
+  border: 1px solid #f0d9a3;
+}
+
+.dep-input-wrap {
+  position: relative;
+}
+
+.dep-input {
+  font: inherit;
+  font-size: 12px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  padding: 3px 4px;
+  min-width: 130px;
+}
+
+.dep-input::placeholder {
+  color: #c0c3c9;
+}
+
+.dep-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dep-suggestion {
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dep-suggestion:hover {
+  background: var(--accent-soft);
+}
+
+/* graph view dependency styling */
+
+.gedge-dep .react-flow__edge-path {
+  stroke: #b58a2c;
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+
+.gedge-dep-cycle .react-flow__edge-path {
+  stroke: #b42318;
+  stroke-width: 2;
+  opacity: 1;
+}
+
+.gnode-waiting {
+  border-color: #f0d9a3;
+  background: #fffdf6;
+}
+
+.gnode-cycle {
+  border-color: #e5a49d;
+  background: #fff8f7;
+}
+
+.gnode-done {
+  opacity: 0.55;
+}
+
+.gnode-done .gnode-title {
+  text-decoration: line-through;
+}

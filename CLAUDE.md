@@ -106,7 +106,16 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
    right-to-left, dashed `assigned_to` edges bridge the gap, colored
    per root group via shared `colors.ts`. Read-mostly: pan/zoom/click
    to select; no dragging — positions re-derive from the graph)
-6. Dependency edges + blocked/cycle highlighting (Tarjan SCC)
+6. ✅ Dependencies (`src/model/analysis.ts`, pure + unit-tested: the
+   relation combines `depends_on` with inverse `blocks`; Tarjan SCC
+   for cycles; `waitingMap` = unfinished direct prerequisites. Deps
+   connect work nodes only — groups sequence by sibling order,
+   enforced in `addEdge`. UX: "Depends on" editor in the details card
+   (type-to-search, Enter adds); outliner bullets became status
+   controls (click cycles not_started → in_progress → done, done =
+   struck through); ⧗/⟳ badges on waiting/cycling rows; graph view
+   draws dep edges dependent → prerequisite with arrowheads, cycles
+   red + animated)
 
 - v2+: merge/split nodes, bulk edit, critical path, richer graph editing.
 

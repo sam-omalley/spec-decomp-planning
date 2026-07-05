@@ -15,11 +15,13 @@ import {
   Background,
   Controls,
   Handle,
+  MarkerType,
   Position,
   ReactFlow,
 } from '@xyflow/react';
 import type { Edge as FlowEdge, Node as FlowNode, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import { useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
 import { layoutGraph } from './graphLayout.ts';
@@ -28,14 +30,26 @@ interface GNodeData extends Record<string, unknown> {
   title: string;
   hasDetails: boolean;
   isSelected: boolean;
+  isDone: boolean;
+  isWaiting: boolean;
+  inCycle: boolean;
   color?: string;
 }
 
 type GNode = FlowNode<GNodeData>;
 
 function WorkGraphNode({ data }: NodeProps<GNode>) {
+  const classes = [
+    'gnode',
+    'gnode-work',
+    data.isSelected ? 'gnode-selected' : '',
+    data.isDone ? 'gnode-done' : '',
+    data.inCycle ? 'gnode-cycle' : data.isWaiting ? 'gnode-waiting' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <div className={`gnode gnode-work${data.isSelected ? ' gnode-selected' : ''}`}>
+    <div className={classes}>
       <Handle type="target" position={Position.Left} id="lt" className="ghandle" />
       <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
@@ -69,6 +83,11 @@ interface GraphViewProps {
 export function GraphView({ selectedId, onSelect }: GraphViewProps) {
   const graph = useProjectGraph();
 
+  const analysis = useMemo(
+    () => ({ waiting: waitingMap(graph), cycles: cycleIndexOf(graph) }),
+    [graph],
+  );
+
   const nodes = useMemo<GNode[]>(
     () =>
       layoutGraph(graph).map((placed) => {
@@ -81,6 +100,9 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
             title: node.title,
             hasDetails: node.description.trim() !== '',
             isSelected: placed.id === selectedId,
+            isDone: node.status === 'done',
+            isWaiting: analysis.waiting.has(placed.id),
+            inCycle: analysis.cycles.has(placed.id),
             ...(placed.side === 'group'
               ? { color: rootGroupColor(graph, placed.id) }
               : {}),
@@ -89,13 +111,35 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
           connectable: false,
         };
       }),
-    [graph, selectedId],
+    [graph, selectedId, analysis],
   );
 
   const edges = useMemo<FlowEdge[]>(() => {
     const result: FlowEdge[] = [];
     for (const edge of Object.values(graph.edges)) {
-      if (edge.type === 'contains') {
+      if (edge.type === 'depends_on' || edge.type === 'blocks') {
+        // Normalize to "dependent → prerequisite"; the arrow points at
+        // what is needed first.
+        const [dependent, prerequisite] =
+          edge.type === 'depends_on' ? [edge.from, edge.to] : [edge.to, edge.from];
+        const cycleA = analysis.cycles.get(dependent);
+        const inCycle = cycleA !== undefined && cycleA === analysis.cycles.get(prerequisite);
+        result.push({
+          id: edge.id,
+          source: dependent,
+          target: prerequisite,
+          sourceHandle: 'rs',
+          targetHandle: 'lt',
+          className: inCycle ? 'gedge-dep gedge-dep-cycle' : 'gedge-dep',
+          animated: inCycle,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 16,
+            height: 16,
+            color: inCycle ? '#b42318' : '#b58a2c',
+          },
+        });
+      } else if (edge.type === 'contains') {
         const groupSide = graph.nodes[edge.from]?.type === 'group';
         result.push({
           id: edge.id,
@@ -119,7 +163,7 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
       }
     }
     return result;
-  }, [graph]);
+  }, [graph, analysis]);
 
   if (nodes.length === 0) {
     return (
