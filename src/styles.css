@@ -717,3 +717,106 @@ body {
 .gnode-done .gnode-title {
   text-decoration: line-through;
 }
+
+/* ----------------------------- markdown view --------------------------- */
+
+.markdown-view {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.md-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: #fbfbfa;
+  flex-wrap: wrap;
+}
+
+.md-options {
+  display: flex;
+  gap: 12px;
+}
+
+.md-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.md-copy {
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.md-source {
+  margin: 0;
+  padding: 20px 24px;
+  max-height: calc(100vh - 210px);
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.md-preview {
+  padding: 8px 28px 28px;
+  max-height: calc(100vh - 210px);
+  overflow: auto;
+}
+
+.md-empty {
+  padding: 28px;
+}
+
+.md-heading {
+  line-height: 1.3;
+  margin: 20px 0 6px;
+  font-weight: 600;
+}
+
+h1.md-heading {
+  font-size: 22px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+
+h2.md-heading { font-size: 18px; }
+h3.md-heading { font-size: 16px; }
+h4.md-heading,
+h5.md-heading,
+h6.md-heading { font-size: 14px; color: var(--muted); }
+
+.md-para {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #3a4046;
+  white-space: pre-wrap;
+}
+
+.md-list {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+
+.md-list li {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.md-item-detail {
+  color: var(--muted);
+  white-space: pre-wrap;
+}

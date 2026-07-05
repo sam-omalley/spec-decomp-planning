@@ -3,10 +3,11 @@ import { GraphError } from './model/graph.ts';
 import { deserializeProject, serializeProject } from './model/serialize.ts';
 import { store, useProjectGraph } from './store/appStore.ts';
 import { GraphView } from './ui/GraphView.tsx';
+import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
 import { PlanningView } from './ui/PlanningView.tsx';
 
-type View = 'spec' | 'planning' | 'graph';
+type View = 'spec' | 'planning' | 'graph' | 'markdown';
 
 export function App() {
   const graph = useProjectGraph();
@@ -98,6 +99,12 @@ export function App() {
           >
             Graph
           </button>
+          <button
+            className={view === 'markdown' ? 'view-tab view-tab-active' : 'view-tab'}
+            onClick={() => setView('markdown')}
+          >
+            Markdown
+          </button>
         </nav>
         <span className="app-count">
           {itemCount} item{itemCount === 1 ? '' : 's'}
@@ -136,6 +143,7 @@ export function App() {
         {view === 'graph' && (
           <GraphView selectedId={selectedId} onSelect={setSelectedId} />
         )}
+        {view === 'markdown' && <MarkdownView />}
       </main>
       <footer className="app-hints">
         {view === 'spec' && (
@@ -153,6 +161,9 @@ export function App() {
         {view === 'graph' && (
           <>Spec on the left, delivery on the right, assignments bridge the middle · click
             selects · scroll zooms</>
+        )}
+        {view === 'markdown' && (
+          <>The delivery plan as Markdown · toggle sections · Copy to export · read-only</>
         )}
       </footer>
     </div>
