@@ -7,6 +7,12 @@
  * Classic tidy layout per forest: leaves take consecutive rows, a
  * parent sits at the midpoint of its children. The shorter forest is
  * vertically centered against the taller one.
+ *
+ * An optional `visible` set restricts the layout to a sub-graph — used
+ * by the graph view's hide filter so the survivors re-flow compactly
+ * instead of leaving gaps. Children are filtered to visible nodes, and
+ * a visible node whose parent is hidden is promoted to a root, keeping
+ * both forests well-formed.
  */
 
 import { childrenOf, groupRootsOf, rootsOf } from '../model/graph.ts';
@@ -29,19 +35,22 @@ interface ForestLayout {
   maxDepth: number;
 }
 
-function layoutForest(graph: ProjectGraph, roots: string[]): ForestLayout {
+function layoutForest(
+  roots: string[],
+  children: (id: string) => string[],
+): ForestLayout {
   const positions = new Map<string, { depth: number; row: number }>();
   let nextRow = 0;
   let maxDepth = 0;
 
   const visit = (id: string, depth: number): number => {
     maxDepth = Math.max(maxDepth, depth);
-    const children = childrenOf(graph, id);
+    const kids = children(id);
     let row: number;
-    if (children.length === 0) {
+    if (kids.length === 0) {
       row = nextRow++;
     } else {
-      const childRows = children.map((child) => visit(child, depth + 1));
+      const childRows = kids.map((child) => visit(child, depth + 1));
       row = (childRows[0]! + childRows[childRows.length - 1]!) / 2;
     }
     positions.set(id, { depth, row });
@@ -52,9 +61,42 @@ function layoutForest(graph: ProjectGraph, roots: string[]): ForestLayout {
   return { positions, rowCount: nextRow, maxDepth };
 }
 
-export function layoutGraph(graph: ProjectGraph): PlacedNode[] {
-  const work = layoutForest(graph, rootsOf(graph));
-  const groups = layoutForest(graph, groupRootsOf(graph));
+/**
+ * Roots of the visible sub-forest, in the full tree's pre-order: every
+ * visible node whose parent is absent from `visible` (or a top root).
+ */
+function visibleRoots(
+  graph: ProjectGraph,
+  topRoots: string[],
+  visible: ReadonlySet<string>,
+): string[] {
+  const roots: string[] = [];
+  const visit = (id: string, parentVisible: boolean): void => {
+    const shown = visible.has(id);
+    if (shown && !parentVisible) roots.push(id);
+    for (const child of childrenOf(graph, id)) visit(child, shown);
+  };
+  for (const root of topRoots) visit(root, false);
+  return roots;
+}
+
+function forestFor(
+  graph: ProjectGraph,
+  topRoots: string[],
+  visible: ReadonlySet<string> | undefined,
+): ForestLayout {
+  if (!visible) return layoutForest(topRoots, (id) => childrenOf(graph, id));
+  const children = (id: string): string[] =>
+    childrenOf(graph, id).filter((c) => visible.has(c));
+  return layoutForest(visibleRoots(graph, topRoots, visible), children);
+}
+
+export function layoutGraph(
+  graph: ProjectGraph,
+  visible?: ReadonlySet<string>,
+): PlacedNode[] {
+  const work = forestFor(graph, rootsOf(graph), visible);
+  const groups = forestFor(graph, groupRootsOf(graph), visible);
 
   // Vertical centering of the shorter forest against the taller one.
   const workOffset = Math.max(0, (groups.rowCount - work.rowCount) / 2);

@@ -14,7 +14,7 @@
  * canvas.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Background,
   Controls,
@@ -22,6 +22,7 @@ import {
   MarkerType,
   Position,
   ReactFlow,
+  useReactFlow,
 } from '@xyflow/react';
 import type { Edge as FlowEdge, Node as FlowNode, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -125,6 +126,17 @@ function GroupGraphNode({ data }: NodeProps<GNode>) {
 
 const nodeTypes = { work: WorkGraphNode, group: GroupGraphNode };
 
+/** Re-fits the viewport whenever `signature` changes — i.e. when the
+ *  filter/mode toggles reflow the graph. Lives inside <ReactFlow> so it
+ *  can reach the instance via context. */
+function FitOnReflow({ signature }: { signature: string }) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    void fitView({ duration: 200 });
+  }, [signature, fitView]);
+  return null;
+}
+
 interface GraphViewProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -172,13 +184,22 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
     [onSelect],
   );
 
+  const hiding = anyFilter && mode === 'hide';
+
+  // In hide mode, lay out only the survivors so they re-flow compactly
+  // instead of sitting at their full-graph positions with gaps.
+  const visibleSet = useMemo(() => {
+    if (!hiding) return undefined;
+    const set = new Set<string>();
+    for (const id of Object.keys(graph.nodes)) if (matches(id)) set.add(id);
+    return set;
+  }, [graph, hiding, matches]);
+
   const nodes = useMemo<GNode[]>(() => {
     const result: GNode[] = [];
-    for (const placed of layoutGraph(graph)) {
+    for (const placed of layoutGraph(graph, visibleSet)) {
       const node = graph.nodes[placed.id]!;
       const matched = matches(placed.id);
-      // Hide mode drops non-matches from the canvas altogether.
-      if (anyFilter && mode === 'hide' && !matched) continue;
       result.push({
         id: placed.id,
         type: placed.side,
@@ -204,7 +225,7 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
       });
     }
     return result;
-  }, [graph, selectedId, analysis, anyFilter, mode, matches, assign]);
+  }, [graph, selectedId, analysis, anyFilter, mode, matches, assign, visibleSet]);
 
   // Edges to a node hidden in hide mode would dangle, so keep only those
   // whose endpoints are both on the canvas.
@@ -315,6 +336,7 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
       >
         <Background gap={24} />
         <Controls showInteractive={false} />
+        <FitOnReflow signature={`${mode}:${active.unassigned}:${active.empty}`} />
       </ReactFlow>
     </div>
   );
