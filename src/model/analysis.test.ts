@@ -7,12 +7,13 @@ import {
   prerequisitesOf,
   waitingMap,
 } from './analysis.ts';
-import { addEdge, createNode, emptyGraph, updateNode } from './graph.ts';
+import { addEdge, createGroup, emptyGraph, updateNode } from './graph.ts';
 import type { ProjectGraph } from './types.ts';
 
+// Dependencies are group-only, so the analysis fixtures build groups.
 function nodes(...ids: string[]): ProjectGraph {
   let g = emptyGraph();
-  for (const id of ids) g = createNode(g, { id, title: id.toUpperCase() });
+  for (const id of ids) g = createGroup(g, { id, title: id.toUpperCase() });
   return g;
 }
 
