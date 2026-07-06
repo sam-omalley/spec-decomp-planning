@@ -1027,6 +1027,257 @@ body {
   color: var(--muted);
 }
 
+/* ------------------------------ timeline view ------------------------------ */
+
+.timeline-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.timeline-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.tl-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.tl-tick-label {
+  font-size: 10px;
+  fill: var(--muted);
+}
+.tl-row-hit {
+  fill: transparent;
+}
+.tl-row:hover .tl-row-hit {
+  fill: var(--accent-soft);
+}
+.tl-row {
+  cursor: pointer;
+}
+.tl-label {
+  font-size: 12px;
+  fill: var(--text);
+}
+.tl-label-selected {
+  font-weight: 600;
+}
+.tl-bar {
+  fill: var(--bar-color, var(--accent));
+  opacity: 0.45;
+}
+.tl-bar-actual {
+  opacity: 0.95;
+}
+.tl-bar-container {
+  opacity: 0.22;
+}
+.tl-bar-selected {
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+.tl-marker {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.tl-marker-target {
+  stroke: #d1495b;
+}
+.tl-marker-label {
+  font-size: 10px;
+  fill: var(--accent);
+}
+.tl-marker-label-target {
+  fill: #d1495b;
+}
+
+/* ------------------------------ metrics view ------------------------------ */
+
+.metrics-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px;
+}
+
+.metrics-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.metric-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.metric-card-good {
+  border-color: #7bbf8a;
+  background: #f1f9f3;
+}
+.metric-card-bad {
+  border-color: #e0a3a3;
+  background: #fdf2f2;
+}
+.metric-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.metric-card-value {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.metric-card-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.metric-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px 16px;
+}
+.metric-panel h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.metric-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.burn-total {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.burn-ideal {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+.burn-done {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.burn-dot {
+  fill: var(--accent);
+}
+.burn-target {
+  stroke: #d1495b;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.burn-axis-label {
+  font-size: 10px;
+  fill: var(--muted);
+}
+
+.eva {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.eva-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 52px;
+  align-items: center;
+  gap: 10px;
+}
+.eva-title {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eva-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.eva-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.eva-tag {
+  font-size: 10px;
+  color: var(--muted);
+  width: 22px;
+}
+.eva-bar {
+  height: 9px;
+  border-radius: 3px;
+  min-width: 2px;
+}
+.eva-bar-est {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+}
+.eva-bar-under {
+  background: #7bbf8a;
+}
+.eva-bar-over {
+  background: #d1495b;
+}
+.eva-num {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.eva-var {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.eva-var-over {
+  color: #d1495b;
+}
+.eva-total {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* graph view dependency styling */
 
 .gedge-dep .react-flow__edge-path {
