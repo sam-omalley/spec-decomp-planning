@@ -213,6 +213,14 @@ export function deserializeProject(text: string): ProjectGraph {
   }
   if (file.version < FILE_VERSION) migrateLegacy(graph);
   backfillNodeDefaults(graph.nodes);
+  // Dependencies are group-only now (the plan sequences, the spec is
+  // structural). Drop any legacy dep edge touching a work node.
+  for (const [edgeId, edge] of Object.entries(graph.edges)) {
+    if (edge.type !== 'depends_on' && edge.type !== 'blocks') continue;
+    const from = graph.nodes[edge.from];
+    const to = graph.nodes[edge.to];
+    if (from?.type !== 'group' || to?.type !== 'group') delete graph.edges[edgeId];
+  }
 
   for (const edge of Object.values(graph.edges)) {
     if (!graph.nodes[edge.from] || !graph.nodes[edge.to]) {

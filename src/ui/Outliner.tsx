@@ -79,7 +79,7 @@ export function Outliner({
   // Dependency signals (work side only): who is waiting, who cycles.
   const depInfo = useMemo(
     () =>
-      side === 'work'
+      side === 'group'
         ? { waiting: waitingMap(graph), cycles: cycleIndexOf(graph) }
         : null,
     [graph, side],
@@ -274,7 +274,7 @@ export function Outliner({
   // A compact rolled estimate chip (work side): own estimate wins over
   // the sum of descendants; a ⚠ marks a subtree with unestimated leaves.
   function estimateChip(id: string): ReactNode {
-    if (side !== 'work') return null;
+    if (side !== 'group') return null;
     const days = rolledDuration(graph, id);
     const points = rolledEffort(graph, id);
     if (days.value === null && points.value === null && !days.hasGaps) return null;
@@ -355,10 +355,10 @@ export function Outliner({
             </>
           }
           dropProps={rowDropProps?.(row.id)}
-          status={side === 'work' ? graph.nodes[row.id]?.status : undefined}
-          onCycleStatus={side === 'work' ? cycleStatus : undefined}
+          status={side === 'group' ? graph.nodes[row.id]?.status : undefined}
+          onCycleStatus={side === 'group' ? cycleStatus : undefined}
           detailsExtras={
-            side === 'work' ? (
+            side === 'group' ? (
               <>
                 <NodeMetaEditor id={row.id} />
                 <DependencyEditor id={row.id} />

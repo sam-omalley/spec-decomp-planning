@@ -110,11 +110,11 @@ describe('node creation and the contains tree', () => {
 
 describe('moveNode', () => {
   it('reparents without touching other relationships', () => {
-    let g = fixture();
-    g = addEdge(g, { type: 'depends_on', from: 'oauth', to: 'password' });
-    g = moveNode(g, 'oauth', 'reset');
-    assert.equal(parentOf(g, 'oauth'), 'reset');
-    assert.ok(edgeBetween(g, 'depends_on', 'oauth', 'password'), 'dependency survives');
+    let g = planned();
+    g = addEdge(g, { type: 'depends_on', from: 'epicA', to: 'epicB' });
+    g = moveNode(g, 'epicA', null);
+    assert.equal(parentOf(g, 'epicA'), null);
+    assert.ok(edgeBetween(g, 'depends_on', 'epicA', 'epicB'), 'dependency survives');
   });
 
   it('places the node at a specific sibling index', () => {
@@ -239,13 +239,12 @@ describe('cascade delete', () => {
   it('removes the work subtree and every touching edge', () => {
     let g = planned();
     g = createNode(g, { id: 'db', title: 'User database' });
-    g = addEdge(g, { type: 'depends_on', from: 'oauth', to: 'db' });
 
     g = deleteNode(g, 'login');
 
     assert.deepEqual([...subtreeIds(g, 'auth')].sort(), ['auth', 'reset']);
     assert.equal(g.nodes['oauth'], undefined);
-    assert.equal(edgeBetween(g, 'depends_on', 'oauth', 'db'), undefined);
+    // The deleted work subtree's assignment edge (oauth → epicA) is gone.
     assert.deepEqual(membersOfGroup(g, 'epicA'), []);
     assert.ok(g.nodes['db'], 'unrelated node survives');
     assert.ok(g.nodes['epicA'], 'group itself survives');
@@ -253,9 +252,11 @@ describe('cascade delete', () => {
 
   it('deleting a group subtree removes assignments but never work nodes', () => {
     let g = planned();
+    g = addEdge(g, { type: 'depends_on', from: 'epicA', to: 'epicB' });
     g = deleteNode(g, 'block1');
     assert.equal(g.nodes['epicA'], undefined);
     assert.equal(g.nodes['epicB'], undefined);
+    assert.equal(edgeBetween(g, 'depends_on', 'epicA', 'epicB'), undefined, 'group dep cascaded');
     assert.ok(g.nodes['oauth'], 'work node survives');
     assert.equal(groupOf(g, 'oauth'), null);
     assert.deepEqual(groupRootsOf(g), []);
@@ -264,24 +265,26 @@ describe('cascade delete', () => {
 });
 
 describe('dependencies', () => {
-  it('rejects dependencies touching groups', () => {
-    const g = planned();
+  it('connects groups and rejects any dep touching a work node', () => {
+    let g = planned();
+    g = addEdge(g, { type: 'depends_on', from: 'epicA', to: 'epicB' });
+    assert.ok(edgeBetween(g, 'depends_on', 'epicA', 'epicB'), 'group dep allowed');
     assert.throws(
-      () => addEdge(g, { type: 'depends_on', from: 'oauth', to: 'epicA' }),
-      /connect work nodes/,
+      () => addEdge(g, { type: 'depends_on', from: 'oauth', to: 'password' }),
+      /structural/,
     );
     assert.throws(
-      () => addEdge(g, { type: 'blocks', from: 'block1', to: 'oauth' }),
-      /connect work nodes/,
+      () => addEdge(g, { type: 'blocks', from: 'oauth', to: 'epicA' }),
+      /structural/,
     );
   });
 
   it('allows dependency cycles (they are visualized, not forbidden)', () => {
-    let g = fixture();
-    g = addEdge(g, { type: 'depends_on', from: 'oauth', to: 'password' });
-    g = addEdge(g, { type: 'depends_on', from: 'password', to: 'oauth' });
-    assert.ok(edgeBetween(g, 'depends_on', 'oauth', 'password'));
-    assert.ok(edgeBetween(g, 'depends_on', 'password', 'oauth'));
+    let g = planned();
+    g = addEdge(g, { type: 'depends_on', from: 'epicA', to: 'epicB' });
+    g = addEdge(g, { type: 'depends_on', from: 'epicB', to: 'epicA' });
+    assert.ok(edgeBetween(g, 'depends_on', 'epicA', 'epicB'));
+    assert.ok(edgeBetween(g, 'depends_on', 'epicB', 'epicA'));
   });
 });
 
