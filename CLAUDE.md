@@ -221,16 +221,19 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     graph), coalesced per field; inputs are pre-validated so an invalid
     value is ignored rather than thrown (a throwing commit would
     propagate). Closes on outside-click / Esc. Verified in preview.
-12. Timeline / Gantt view — new 5th tab `TimelineView.tsx` + pure
-    `timelineLayout.ts` (unit-tested). Bars per scheduling unit grouped
-    by delivery group, planned-vs-actual overlay, projected-finish and
-    target-date markers. Hand-rolled SVG like `GraphView` (no chart
-    dep); register in the `App.tsx` `View` union and tab bar.
-13. Metrics view — new 6th tab `MetricsView.tsx` + pure `metrics.ts`
-    (unit-tested): projection summary (completion date, remaining,
-    variance vs target), burn-up / burn-down (cumulative done vs total
-    over time), estimate-vs-actual variance (per-item + rolled). Also
-    hand-rolled SVG, no new deps.
+12. ✅ Timeline / Gantt view — 5th tab `TimelineView.tsx` + pure
+    `timelineLayout.ts` (unit-tested). Bars per scheduled group in
+    pre-order (containers span their units), fraction-based geometry over
+    the date range, ▸ projected-finish and 🎯 target-date markers, weekly
+    gridline ticks, actual (done) bars styled distinctly from planned.
+    Hand-rolled SVG, no chart dep. Verified in preview.
+13. ✅ Metrics view — 6th tab `MetricsView.tsx` + pure `src/model/metrics.ts`
+    (unit-tested): `projectionSummary` (projected finish, done/remaining
+    days + points, calendar-day variance vs target, onTrack),
+    `estimateVsActual` (per done-unit + rolled, working-day durations),
+    `burnUp` (cumulative done vs constant total). Summary cards +
+    hand-rolled SVG burn-up (ideal / total / target lines) + est-vs-actual
+    bars. Verified in preview.
 
 - v2+: merge/split nodes, bulk edit, critical path, richer graph editing.
 
