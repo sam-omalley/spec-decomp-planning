@@ -844,6 +844,133 @@ body {
   background: var(--accent-soft);
 }
 
+/* details-card metadata editor (status/priority/estimates/dates/keys) */
+
+.meta-editor {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 10px 10px 44px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.meta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.meta-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.meta-select,
+.meta-input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.meta-select {
+  text-transform: capitalize;
+}
+
+.meta-input {
+  width: 130px;
+}
+
+.meta-refs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 4px 2px 4px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+}
+
+.ref-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ref-link:hover {
+  text-decoration: underline;
+}
+
+.ref-system {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.ref-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ref-input-system {
+  width: 70px;
+}
+
+.ref-input-key {
+  width: 90px;
+}
+
+.ref-input-url {
+  width: 130px;
+}
+
+.ref-add-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.est-chip {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.est-chip-gaps {
+  color: #a9762a;
+  background: #fdf3e2;
+}
+
 /* graph view dependency styling */
 
 .gedge-dep .react-flow__edge-path {
