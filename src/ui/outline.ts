@@ -62,6 +62,31 @@ export function insertionPointAfter(
   return { parentId, index: siblingsOf(graph, id).indexOf(id) + 1 };
 }
 
+/** Where a new sibling created "before `id`" goes. */
+export function insertionPointBefore(
+  graph: ProjectGraph,
+  id: string,
+): { parentId: string | null; index: number } {
+  const parentId = parentOf(graph, id);
+  return { parentId, index: siblingsOf(graph, id).indexOf(id) };
+}
+
+/**
+ * Where pressing Enter on `id` inserts the new row so it lands on the
+ * very next visible line at the cursor, not after the whole subtree.
+ * An expanded parent gets a new first child; a leaf or collapsed row
+ * gets a sibling immediately after (its hidden children stay put).
+ */
+export function insertionPointForEnter(
+  graph: ProjectGraph,
+  id: string,
+  collapsed: ReadonlySet<string>,
+): { parentId: string | null; index: number } {
+  const hasChildren = childrenOf(graph, id).length > 0;
+  if (hasChildren && !collapsed.has(id)) return { parentId: id, index: 0 };
+  return insertionPointAfter(graph, id);
+}
+
 /** Indenting makes `id` the last child of its previous sibling. */
 export function indentTarget(graph: ProjectGraph, id: string): string | null {
   const siblings = siblingsOf(graph, id);

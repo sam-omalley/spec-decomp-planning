@@ -24,7 +24,11 @@ body {
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  /* A fixed viewport height gives descendants a definite height to
+     resolve against (React Flow, the scrolling planning columns) so the
+     page itself never scrolls — panes scroll internally instead. */
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-header {
@@ -76,10 +80,12 @@ body {
 
 .app-main {
   flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 860px;
   margin: 0 auto;
   padding: 24px 20px 60px;
+  overflow-y: auto;
 }
 
 .app-hints {
@@ -256,8 +262,15 @@ body {
 
 /* ------------------------------- planning ------------------------------ */
 
+/* Wide views (planning, graph, markdown) use the full window and manage
+   their own scrolling, so the page itself never scrolls. */
 .app-main-wide {
-  max-width: 1280px;
+  max-width: none;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .icon-button {
@@ -281,18 +294,26 @@ body {
 
 .planning-body {
   display: flex;
-  gap: 24px;
-  align-items: flex-start;
+  gap: 20px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
 }
 
 .plan-tree {
-  flex: 0 0 340px;
+  /* Size by width (not flex-basis) so the resize handle actually takes
+     effect — a fixed flex-basis would override the dragged width. */
+  flex: 0 0 auto;
+  width: 340px;
+  min-width: 220px;
+  max-width: 680px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
-  max-height: calc(100vh - 180px);
   overflow-y: auto;
+  /* Drag the right edge to give real-world titles more room. */
+  resize: horizontal;
   transition: border-color 80ms ease, box-shadow 80ms ease;
 }
 
@@ -305,12 +326,59 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
   margin-bottom: 10px;
+}
+
+/* Keeps the pane header in view while its column scrolls. */
+.pane-title-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 2px 0 8px;
+}
+
+.plan-tree .pane-title-sticky {
+  background: var(--panel);
+}
+
+.plan-board .pane-title-sticky {
+  background: var(--bg);
+}
+
+.pane-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pane-filter input {
+  cursor: pointer;
+  margin: 0;
+}
+
+.empty-badge {
+  flex: none;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #f0eef7;
+  color: #6b5fa8;
+  border: 1px solid #ded9ef;
+  cursor: help;
 }
 
 .pane-hint {
@@ -366,6 +434,7 @@ body {
 .plan-board {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
 }
 
 .row-drop {
@@ -492,11 +561,73 @@ body {
 /* ------------------------------ graph view ----------------------------- */
 
 .graph-wrap {
-  height: calc(100vh - 150px);
+  position: relative;
+  flex: 1;
+  min-height: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
+}
+
+.graph-filter {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.graph-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.graph-filter-btn:hover {
+  background: var(--accent-soft);
+}
+
+.graph-filter-btn-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.graph-filter-count {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #ececea;
+  color: var(--muted);
+}
+
+.graph-filter-btn-active .graph-filter-count {
+  background: #fff;
+  color: var(--accent);
+}
+
+.gnode-dim {
+  opacity: 0.18;
+}
+
+.gnode-match {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .gnode {

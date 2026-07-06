@@ -10,7 +10,7 @@
  * the Tarjan slice.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Background,
   Controls,
@@ -25,6 +25,10 @@ import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import { useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
 import { layoutGraph } from './graphLayout.ts';
+import { isEmptyLeafGroup, uncoveredWorkIds } from './planning.ts';
+
+/** Which nodes to spotlight; dims everything else without moving it. */
+type GraphFilter = 'none' | 'unassigned' | 'empty';
 
 interface GNodeData extends Record<string, unknown> {
   title: string;
@@ -33,6 +37,8 @@ interface GNodeData extends Record<string, unknown> {
   isDone: boolean;
   isWaiting: boolean;
   inCycle: boolean;
+  dimmed: boolean;
+  matched: boolean;
   color?: string;
 }
 
@@ -45,6 +51,8 @@ function WorkGraphNode({ data }: NodeProps<GNode>) {
     data.isSelected ? 'gnode-selected' : '',
     data.isDone ? 'gnode-done' : '',
     data.inCycle ? 'gnode-cycle' : data.isWaiting ? 'gnode-waiting' : '',
+    data.dimmed ? 'gnode-dim' : '',
+    data.matched ? 'gnode-match' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -59,11 +67,17 @@ function WorkGraphNode({ data }: NodeProps<GNode>) {
 }
 
 function GroupGraphNode({ data }: NodeProps<GNode>) {
+  const classes = [
+    'gnode',
+    'gnode-group',
+    data.isSelected ? 'gnode-selected' : '',
+    data.dimmed ? 'gnode-dim' : '',
+    data.matched ? 'gnode-match' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <div
-      className={`gnode gnode-group${data.isSelected ? ' gnode-selected' : ''}`}
-      style={{ ['--group-color' as string]: data.color }}
-    >
+    <div className={classes} style={{ ['--group-color' as string]: data.color }}>
       <Handle type="source" position={Position.Left} id="ls" className="ghandle" />
       <Handle type="target" position={Position.Left} id="lt" className="ghandle" />
       <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
@@ -82,16 +96,32 @@ interface GraphViewProps {
 
 export function GraphView({ selectedId, onSelect }: GraphViewProps) {
   const graph = useProjectGraph();
+  const [filter, setFilter] = useState<GraphFilter>('none');
 
   const analysis = useMemo(
     () => ({ waiting: waitingMap(graph), cycles: cycleIndexOf(graph) }),
     [graph],
   );
 
+  const highlight = useMemo(() => {
+    const unassigned = uncoveredWorkIds(graph);
+    const empty = new Set(
+      Object.keys(graph.nodes).filter((id) => isEmptyLeafGroup(graph, id)),
+    );
+    return { unassigned, empty };
+  }, [graph]);
+
+  function matchesFilter(id: string): boolean {
+    if (filter === 'unassigned') return highlight.unassigned.has(id);
+    if (filter === 'empty') return highlight.empty.has(id);
+    return false;
+  }
+
   const nodes = useMemo<GNode[]>(
     () =>
       layoutGraph(graph).map((placed) => {
         const node = graph.nodes[placed.id]!;
+        const matched = matchesFilter(placed.id);
         return {
           id: placed.id,
           type: placed.side,
@@ -103,6 +133,8 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
             isDone: node.status === 'done',
             isWaiting: analysis.waiting.has(placed.id),
             inCycle: analysis.cycles.has(placed.id),
+            dimmed: filter !== 'none' && !matched,
+            matched,
             ...(placed.side === 'group'
               ? { color: rootGroupColor(graph, placed.id) }
               : {}),
@@ -111,7 +143,7 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
           connectable: false,
         };
       }),
-    [graph, selectedId, analysis],
+    [graph, selectedId, analysis, filter, highlight],
   );
 
   const edges = useMemo<FlowEdge[]>(() => {
@@ -173,8 +205,26 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
     );
   }
 
+  const filters: { key: GraphFilter; label: string; count?: number }[] = [
+    { key: 'none', label: 'All' },
+    { key: 'unassigned', label: 'Unassigned work', count: highlight.unassigned.size },
+    { key: 'empty', label: 'Empty groups', count: highlight.empty.size },
+  ];
+
   return (
     <div className="graph-wrap">
+      <div className="graph-filter">
+        {filters.map((f) => (
+          <button
+            key={f.key}
+            className={`graph-filter-btn${filter === f.key ? ' graph-filter-btn-active' : ''}`}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label}
+            {f.count !== undefined && <span className="graph-filter-count">{f.count}</span>}
+          </button>
+        ))}
+      </div>
       <ReactFlow
         nodes={nodes}
         edges={edges}
