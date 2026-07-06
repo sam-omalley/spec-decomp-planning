@@ -6,9 +6,11 @@ import { GraphView } from './ui/GraphView.tsx';
 import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
 import { PlanningView } from './ui/PlanningView.tsx';
+import { MetricsView } from './ui/MetricsView.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
+import { TimelineView } from './ui/TimelineView.tsx';
 
-type View = 'spec' | 'planning' | 'graph' | 'markdown';
+type View = 'spec' | 'planning' | 'graph' | 'markdown' | 'timeline' | 'metrics';
 
 export function App() {
   const graph = useProjectGraph();
@@ -101,6 +103,18 @@ export function App() {
             Graph
           </button>
           <button
+            className={view === 'timeline' ? 'view-tab view-tab-active' : 'view-tab'}
+            onClick={() => setView('timeline')}
+          >
+            Timeline
+          </button>
+          <button
+            className={view === 'metrics' ? 'view-tab view-tab-active' : 'view-tab'}
+            onClick={() => setView('metrics')}
+          >
+            Metrics
+          </button>
+          <button
             className={view === 'markdown' ? 'view-tab view-tab-active' : 'view-tab'}
             onClick={() => setView('markdown')}
           >
@@ -146,6 +160,10 @@ export function App() {
         {view === 'graph' && (
           <GraphView selectedId={selectedId} onSelect={setSelectedId} />
         )}
+        {view === 'timeline' && (
+          <TimelineView selectedId={selectedId} onSelect={setSelectedId} />
+        )}
+        {view === 'metrics' && <MetricsView />}
         {view === 'markdown' && <MarkdownView />}
       </main>
       <footer className="app-hints">
@@ -168,6 +186,15 @@ export function App() {
           <>Spec on the left, delivery on the right, assignments bridge the middle · click
             selects · scroll zooms · drag a spec node onto a group to assign · toggle
             Unassigned / Empty filters, spotlight or hide the rest</>
+        )}
+        {view === 'timeline' && (
+          <>Plan schedule as a Gantt · bars per delivery group, containers span their units ·
+            ▸ projected finish, 🎯 target date · solid = actual, lighter = planned · set dates
+            &amp; capacity in ⚙ Settings</>
+        )}
+        {view === 'metrics' && (
+          <>Projection summary, burn-up and estimate-vs-actual · figures roll up from the
+            plan&apos;s scheduling units · set a target date in ⚙ Settings for variance</>
         )}
         {view === 'markdown' && (
           <>The delivery plan as Markdown · toggle sections · Copy to export · read-only</>
