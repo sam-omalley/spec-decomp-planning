@@ -6,6 +6,7 @@ import { GraphView } from './ui/GraphView.tsx';
 import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
 import { PlanningView } from './ui/PlanningView.tsx';
+import { SettingsPanel } from './ui/SettingsPanel.tsx';
 
 type View = 'spec' | 'planning' | 'graph' | 'markdown';
 
@@ -127,6 +128,8 @@ export function App() {
         <button onClick={exportProject} title="Download the project as .json">
           Save…
         </button>
+        <span className="header-divider" />
+        <SettingsPanel />
         <span className="header-divider" />
         <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
           ↩ Undo

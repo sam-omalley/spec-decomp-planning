@@ -971,6 +971,62 @@ body {
   background: #fdf3e2;
 }
 
+/* settings popover */
+
+.settings-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.settings-trigger-open {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 300px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.settings-panel .meta-input {
+  width: 100%;
+}
+
+.settings-panel .meta-field {
+  flex: 1;
+}
+
+.settings-panel .meta-row {
+  gap: 12px;
+}
+
+.settings-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 /* graph view dependency styling */
 
 .gedge-dep .react-flow__edge-path {
