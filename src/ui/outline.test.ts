@@ -5,6 +5,8 @@ import type { ProjectGraph } from '../model/types.ts';
 import {
   indentTarget,
   insertionPointAfter,
+  insertionPointBefore,
+  insertionPointForEnter,
   outdentTarget,
   reorderTarget,
   visibleRows,
@@ -100,6 +102,34 @@ describe('keyboard operation targets', () => {
     assert.deepEqual(insertionPointAfter(fixture(), 'auth'), { parentId: 'app', index: 1 });
     assert.deepEqual(insertionPointAfter(fixture(), 'login'), { parentId: 'auth', index: 1 });
     assert.deepEqual(insertionPointAfter(fixture(), 'app'), { parentId: null, index: 1 });
+  });
+
+  it('insertionPointBefore targets the node\'s own slot among its siblings', () => {
+    assert.deepEqual(insertionPointBefore(fixture(), 'auth'), { parentId: 'app', index: 0 });
+    assert.deepEqual(insertionPointBefore(fixture(), 'signup'), { parentId: 'auth', index: 1 });
+    assert.deepEqual(insertionPointBefore(fixture(), 'docs'), { parentId: null, index: 1 });
+  });
+
+  // Regression: Enter on a middle item that has expanded children used to
+  // drop the new row after the whole subtree ("at the end"). It should
+  // land on the next visible line: a first child of the expanded parent.
+  it('insertionPointForEnter dives into an expanded parent, sits after a collapsed/leaf one', () => {
+    const g = fixture();
+    assert.deepEqual(
+      insertionPointForEnter(g, 'auth', none),
+      { parentId: 'auth', index: 0 },
+      'expanded parent -> first child',
+    );
+    assert.deepEqual(
+      insertionPointForEnter(g, 'auth', new Set(['auth'])),
+      { parentId: 'app', index: 1 },
+      'collapsed parent -> sibling after, hidden children untouched',
+    );
+    assert.deepEqual(
+      insertionPointForEnter(g, 'login', none),
+      { parentId: 'auth', index: 1 },
+      'leaf -> sibling after',
+    );
   });
 
   it('indentTarget is the previous sibling, null for first siblings', () => {

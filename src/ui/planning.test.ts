@@ -7,7 +7,14 @@ import {
   emptyGraph,
 } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
-import { coveringGroups, overlappingMembers, rootGroupOf } from './planning.ts';
+import {
+  coveringGroups,
+  isEmptyLeafGroup,
+  isUncovered,
+  overlappingMembers,
+  rootGroupOf,
+  uncoveredWorkIds,
+} from './planning.ts';
 
 /**
  * Spec:  app ─┬─ auth ─┬─ login
@@ -88,6 +95,44 @@ describe('overlappingMembers', () => {
   it('ignores unassigned descendants', () => {
     const g = assignToGroup(fixture(), 'app', 'block1');
     assert.deepEqual(overlappingMembers(g, 'block1'), []);
+  });
+});
+
+describe('uncoveredWorkIds', () => {
+  it('lists every work node no group covers, and shrinks by inheritance', () => {
+    const g = fixture();
+    // Nothing assigned: all five work nodes are uncovered.
+    assert.deepEqual(
+      [...uncoveredWorkIds(g)].sort(),
+      ['app', 'auth', 'billing', 'login', 'signup'],
+    );
+
+    // Assigning an ancestor covers its whole subtree via inheritance.
+    const h = assignToGroup(g, 'auth', 'epicA');
+    assert.equal(isUncovered(h, 'login'), false, 'inherits from auth');
+    assert.deepEqual([...uncoveredWorkIds(h)].sort(), ['app', 'billing']);
+  });
+
+  it('excludes groups — only work nodes can be uncovered', () => {
+    const ids = uncoveredWorkIds(fixture());
+    assert.equal(ids.has('block1'), false);
+    assert.equal(ids.has('epicA'), false);
+  });
+});
+
+describe('isEmptyLeafGroup', () => {
+  it('is true for a leaf group with no members, false once filled', () => {
+    const g = fixture();
+    assert.equal(isEmptyLeafGroup(g, 'epicA'), true);
+    assert.equal(isEmptyLeafGroup(assignToGroup(g, 'login', 'epicA'), 'epicA'), false);
+  });
+
+  it('is false for a group that has child groups', () => {
+    assert.equal(isEmptyLeafGroup(fixture(), 'block1'), false, 'block1 nests epicA/epicB');
+  });
+
+  it('is false for work nodes', () => {
+    assert.equal(isEmptyLeafGroup(fixture(), 'login'), false);
   });
 });
 

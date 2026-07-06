@@ -148,19 +148,21 @@ export function App() {
       <footer className="app-hints">
         {view === 'spec' && (
           <>
-            Enter sibling · Tab indent · ⇧Tab outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details
-            &amp; dependencies · bullet click = status · ⌫ on empty / ⌘⌫ delete · ⌘Z undo
+            Enter sibling · ⇧Enter / Enter at line start = insert above · Tab indent · ⇧Tab
+            outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details &amp; dependencies · bullet click =
+            status · ⌫ on empty / ⌘⌫ delete · ⌘Z undo
           </>
         )}
         {view === 'planning' && (
           <>
-            Groups edit like the outliner (Enter · Tab · ⌥↑↓ · ⌘↩ details) · drag spec items
-            onto groups · drop moves, drag to spec pane or × unassigns
+            Groups edit like the outliner (Enter · ⇧Enter above · Tab · ⌥↑↓ · ⌘↩) · drag spec
+            items onto groups · drop moves, drag to spec pane or × unassigns · Unassigned
+            filter finds uncovered work · drag the pane edge to resize
           </>
         )}
         {view === 'graph' && (
           <>Spec on the left, delivery on the right, assignments bridge the middle · click
-            selects · scroll zooms</>
+            selects · scroll zooms · filter to spotlight unassigned work or empty groups</>
         )}
         {view === 'markdown' && (
           <>The delivery plan as Markdown · toggle sections · Copy to export · read-only</>

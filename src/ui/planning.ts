@@ -11,10 +11,12 @@
  */
 
 import {
+  childrenOf,
   groupOf,
   isInSubtreeOf,
   membersOfGroup,
   parentOf,
+  rootsOf,
   subtreeIds,
 } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
@@ -66,6 +68,37 @@ export function overlappingMembers(graph: ProjectGraph, groupId: string): string
     if (conflict) result.push(member);
   }
   return result;
+}
+
+/**
+ * True when `nodeId` is a work item no group covers — neither assigned
+ * itself nor inheriting an assignment from a spec ancestor. Coverage is
+ * ancestor-inherited, so the uncovered set is a clean top-down forest.
+ */
+export function isUncovered(graph: ProjectGraph, nodeId: string): boolean {
+  return coveringGroups(graph, nodeId).length === 0;
+}
+
+/** Every uncovered work node (spec items not assigned to any group). */
+export function uncoveredWorkIds(graph: ProjectGraph): Set<string> {
+  const result = new Set<string>();
+  const visit = (id: string): void => {
+    if (isUncovered(graph, id)) result.add(id);
+    for (const child of childrenOf(graph, id)) visit(child);
+  };
+  for (const root of rootsOf(graph)) visit(root);
+  return result;
+}
+
+/**
+ * True when `groupId` is a leaf group (no child groups) with no work
+ * items assigned to it — an epic you created but never filled.
+ */
+export function isEmptyLeafGroup(graph: ProjectGraph, groupId: string): boolean {
+  const node = graph.nodes[groupId];
+  if (!node || node.type !== 'group') return false;
+  if (childrenOf(graph, groupId).length > 0) return false;
+  return membersOfGroup(graph, groupId).length === 0;
 }
 
 /** The root group above `groupId` in the delivery tree (itself if a root). */
