@@ -14,6 +14,7 @@ export interface RowActions {
   setDetails: (id: string, details: string) => void;
   toggleDetails: (id: string) => void;
   createAfter: (id: string) => void;
+  createBefore: (id: string) => void;
   indent: (id: string) => void;
   outdent: (id: string) => void;
   reorder: (id: string, delta: -1 | 1) => void;
@@ -70,7 +71,12 @@ export function OutlinerRow({
       actions.toggleDetails(id);
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      actions.createAfter(id);
+      // Shift+Enter, or Enter with the caret at the very start of a
+      // non-empty title, inserts a row before this one.
+      const input = event.currentTarget;
+      const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+      if (event.shiftKey || (atStart && title !== '')) actions.createBefore(id);
+      else actions.createAfter(id);
     } else if (event.key === 'Tab') {
       event.preventDefault();
       if (event.shiftKey) actions.outdent(id);
