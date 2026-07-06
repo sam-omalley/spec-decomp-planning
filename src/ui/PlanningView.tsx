@@ -10,7 +10,7 @@
  * member's group subtree) are allowed and badged, never forbidden.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DragEvent, ReactNode } from 'react';
 import {
   assignToGroup,
@@ -21,7 +21,12 @@ import {
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
 import { visibleRows } from './outline.ts';
-import { coveringGroups, overlappingMembers } from './planning.ts';
+import {
+  coveringGroups,
+  isEmptyLeafGroup,
+  overlappingMembers,
+  uncoveredWorkIds,
+} from './planning.ts';
 import { Outliner } from './Outliner.tsx';
 import type { RowDropProps } from './OutlinerRow.tsx';
 
@@ -36,8 +41,17 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
   const graph = useProjectGraph();
   const [dropGroupId, setDropGroupId] = useState<string | null>(null);
   const [specDropping, setSpecDropping] = useState(false);
+  const [onlyUnassigned, setOnlyUnassigned] = useState(false);
 
   const specRows = visibleRows(graph, NO_COLLAPSE, 'work');
+  const uncovered = useMemo(() => uncoveredWorkIds(graph), [graph]);
+  const shownSpecRows = onlyUnassigned
+    ? specRows.filter((row) => uncovered.has(row.id))
+    : specRows;
+  const emptyGroupCount = useMemo(
+    () => Object.keys(graph.nodes).filter((id) => isEmptyLeafGroup(graph, id)).length,
+    [graph],
+  );
 
   function colorOf(groupId: string): string {
     return rootGroupColor(graph, groupId);
@@ -92,7 +106,13 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
   function rowExtras(groupId: string): ReactNode {
     const members = membersOfGroup(graph, groupId);
     const overlaps = new Set(overlappingMembers(graph, groupId));
-    if (members.length === 0) return null;
+    if (members.length === 0) {
+      return isEmptyLeafGroup(graph, groupId) ? (
+        <span className="empty-badge" title="No work items assigned to this group">
+          empty
+        </span>
+      ) : null;
+    }
     return (
       <>
         {overlaps.size > 0 && (
@@ -147,11 +167,24 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
         onDragLeave={() => setSpecDropping(false)}
         onDrop={dropOnSpec}
       >
-        <div className="pane-title">Spec — drag items onto groups</div>
+        <div className="pane-title pane-title-sticky">
+          <span>Spec — drag items onto groups</span>
+          <label className="pane-filter" title="Show only spec items no group covers">
+            <input
+              type="checkbox"
+              checked={onlyUnassigned}
+              onChange={(e) => setOnlyUnassigned(e.target.checked)}
+            />
+            Unassigned ({uncovered.size})
+          </label>
+        </div>
         {specRows.length === 0 && (
           <p className="pane-hint">The spec is empty. Add items in the Spec view first.</p>
         )}
-        {specRows.map((row) => {
+        {specRows.length > 0 && shownSpecRows.length === 0 && (
+          <p className="pane-hint">Every spec item is assigned to a group. 🎉</p>
+        )}
+        {shownSpecRows.map((row) => {
           const node = graph.nodes[row.id]!;
           const coverage = coveringGroups(graph, row.id);
           return (
@@ -192,7 +225,14 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
       </div>
 
       <div className="plan-board">
-        <div className="pane-title">Delivery plan</div>
+        <div className="pane-title pane-title-sticky">
+          <span>Delivery plan</span>
+          {emptyGroupCount > 0 && (
+            <span className="empty-badge" title="Leaf groups with no work items assigned">
+              {emptyGroupCount} empty
+            </span>
+          )}
+        </div>
         <Outliner
           side="group"
           selectedId={selectedId}

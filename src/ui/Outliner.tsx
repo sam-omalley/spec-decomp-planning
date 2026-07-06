@@ -28,7 +28,8 @@ import { DependencyEditor } from './DependencyEditor.tsx';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import {
   indentTarget,
-  insertionPointAfter,
+  insertionPointBefore,
+  insertionPointForEnter,
   outdentTarget,
   reorderTarget,
   visibleRows,
@@ -138,7 +139,19 @@ export function Outliner({
     const newId = createId();
     store.commit((g) => {
       if (afterId === null) return createEmpty(g, newId);
-      const { parentId, index } = insertionPointAfter(g, afterId);
+      // Land on the next visible line at the cursor — an expanded
+      // parent gets a first child, not a sibling after its subtree.
+      const { parentId, index } = insertionPointForEnter(g, afterId, collapsed);
+      g = createEmpty(g, newId, parentId ?? undefined);
+      return moveNode(g, newId, parentId, index);
+    });
+    requestFocus(newId);
+  }
+
+  function createBefore(beforeId: string) {
+    const newId = createId();
+    store.commit((g) => {
+      const { parentId, index } = insertionPointBefore(g, beforeId);
       g = createEmpty(g, newId, parentId ?? undefined);
       return moveNode(g, newId, parentId, index);
     });
@@ -192,6 +205,7 @@ export function Outliner({
       }
     },
     createAfter,
+    createBefore,
     // Targets are computed inside the commit callback, on the graph
     // actually being mutated — the rendered `graph` can lag a keystroke
     // behind when events arrive faster than React re-renders.
