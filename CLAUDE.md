@@ -186,18 +186,16 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    `model/` so the slice-10 scheduler imports it without a ui→model
    back-dependency.) NOTE: first built on the spec/work side by mistake;
    corrected by slice 9a.
-9a. 🔧 IN PROGRESS — re-target to the plan. The spec is purely
-   structural; estimation, actuals, keys, status and dependencies belong
-   to the **group (plan)** side. Flip `Outliner`'s status bullets,
-   dep badges, estimate chip and details-card editors (`NodeMetaEditor`
-   + `DependencyEditor`) from `side === 'work'` to `side === 'group'`;
-   `DependencyEditor` candidate list filters to groups; `addEdge` now
-   requires both dep endpoints be groups (inverted); `serialize` drops
-   `depends_on`/`blocks` edges touching a work node on load. Flip the
-   shipped dep tests (`graph.test.ts`, `analysis.test.ts` fixtures →
-   groups). Spec view loses status/deps/estimates (keeps title +
-   details). **When this lands: update slices 6 & 9 to ✅-final and drop
-   this 9a entry.**
+9a. ✅ Re-targeted to the plan. Estimation, actuals, keys, status and
+   dependencies live on the **group (plan)** side; the spec is purely
+   structural (title + details only). `Outliner` renders status bullets,
+   dep badges, estimate chip and the `NodeMetaEditor`/`DependencyEditor`
+   details editors on `side === 'group'`; `DependencyEditor` candidates
+   are groups; `addEdge` requires both dep endpoints be groups;
+   `serialize` drops `depends_on`/`blocks` edges touching a work node on
+   load. Shipped dep tests (`graph`/`analysis`/`projectStore`) flipped to
+   groups. Verified in preview: plan rows carry the editor + status; spec
+   view is structural-only.
 10. Scheduler — `src/model/schedule.ts`, pure + heavily tested. Schedules
     the **group tree** (the plan). Forward resource-constrained schedule:
     scheduling units = topmost groups with an own estimate (`rollup.ts`);
