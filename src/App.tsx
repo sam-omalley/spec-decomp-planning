@@ -149,14 +149,15 @@ export function App() {
         {view === 'spec' && (
           <>
             Enter sibling · ⇧Enter / Enter at line start = insert above · Tab indent · ⇧Tab
-            outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details &amp; dependencies · bullet click =
-            status · ⌫ on empty / ⌘⌫ delete · ⌘Z undo
+            outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details · ⌫ on empty / ⌘⌫ delete · ⌘Z undo ·
+            the spec is structural — estimate &amp; track in the Plan
           </>
         )}
         {view === 'planning' && (
           <>
-            Groups edit like the outliner (Enter · ⇧Enter above · Tab · ⌥↑↓ · ⌘↩) · drag spec
-            items onto groups · drop moves, drag to spec pane or × unassigns · Unassigned
+            Groups edit like the outliner (Enter · ⇧Enter above · Tab · ⌥↑↓ · ⌘↩ details,
+            estimates, dependencies) · bullet click = status · drag spec items onto groups
+            for traceability · drop moves, drag to spec pane or × unassigns · Unassigned
             filter finds uncovered work · drag the pane edge to resize
           </>
         )}

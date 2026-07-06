@@ -162,7 +162,9 @@ describe('reset', () => {
   it('replaces state and clears history', () => {
     const store = seeded();
     let g = store.getState();
-    g = addEdge(g, { type: 'depends_on', from: 'coupons', to: 'pricing' });
+    g = createGroup(g, { id: 'b1', title: 'Block 1' });
+    g = createGroup(g, { id: 'b2', title: 'Block 2' });
+    g = addEdge(g, { type: 'depends_on', from: 'b1', to: 'b2' });
     store.reset(g);
     assert.ok(!store.canUndo);
     assert.ok(!store.canRedo);

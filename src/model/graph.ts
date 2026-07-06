@@ -426,9 +426,9 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
   }
 
   if (input.type === 'depends_on' || input.type === 'blocks') {
-    if (isGroup(from) || isGroup(to)) {
+    if (!isGroup(from) || !isGroup(to)) {
       throw new GraphError(
-        'Dependencies connect work nodes; groups sequence by sibling order',
+        'Dependencies sequence delivery groups (the plan); spec work nodes are structural only',
       );
     }
   }

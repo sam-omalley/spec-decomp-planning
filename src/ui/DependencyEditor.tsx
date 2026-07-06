@@ -27,7 +27,7 @@ export function DependencyEditor({ id }: DependencyEditorProps) {
       : Object.values(graph.nodes)
           .filter(
             (n) =>
-              n.type !== 'group' &&
+              n.type === 'group' &&
               n.id !== id &&
               !prerequisites.includes(n.id) &&
               n.title.toLowerCase().includes(needle),
