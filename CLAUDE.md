@@ -214,9 +214,13 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     `projectStart` / `projectFinish`. (`assigned_to` unused.) Tests: unit
     selection, weekend skipping, dep order, parallelism cap, speed
     multiplier, cycle batch, container span, done/in-progress override.
-11. Settings UI — panel for `startDate`, `targetDate`, `pointsPerDay`,
-    `hoursPerDay`, `parallelTracks`, `speedMultiplier`; edits go through
-    `updateSettings` (undoable, autosaved with the graph).
+11. ✅ Settings UI — header ⚙ popover (`SettingsPanel.tsx`) with
+    Schedule / Capacity / Conversion sections: `startDate`, `targetDate`,
+    `parallelTracks`, `speedMultiplier`, `pointsPerDay`, `hoursPerDay`.
+    Edits go through `updateSettings` (undoable, autosaved with the
+    graph), coalesced per field; inputs are pre-validated so an invalid
+    value is ignored rather than thrown (a throwing commit would
+    propagate). Closes on outside-click / Esc. Verified in preview.
 12. Timeline / Gantt view — new 5th tab `TimelineView.tsx` + pure
     `timelineLayout.ts` (unit-tested). Bars per scheduling unit grouped
     by delivery group, planned-vs-actual overlay, projected-finish and
