@@ -1,16 +1,20 @@
 /**
- * Graph view: the whole graph on one canvas, read-mostly. The spec
- * forest grows left-to-right, the delivery forest is mirrored
- * right-to-left, and dashed 'assigned_to' edges bridge the gap —
- * nested inputs facing nested outputs. Positions come from the pure
- * layout in graphLayout.ts; React Flow only renders.
+ * Graph view: the whole graph on one canvas. The spec forest grows
+ * left-to-right, the delivery forest is mirrored right-to-left, and
+ * dashed 'assigned_to' edges bridge the gap — nested inputs facing
+ * nested outputs. Positions come from the pure layout in graphLayout.ts;
+ * React Flow only renders.
  *
- * v1 interactions: pan, zoom, click to select (synced with the other
- * views). No dragging, no edge editing. Dependency edges arrive with
- * the Tarjan slice.
+ * Interactions: pan, zoom, click to select (synced with the other
+ * views). Filters (Unassigned work / Empty groups, toggled together)
+ * either spotlight matches by dimming the rest or hide the rest
+ * outright. Assignment is possible here too: drag a spec node onto a
+ * group node (single membership, so it moves an existing assignment) —
+ * handy for dropping loose work onto an empty group without leaving the
+ * canvas.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Background,
   Controls,
@@ -22,13 +26,17 @@ import {
 import type { Edge as FlowEdge, Node as FlowNode, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
-import { useProjectGraph } from '../store/appStore.ts';
+import { assignToGroup } from '../model/graph.ts';
+import { store, useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
 import { layoutGraph } from './graphLayout.ts';
 import { isEmptyLeafGroup, uncoveredWorkIds } from './planning.ts';
 
-/** Which nodes to spotlight; dims everything else without moving it. */
-type GraphFilter = 'none' | 'unassigned' | 'empty';
+type FilterKey = 'unassigned' | 'empty';
+/** Spotlight dims non-matches in place; hide removes them entirely. */
+type FilterMode = 'spotlight' | 'hide';
+
+const DND_TYPE = 'text/plain';
 
 interface GNodeData extends Record<string, unknown> {
   title: string;
@@ -40,14 +48,17 @@ interface GNodeData extends Record<string, unknown> {
   dimmed: boolean;
   matched: boolean;
   color?: string;
+  /** Group nodes only: assign the dragged work node to this group. */
+  onAssign?: (workId: string) => void;
 }
 
 type GNode = FlowNode<GNodeData>;
 
-function WorkGraphNode({ data }: NodeProps<GNode>) {
+function WorkGraphNode({ id, data }: NodeProps<GNode>) {
   const classes = [
     'gnode',
     'gnode-work',
+    'gnode-draggable',
     data.isSelected ? 'gnode-selected' : '',
     data.isDone ? 'gnode-done' : '',
     data.inCycle ? 'gnode-cycle' : data.isWaiting ? 'gnode-waiting' : '',
@@ -57,7 +68,15 @@ function WorkGraphNode({ data }: NodeProps<GNode>) {
     .filter(Boolean)
     .join(' ');
   return (
-    <div className={classes}>
+    <div
+      className={classes}
+      draggable
+      title="Drag onto a group to assign"
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DND_TYPE, id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+    >
       <Handle type="target" position={Position.Left} id="lt" className="ghandle" />
       <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
@@ -67,17 +86,34 @@ function WorkGraphNode({ data }: NodeProps<GNode>) {
 }
 
 function GroupGraphNode({ data }: NodeProps<GNode>) {
+  const [over, setOver] = useState(false);
   const classes = [
     'gnode',
     'gnode-group',
     data.isSelected ? 'gnode-selected' : '',
     data.dimmed ? 'gnode-dim' : '',
     data.matched ? 'gnode-match' : '',
+    over ? 'gnode-drop' : '',
   ]
     .filter(Boolean)
     .join(' ');
   return (
-    <div className={classes} style={{ ['--group-color' as string]: data.color }}>
+    <div
+      className={classes}
+      style={{ ['--group-color' as string]: data.color }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const workId = e.dataTransfer.getData(DND_TYPE);
+        if (workId) data.onAssign?.(workId);
+      }}
+    >
       <Handle type="source" position={Position.Left} id="ls" className="ghandle" />
       <Handle type="target" position={Position.Left} id="lt" className="ghandle" />
       <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
@@ -96,7 +132,11 @@ interface GraphViewProps {
 
 export function GraphView({ selectedId, onSelect }: GraphViewProps) {
   const graph = useProjectGraph();
-  const [filter, setFilter] = useState<GraphFilter>('none');
+  const [active, setActive] = useState<Record<FilterKey, boolean>>({
+    unassigned: false,
+    empty: false,
+  });
+  const [mode, setMode] = useState<FilterMode>('spotlight');
 
   const analysis = useMemo(
     () => ({ waiting: waitingMap(graph), cycles: cycleIndexOf(graph) }),
@@ -111,44 +151,69 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
     return { unassigned, empty };
   }, [graph]);
 
-  function matchesFilter(id: string): boolean {
-    if (filter === 'unassigned') return highlight.unassigned.has(id);
-    if (filter === 'empty') return highlight.empty.has(id);
-    return false;
-  }
+  const anyFilter = active.unassigned || active.empty;
 
-  const nodes = useMemo<GNode[]>(
-    () =>
-      layoutGraph(graph).map((placed) => {
-        const node = graph.nodes[placed.id]!;
-        const matched = matchesFilter(placed.id);
-        return {
-          id: placed.id,
-          type: placed.side,
-          position: { x: placed.x, y: placed.y },
-          data: {
-            title: node.title,
-            hasDetails: node.description.trim() !== '',
-            isSelected: placed.id === selectedId,
-            isDone: node.status === 'done',
-            isWaiting: analysis.waiting.has(placed.id),
-            inCycle: analysis.cycles.has(placed.id),
-            dimmed: filter !== 'none' && !matched,
-            matched,
-            ...(placed.side === 'group'
-              ? { color: rootGroupColor(graph, placed.id) }
-              : {}),
-          },
-          draggable: false,
-          connectable: false,
-        };
-      }),
-    [graph, selectedId, analysis, filter, highlight],
+  const matches = useCallback(
+    (id: string): boolean =>
+      (active.unassigned && highlight.unassigned.has(id)) ||
+      (active.empty && highlight.empty.has(id)),
+    [active, highlight],
   );
+
+  const assign = useCallback(
+    (workId: string, groupId: string) => {
+      store.commit((g) => {
+        const node = g.nodes[workId];
+        if (!node || node.type === 'group' || !g.nodes[groupId]) return g;
+        return assignToGroup(g, workId, groupId);
+      });
+      onSelect(workId);
+    },
+    [onSelect],
+  );
+
+  const nodes = useMemo<GNode[]>(() => {
+    const result: GNode[] = [];
+    for (const placed of layoutGraph(graph)) {
+      const node = graph.nodes[placed.id]!;
+      const matched = matches(placed.id);
+      // Hide mode drops non-matches from the canvas altogether.
+      if (anyFilter && mode === 'hide' && !matched) continue;
+      result.push({
+        id: placed.id,
+        type: placed.side,
+        position: { x: placed.x, y: placed.y },
+        data: {
+          title: node.title,
+          hasDetails: node.description.trim() !== '',
+          isSelected: placed.id === selectedId,
+          isDone: node.status === 'done',
+          isWaiting: analysis.waiting.has(placed.id),
+          inCycle: analysis.cycles.has(placed.id),
+          dimmed: anyFilter && mode === 'spotlight' && !matched,
+          matched: anyFilter && matched,
+          ...(placed.side === 'group'
+            ? {
+                color: rootGroupColor(graph, placed.id),
+                onAssign: (workId: string) => assign(workId, placed.id),
+              }
+            : {}),
+        },
+        draggable: false,
+        connectable: false,
+      });
+    }
+    return result;
+  }, [graph, selectedId, analysis, anyFilter, mode, matches, assign]);
+
+  // Edges to a node hidden in hide mode would dangle, so keep only those
+  // whose endpoints are both on the canvas.
+  const visibleIds = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
 
   const edges = useMemo<FlowEdge[]>(() => {
     const result: FlowEdge[] = [];
     for (const edge of Object.values(graph.edges)) {
+      if (!visibleIds.has(edge.from) || !visibleIds.has(edge.to)) continue;
       if (edge.type === 'depends_on' || edge.type === 'blocks') {
         // Normalize to "dependent → prerequisite"; the arrow points at
         // what is needed first.
@@ -195,9 +260,9 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
       }
     }
     return result;
-  }, [graph, analysis]);
+  }, [graph, analysis, visibleIds]);
 
-  if (nodes.length === 0) {
+  if (layoutGraph(graph).length === 0) {
     return (
       <div className="outliner-empty">
         <p>Nothing to show yet. Add spec items or groups first.</p>
@@ -205,8 +270,7 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
     );
   }
 
-  const filters: { key: GraphFilter; label: string; count?: number }[] = [
-    { key: 'none', label: 'All' },
+  const toggles: { key: FilterKey; label: string; count: number }[] = [
     { key: 'unassigned', label: 'Unassigned work', count: highlight.unassigned.size },
     { key: 'empty', label: 'Empty groups', count: highlight.empty.size },
   ];
@@ -214,14 +278,26 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
   return (
     <div className="graph-wrap">
       <div className="graph-filter">
-        {filters.map((f) => (
+        {toggles.map((t) => (
           <button
-            key={f.key}
-            className={`graph-filter-btn${filter === f.key ? ' graph-filter-btn-active' : ''}`}
-            onClick={() => setFilter(f.key)}
+            key={t.key}
+            className={`graph-filter-btn${active[t.key] ? ' graph-filter-btn-active' : ''}`}
+            aria-pressed={active[t.key]}
+            onClick={() => setActive((a) => ({ ...a, [t.key]: !a[t.key] }))}
           >
-            {f.label}
-            {f.count !== undefined && <span className="graph-filter-count">{f.count}</span>}
+            {t.label}
+            <span className="graph-filter-count">{t.count}</span>
+          </button>
+        ))}
+        <span className="graph-filter-sep" />
+        {(['spotlight', 'hide'] as FilterMode[]).map((m) => (
+          <button
+            key={m}
+            className={`graph-filter-btn${mode === m ? ' graph-filter-btn-active' : ''}`}
+            disabled={!anyFilter}
+            onClick={() => setMode(m)}
+          >
+            {m === 'spotlight' ? 'Spotlight' : 'Hide'}
           </button>
         ))}
       </div>
