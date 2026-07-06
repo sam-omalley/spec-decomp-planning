@@ -21,7 +21,10 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
 
 - **Work nodes** — requirement, feature, capability, component,
   user_story, task, research, bug. The spec tree. Intrinsic data only
-  (title, status, priority, effort, tags…); all relationships are edges.
+  (title, status, priority, effort points, `durationEstimate` in working
+  days, `actualStart`/`actualFinish`, `externalRefs`, tags…); all
+  relationships are edges. `effort` (size) and `durationEstimate` (time)
+  are distinct axes, convertible via `settings.pointsPerDay`.
 - **Group nodes** (`type: 'group'`) — the delivery tree: blocks of
   epics, epics of sub-epics, any depth. Bare groups; depth conveys
   meaning, no kind labels.
@@ -30,22 +33,18 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
   carry `order` for sibling ordering; root order lives in
   `ProjectGraph.rootOrder` (work side) and `groupRootOrder` (group
   side), maintained by every mutation, reconciled on file load.
-  File version 3; v1/v2 migrate (plans → root groups, epics → child
-  groups, `belongs_to_epic` → `assigned_to`, first membership wins).
+  File version 4; v1/v2 migrate (plans → root groups, epics → child
+  groups, `belongs_to_epic` → `assigned_to`, first membership wins),
+  v3 → v4 backfills the estimate/actual/`externalRefs` node fields and
+  `settings` with defaults (see below), so no data is lost.
+- **Project settings** (`ProjectGraph.settings: ProjectSettings`) — the
+  scheduling config: `startDate`, `targetDate`, `pointsPerDay`,
+  `hoursPerDay`, `parallelTracks`, `speedMultiplier`. Carried inside the
+  graph so it rides the store/undo/serialize/autosave path unchanged.
 
-**Planned — project-management extension (slices 8–13, not yet built).**
-Work nodes gain `externalRefs: ExternalRef[]` (`{system, key, url?}` —
-Jira/GitHub/wildcard URL, allowed on group nodes too), a
-`durationEstimate: number | null` (canonical unit = working days; the
-existing `effort` stays as abstract points — the two are distinct axes,
-convertible via `pointsPerDay`), and `actualStart` / `actualFinish`
-(ISO date | null). `ProjectGraph` gains `settings: ProjectSettings`
-(`startDate`, `targetDate`, `pointsPerDay`, `hoursPerDay`,
-`parallelTracks`, `speedMultiplier`) — carried inside the graph so it
-rides the existing store/undo/serialize/autosave path unchanged. File
-version bumps 3 → 4; v1–v3 migrate by backfilling defaults (`[]`, `null`,
-default settings), so no data is lost. Each field/section is surfaced by
-its slice below and folded into these sections as it lands.
+The project-management extension (slices 9–13 below) reads this model;
+its scheduler/views are still to build. `externalRefs` are allowed on
+group nodes too (e.g. a Jira epic key).
 
 ### Invariants (enforced in `src/model/graph.ts`, tested)
 
@@ -143,14 +142,15 @@ Project-management extension (planned, in dependency order — 8 unblocks
 all; 9 and 10 are independent; 11–13 consume 10). Each slice is
 shippable alone and keeps the dependency-free-core / tested-domain rules:
 
-8. Model foundation — `types.ts` (the fields in Data model above),
-   `serialize.ts` v4 + backfill migration (with a migration test), and
-   new `graph.ts` mutations: `setEstimate`, `setActualDates`,
-   `addExternalRef` / `removeExternalRef`, `updateSettings`. Every new
-   mutation gets invariant tests. **Status auto-derives from actuals:**
-   `actualFinish` set ⇒ `done`; `actualStart` set with no finish ⇒
-   `in_progress`; neither set ⇒ status untouched (manual `blocked` /
-   `not_started` survive).
+8. ✅ Model foundation — `types.ts` (the fields in Data model above),
+   `serialize.ts` v4 + backfill migration (tested), and new `graph.ts`
+   mutations: `setEstimate` (non-negative, per-axis), `setActualDates`,
+   `addExternalRef` / `removeExternalRef` (dedup on system+key),
+   `updateSettings` (validates capacity/conversion). All invariant-tested
+   in `graph.test.ts`. **Status auto-derives from actuals:** `actualFinish`
+   set ⇒ `done`; `actualStart` set with no finish ⇒ `in_progress` unless
+   manually `blocked` (a started-then-blocked item stays blocked); neither
+   set ⇒ status untouched, so manual states survive.
 9. Entry UI — the details card surfaces the new fields plus `priority`
    and `effort` (modelled since slice 1 but never shown). Pure
    `rollup.ts` (unit-tested): rolled estimate / points / actuals.

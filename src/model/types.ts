@@ -36,6 +36,17 @@ export type Status = 'not_started' | 'in_progress' | 'blocked' | 'done';
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 
+/**
+ * A pointer into an external tracker: Jira, GitHub, or any URL. Deliberately
+ * generic — `system` is free text so new trackers need no model change.
+ * Identity for dedupe/removal is the (system, key) pair.
+ */
+export interface ExternalRef {
+  system: string;
+  key: string;
+  url?: string;
+}
+
 export interface WorkNode {
   id: string;
   title: string;
@@ -43,8 +54,21 @@ export interface WorkNode {
   type: NodeType;
   status: Status;
   priority: Priority;
-  /** Estimated effort in abstract points; null = unestimated. */
+  /** Estimated size in abstract points; null = unestimated. */
   effort: number | null;
+  /**
+   * Estimated duration in working days (the scheduler's canonical unit;
+   * hours are a display convenience via `ProjectSettings.hoursPerDay`).
+   * A distinct axis from `effort` — size and time are estimated apart,
+   * convertible via `pointsPerDay`. null = unestimated.
+   */
+  durationEstimate: number | null;
+  /** Actual start (ISO date), or null if not started. */
+  actualStart: string | null;
+  /** Actual finish (ISO date), or null if unfinished. */
+  actualFinish: string | null;
+  /** External-tracker pointers (Jira, GitHub, …). Allowed on groups too. */
+  externalRefs: ExternalRef[];
   tags: string[];
   notes: string;
   createdAt: string;
@@ -62,9 +86,30 @@ export interface Edge {
   order?: number;
 }
 
+/**
+ * Project-scoped scheduling configuration. Lives inside the graph so it
+ * rides the existing store/undo/serialize/autosave path unchanged.
+ */
+export interface ProjectSettings {
+  /** Schedule anchor (ISO date); the forward scheduler starts here. */
+  startDate: string;
+  /** Optional target date for schedule-variance metrics; null = none. */
+  targetDate: string | null;
+  /** Points↔days conversion factor (points per working day). */
+  pointsPerDay: number;
+  /** Hours per working day, for hours↔days display. */
+  hoursPerDay: number;
+  /** Capacity: how many work items may run at once (positive integer). */
+  parallelTracks: number;
+  /** Capacity: global per-track speed multiplier (>0; scales durations). */
+  speedMultiplier: number;
+}
+
 export interface ProjectGraph {
   nodes: Record<string, WorkNode>;
   edges: Record<string, Edge>;
+  /** Scheduling configuration; see ProjectSettings. */
+  settings: ProjectSettings;
   /**
    * Display order of the spec-tree roots (parentless work nodes).
    * Roots have no 'contains' edge to carry an `order`, so it lives here.
