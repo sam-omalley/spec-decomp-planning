@@ -196,20 +196,24 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    load. Shipped dep tests (`graph`/`analysis`/`projectStore`) flipped to
    groups. Verified in preview: plan rows carry the editor + status; spec
    view is structural-only.
-10. Scheduler — `src/model/schedule.ts`, pure + heavily tested. Schedules
-    the **group tree** (the plan). Forward resource-constrained schedule:
-    scheduling units = topmost groups with an own estimate (`rollup.ts`);
-    dependency order between groups (reusing `analysis.ts`) → each unit to
-    the earliest-free of `parallelTracks` → duration =
-    `durationEstimate / speedMultiplier`, snapped to a skip-weekends
-    working-day calendar from `settings.startDate`. Blends actuals over
-    projection (done = actual dates; in-progress = `actualStart` +
-    remaining). Dependency cycles tolerated: an SCC schedules as one batch
-    by sibling order (never hangs). Output: per-group
-    `{start, finish, source: 'planned' | 'actual'}` + project finish.
-    (`assigned_to` is traceability only, not an input to scheduling.)
-    Tests: dep order, parallelism cap, weekend skipping, cycle batch,
-    actual override.
+10. ✅ Scheduler — `src/model/schedule.ts`, pure + heavily tested
+    (`scheduleProject`, `schedulingUnits`). Schedules the **group tree**
+    (the plan). Scheduling units = topmost groups with an own estimate;
+    unit deps expand from the raw group dep graph (`analysis.ts`,
+    container endpoints fan out to their descendant units). Forward
+    resource-constrained placement: each unit to the earliest-free of
+    `parallelTracks` tracks → duration = `durationEstimate /
+    speedMultiplier` working days on a skip-weekends calendar from
+    `settings.startDate` (internal continuous working-day offsets ⇄ ISO
+    dates). Blends actuals: done = real dates (source `actual`, frees no
+    future capacity, dependents start the next working day); in-progress =
+    real `actualStart` + projected remainder; else fully projected. Cycles
+    tolerated — when nothing is dependency-ready the lowest sibling-order
+    unit goes anyway, so an SCC drains as a batch and the loop never
+    hangs. Output: `groups` map (units by own dates, containers by span) +
+    `projectStart` / `projectFinish`. (`assigned_to` unused.) Tests: unit
+    selection, weekend skipping, dep order, parallelism cap, speed
+    multiplier, cycle batch, container span, done/in-progress override.
 11. Settings UI — panel for `startDate`, `targetDate`, `pointsPerDay`,
     `hoursPerDay`, `parallelTracks`, `speedMultiplier`; edits go through
     `updateSettings` (undoable, autosaved with the graph).
