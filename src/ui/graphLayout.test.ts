@@ -75,6 +75,33 @@ describe('layoutGraph', () => {
     assert.equal(placed.get('block1')!.y, ROW_HEIGHT, 'midpoint of its children');
   });
 
+  describe('visible sub-graph (hide filter reflow)', () => {
+    it('re-flows survivors compactly with no gaps', () => {
+      // Keep only signup and billing on the work side: they should take
+      // consecutive rows from 0, not their full-graph rows (1, 2).
+      const placed = byId(layoutGraph(fixture(), new Set(['signup', 'billing', 'epicB'])));
+      assert.deepEqual([...placed.keys()].sort(), ['billing', 'epicB', 'signup']);
+      assert.equal(placed.get('signup')!.y, 0);
+      assert.equal(placed.get('billing')!.y, ROW_HEIGHT);
+    });
+
+    it('promotes a visible node whose parent is hidden to a root', () => {
+      // signup stays but its parent auth is hidden → signup lays out at
+      // depth 0 (a root), not depth 2.
+      const placed = byId(layoutGraph(fixture(), new Set(['signup', 'epicB'])));
+      assert.equal(placed.get('signup')!.x, 0, 'depth 0 despite being nested in the full tree');
+      assert.equal(placed.get('signup')!.side, 'work');
+      // epicB (parent block1 hidden) becomes the lone group root, rightmost.
+      assert.equal(placed.get('epicB')!.side, 'group');
+    });
+
+    it('filters out edges implicitly — only listed ids are placed', () => {
+      const placed = layoutGraph(fixture(), new Set(['app']));
+      assert.deepEqual(placed.map((p) => p.id), ['app']);
+      assert.deepEqual({ x: placed[0]!.x, y: placed[0]!.y }, { x: 0, y: 0 });
+    });
+  });
+
   it('handles an empty graph and a one-sided graph', () => {
     assert.deepEqual(layoutGraph(emptyGraph()), []);
     let g = emptyGraph();
