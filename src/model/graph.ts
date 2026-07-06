@@ -19,8 +19,10 @@
 import type {
   Edge,
   EdgeType,
+  ExternalRef,
   Priority,
   ProjectGraph,
+  ProjectSettings,
   Status,
   WorkNode,
 } from './types.ts';
@@ -31,8 +33,31 @@ export function createId(): string {
   return crypto.randomUUID();
 }
 
+/** Today as an ISO date (yyyy-mm-dd), the granularity the scheduler uses. */
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Neutral defaults for a fresh project (1 track, no speed-up, no target). */
+export function defaultSettings(): ProjectSettings {
+  return {
+    startDate: todayIso(),
+    targetDate: null,
+    pointsPerDay: 1,
+    hoursPerDay: 8,
+    parallelTracks: 1,
+    speedMultiplier: 1,
+  };
+}
+
 export function emptyGraph(): ProjectGraph {
-  return { nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [] };
+  return {
+    nodes: {},
+    edges: {},
+    rootOrder: [],
+    groupRootOrder: [],
+    settings: defaultSettings(),
+  };
 }
 
 function nowIso(): string {
@@ -204,6 +229,10 @@ export function createNode(
     status: input.status ?? 'not_started',
     priority: input.priority ?? 'medium',
     effort: input.effort ?? null,
+    durationEstimate: null,
+    actualStart: null,
+    actualFinish: null,
+    externalRefs: [],
     tags: input.tags ?? [],
     notes: input.notes ?? '',
     createdAt: timestamp,
@@ -246,6 +275,10 @@ export function createGroup(
     status: 'not_started',
     priority: 'medium',
     effort: null,
+    durationEstimate: null,
+    actualStart: null,
+    actualFinish: null,
+    externalRefs: [],
     tags: [],
     notes: '',
     createdAt: timestamp,
@@ -466,4 +499,138 @@ export function removeFromGroup(graph: ProjectGraph, nodeId: string): ProjectGra
     throw new GraphError(`Node ${nodeId} is not assigned to a group`);
   }
   return removeEdge(graph, edge.id);
+}
+
+/* ------------------------------------------------------------------ */
+/* Estimation, progress & external refs (project-management extension) */
+/* ------------------------------------------------------------------ */
+
+function putNode(graph: ProjectGraph, node: WorkNode): ProjectGraph {
+  return {
+    ...graph,
+    nodes: { ...graph.nodes, [node.id]: { ...node, modifiedAt: nowIso() } },
+  };
+}
+
+function requireNonNegative(value: number | null, label: string): void {
+  if (value !== null && !(value >= 0)) {
+    throw new GraphError(`${label} cannot be negative`);
+  }
+}
+
+export interface EstimatePatch {
+  /** Size in abstract points. Pass null to clear. Omit to leave as-is. */
+  effort?: number | null;
+  /** Duration in working days. Pass null to clear. Omit to leave as-is. */
+  durationEstimate?: number | null;
+}
+
+/** Sets a node's estimate axes independently; either may be omitted. */
+export function setEstimate(
+  graph: ProjectGraph,
+  id: string,
+  patch: EstimatePatch,
+): ProjectGraph {
+  const node = requireNode(graph, id);
+  const updated: WorkNode = { ...node };
+  if ('effort' in patch) {
+    const value = patch.effort ?? null;
+    requireNonNegative(value, 'effort');
+    updated.effort = value;
+  }
+  if ('durationEstimate' in patch) {
+    const value = patch.durationEstimate ?? null;
+    requireNonNegative(value, 'durationEstimate');
+    updated.durationEstimate = value;
+  }
+  return putNode(graph, updated);
+}
+
+export interface ActualsPatch {
+  /** ISO date, or null to clear. Omit to leave as-is. */
+  actualStart?: string | null;
+  actualFinish?: string | null;
+}
+
+/**
+ * Sets actual start/finish and auto-derives status:
+ * finished ⇒ 'done'; started (not finished) ⇒ 'in_progress', unless the
+ * node is manually 'blocked' (a started-then-blocked item stays blocked);
+ * neither date set ⇒ status untouched, so manual states survive.
+ */
+export function setActualDates(
+  graph: ProjectGraph,
+  id: string,
+  patch: ActualsPatch,
+): ProjectGraph {
+  const node = requireNode(graph, id);
+  const updated: WorkNode = { ...node };
+  if ('actualStart' in patch) updated.actualStart = patch.actualStart ?? null;
+  if ('actualFinish' in patch) updated.actualFinish = patch.actualFinish ?? null;
+
+  if (updated.actualFinish !== null) {
+    updated.status = 'done';
+  } else if (updated.actualStart !== null) {
+    if (updated.status !== 'blocked') updated.status = 'in_progress';
+  }
+  return putNode(graph, updated);
+}
+
+/** Adds an external-tracker pointer; rejects a duplicate (system, key). */
+export function addExternalRef(
+  graph: ProjectGraph,
+  id: string,
+  ref: ExternalRef,
+): ProjectGraph {
+  const node = requireNode(graph, id);
+  if (!ref.system.trim() || !ref.key.trim()) {
+    throw new GraphError('External ref needs a system and a key');
+  }
+  if (node.externalRefs.some((r) => r.system === ref.system && r.key === ref.key)) {
+    throw new GraphError(`Duplicate external ref: ${ref.system} ${ref.key}`);
+  }
+  const clean: ExternalRef = {
+    system: ref.system,
+    key: ref.key,
+    ...(ref.url ? { url: ref.url } : {}),
+  };
+  return putNode(graph, { ...node, externalRefs: [...node.externalRefs, clean] });
+}
+
+/** Removes the external ref identified by (system, key). */
+export function removeExternalRef(
+  graph: ProjectGraph,
+  id: string,
+  system: string,
+  key: string,
+): ProjectGraph {
+  const node = requireNode(graph, id);
+  const externalRefs = node.externalRefs.filter(
+    (r) => !(r.system === system && r.key === key),
+  );
+  if (externalRefs.length === node.externalRefs.length) {
+    throw new GraphError(`No external ref ${system} ${key} on node ${id}`);
+  }
+  return putNode(graph, { ...node, externalRefs });
+}
+
+/** Patches project settings, validating capacity/conversion invariants. */
+export function updateSettings(
+  graph: ProjectGraph,
+  patch: Partial<ProjectSettings>,
+): ProjectGraph {
+  const settings: ProjectSettings = { ...graph.settings, ...patch };
+  if (!Number.isInteger(settings.parallelTracks) || settings.parallelTracks < 1) {
+    throw new GraphError('parallelTracks must be a positive integer');
+  }
+  if (!(settings.speedMultiplier > 0)) {
+    throw new GraphError('speedMultiplier must be greater than 0');
+  }
+  if (!(settings.pointsPerDay > 0)) {
+    throw new GraphError('pointsPerDay must be greater than 0');
+  }
+  if (!(settings.hoursPerDay > 0)) {
+    throw new GraphError('hoursPerDay must be greater than 0');
+  }
+  return { ...graph, settings };
 }
