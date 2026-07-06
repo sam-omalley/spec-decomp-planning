@@ -151,13 +151,18 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    set ⇒ `done`; `actualStart` set with no finish ⇒ `in_progress` unless
    manually `blocked` (a started-then-blocked item stays blocked); neither
    set ⇒ status untouched, so manual states survive.
-9. Entry UI — the details card surfaces the new fields plus `priority`
-   and `effort` (modelled since slice 1 but never shown). Pure
-   `rollup.ts` (unit-tested): rolled estimate / points / actuals.
-   **Rollup rule (also the scheduling-unit rule):** walking from roots,
-   the topmost node with an own estimate is the atomic unit and its
-   subtree isn't descended into — own estimate wins over child sum, no
-   double counting; unestimated leaves surface as gaps.
+9. ✅ Entry UI — the work-row details card (`NodeMetaEditor.tsx`, wired
+   into `Outliner` alongside `DependencyEditor`) surfaces status,
+   priority, the two estimate axes (points + duration/days), actual
+   start/finish dates, and external-ref chips. Rows carry a compact
+   rolled `Nd · Npt` estimate chip (⚠ when a subtree has unestimated
+   leaves). Pure `src/model/rollup.ts` (unit-tested): `rolledDuration` /
+   `rolledEffort` / `rolledActuals`. **Rollup rule (also the
+   scheduling-unit rule):** walking from roots, the topmost node with an
+   own estimate is the atomic unit and its subtree isn't descended into —
+   own estimate wins over child sum, no double counting; unestimated
+   leaves surface as gaps. (Lives in `model/` so the slice-10 scheduler
+   can import it without a ui→model back-dependency.)
 10. Scheduler — `src/model/schedule.ts`, pure + heavily tested. Forward
     resource-constrained schedule: dependency order (reusing
     `analysis.ts`) → each unit to the earliest-free of `parallelTracks`

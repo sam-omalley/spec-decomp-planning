@@ -23,8 +23,10 @@ import {
   subtreeIds,
   updateNode,
 } from '../model/graph.ts';
+import { rolledDuration, rolledEffort } from '../model/rollup.ts';
 import type { Status } from '../model/types.ts';
 import { DependencyEditor } from './DependencyEditor.tsx';
+import { NodeMetaEditor } from './NodeMetaEditor.tsx';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import {
   indentTarget,
@@ -269,6 +271,32 @@ export function Outliner({
     });
   }
 
+  // A compact rolled estimate chip (work side): own estimate wins over
+  // the sum of descendants; a ⚠ marks a subtree with unestimated leaves.
+  function estimateChip(id: string): ReactNode {
+    if (side !== 'work') return null;
+    const days = rolledDuration(graph, id);
+    const points = rolledEffort(graph, id);
+    if (days.value === null && points.value === null && !days.hasGaps) return null;
+    const parts: string[] = [];
+    if (days.value !== null) parts.push(`${days.value}d`);
+    if (points.value !== null) parts.push(`${points.value}pt`);
+    if (parts.length === 0) return null;
+    const gaps = days.hasGaps || points.hasGaps;
+    return (
+      <span
+        className={`est-chip${gaps ? ' est-chip-gaps' : ''}`}
+        title={
+          (days.fromOwn ? 'Own estimate' : 'Rolled up from sub-items') +
+          (gaps ? ' · some sub-items are unestimated' : '')
+        }
+      >
+        {parts.join(' · ')}
+        {gaps && ' ⚠'}
+      </span>
+    );
+  }
+
   function depBadges(id: string): ReactNode {
     if (depInfo === null) return null;
     const inCycle = depInfo.cycles.has(id);
@@ -321,6 +349,7 @@ export function Outliner({
           actions={actions}
           extras={
             <>
+              {estimateChip(row.id)}
               {depBadges(row.id)}
               {rowExtras?.(row.id)}
             </>
@@ -328,7 +357,14 @@ export function Outliner({
           dropProps={rowDropProps?.(row.id)}
           status={side === 'work' ? graph.nodes[row.id]?.status : undefined}
           onCycleStatus={side === 'work' ? cycleStatus : undefined}
-          detailsExtras={side === 'work' ? <DependencyEditor id={row.id} /> : undefined}
+          detailsExtras={
+            side === 'work' ? (
+              <>
+                <NodeMetaEditor id={row.id} />
+                <DependencyEditor id={row.id} />
+              </>
+            ) : undefined
+          }
           registerInput={(id, el) => {
             if (el) inputRefs.current.set(id, el);
             else inputRefs.current.delete(id);
