@@ -162,7 +162,8 @@ export function App() {
         )}
         {view === 'graph' && (
           <>Spec on the left, delivery on the right, assignments bridge the middle · click
-            selects · scroll zooms · filter to spotlight unassigned work or empty groups</>
+            selects · scroll zooms · drag a spec node onto a group to assign · toggle
+            Unassigned / Empty filters, spotlight or hide the rest</>
         )}
         {view === 'markdown' && (
           <>The delivery plan as Markdown · toggle sections · Copy to export · read-only</>

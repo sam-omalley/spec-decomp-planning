@@ -598,8 +598,20 @@ body {
   cursor: pointer;
 }
 
-.graph-filter-btn:hover {
+.graph-filter-btn:hover:not(:disabled) {
   background: var(--accent-soft);
+}
+
+.graph-filter-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.graph-filter-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: var(--border);
 }
 
 .graph-filter-btn-active {
@@ -627,6 +639,21 @@ body {
 
 .gnode-match {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.gnode-draggable {
+  cursor: grab;
+}
+
+.gnode-draggable:active {
+  cursor: grabbing;
+}
+
+/* A group node while a spec node is dragged over it. */
+.gnode-drop {
+  border-color: var(--accent);
+  background: var(--accent-soft);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
