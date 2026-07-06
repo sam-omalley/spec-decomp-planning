@@ -33,6 +33,20 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
   File version 3; v1/v2 migrate (plans → root groups, epics → child
   groups, `belongs_to_epic` → `assigned_to`, first membership wins).
 
+**Planned — project-management extension (slices 8–13, not yet built).**
+Work nodes gain `externalRefs: ExternalRef[]` (`{system, key, url?}` —
+Jira/GitHub/wildcard URL, allowed on group nodes too), a
+`durationEstimate: number | null` (canonical unit = working days; the
+existing `effort` stays as abstract points — the two are distinct axes,
+convertible via `pointsPerDay`), and `actualStart` / `actualFinish`
+(ISO date | null). `ProjectGraph` gains `settings: ProjectSettings`
+(`startDate`, `targetDate`, `pointsPerDay`, `hoursPerDay`,
+`parallelTracks`, `speedMultiplier`) — carried inside the graph so it
+rides the existing store/undo/serialize/autosave path unchanged. File
+version bumps 3 → 4; v1–v3 migrate by backfilling defaults (`[]`, `null`,
+default settings), so no data is lost. Each field/section is surfaced by
+its slice below and folded into these sections as it lands.
+
 ### Invariants (enforced in `src/model/graph.ts`, tested)
 
 - `contains` is a single-parent, acyclic forest on each side and never
@@ -124,6 +138,50 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
    string and the rendered preview so they can't drift. Per-section
    toggles (details / sub-items / backlog); read-only, Copy to export.
    Members ordered by spec pre-order.)
+
+Project-management extension (planned, in dependency order — 8 unblocks
+all; 9 and 10 are independent; 11–13 consume 10). Each slice is
+shippable alone and keeps the dependency-free-core / tested-domain rules:
+
+8. Model foundation — `types.ts` (the fields in Data model above),
+   `serialize.ts` v4 + backfill migration (with a migration test), and
+   new `graph.ts` mutations: `setEstimate`, `setActualDates`,
+   `addExternalRef` / `removeExternalRef`, `updateSettings`. Every new
+   mutation gets invariant tests. **Status auto-derives from actuals:**
+   `actualFinish` set ⇒ `done`; `actualStart` set with no finish ⇒
+   `in_progress`; neither set ⇒ status untouched (manual `blocked` /
+   `not_started` survive).
+9. Entry UI — the details card surfaces the new fields plus `priority`
+   and `effort` (modelled since slice 1 but never shown). Pure
+   `rollup.ts` (unit-tested): rolled estimate / points / actuals.
+   **Rollup rule (also the scheduling-unit rule):** walking from roots,
+   the topmost node with an own estimate is the atomic unit and its
+   subtree isn't descended into — own estimate wins over child sum, no
+   double counting; unestimated leaves surface as gaps.
+10. Scheduler — `src/model/schedule.ts`, pure + heavily tested. Forward
+    resource-constrained schedule: dependency order (reusing
+    `analysis.ts`) → each unit to the earliest-free of `parallelTracks`
+    → duration = `durationEstimate / speedMultiplier`, snapped to a
+    skip-weekends working-day calendar from `settings.startDate`.
+    Blends actuals over projection (done = actual dates; in-progress =
+    `actualStart` + remaining). Dependency cycles tolerated: an SCC
+    schedules as one batch by sibling order (never hangs). Output:
+    per-node `{start, finish, source: 'planned' | 'actual'}`, project
+    finish, per-group span via `assigned_to`. Tests: dep order,
+    parallelism cap, weekend skipping, cycle batch, actual override.
+11. Settings UI — panel for `startDate`, `targetDate`, `pointsPerDay`,
+    `hoursPerDay`, `parallelTracks`, `speedMultiplier`; edits go through
+    `updateSettings` (undoable, autosaved with the graph).
+12. Timeline / Gantt view — new 5th tab `TimelineView.tsx` + pure
+    `timelineLayout.ts` (unit-tested). Bars per scheduling unit grouped
+    by delivery group, planned-vs-actual overlay, projected-finish and
+    target-date markers. Hand-rolled SVG like `GraphView` (no chart
+    dep); register in the `App.tsx` `View` union and tab bar.
+13. Metrics view — new 6th tab `MetricsView.tsx` + pure `metrics.ts`
+    (unit-tested): projection summary (completion date, remaining,
+    variance vs target), burn-up / burn-down (cumulative done vs total
+    over time), estimate-vs-actual variance (per-item + rolled). Also
+    hand-rolled SVG, no new deps.
 
 - v2+: merge/split nodes, bulk edit, critical path, richer graph editing.
 
