@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   GraphError,
   addEdge,
+  addExternalRef,
   assignToGroup,
   childrenOf,
   createGroup,
@@ -15,10 +16,14 @@ import {
   membersOfGroup,
   moveNode,
   parentOf,
+  removeExternalRef,
   removeFromGroup,
   rootsOf,
+  setActualDates,
+  setEstimate,
   subtreeIds,
   updateNode,
+  updateSettings,
 } from './graph.ts';
 import { deserializeProject, serializeProject } from './serialize.ts';
 import type { ProjectGraph } from './types.ts';
@@ -293,5 +298,130 @@ describe('serialization', () => {
     const g = fixture();
     const text = serializeProject(g).replace('"auth"', '"ghost"');
     assert.throws(() => deserializeProject(text), GraphError);
+  });
+
+  it('round-trips estimates, actuals, external refs and settings', () => {
+    let g = fixture();
+    g = setEstimate(g, 'login', { effort: 5, durationEstimate: 3 });
+    g = setActualDates(g, 'login', { actualStart: '2026-07-01' });
+    g = addExternalRef(g, 'login', { system: 'jira', key: 'PT-1', url: 'http://x/PT-1' });
+    g = updateSettings(g, { parallelTracks: 3, speedMultiplier: 1.5, targetDate: '2026-12-01' });
+    assert.deepEqual(deserializeProject(serializeProject(g)), g);
+  });
+
+  it('migrates a v3 file by backfilling the new fields and settings', () => {
+    const v3 = {
+      version: 3,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {
+          a: {
+            id: 'a', title: 'A', description: '', type: 'task',
+            status: 'not_started', priority: 'medium', effort: null,
+            tags: [], notes: '',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            modifiedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+        edges: {},
+        rootOrder: ['a'],
+        groupRootOrder: [],
+      },
+    };
+    const g = deserializeProject(JSON.stringify(v3));
+    assert.deepEqual(g.nodes['a']!.externalRefs, []);
+    assert.equal(g.nodes['a']!.durationEstimate, null);
+    assert.equal(g.nodes['a']!.actualStart, null);
+    assert.equal(g.nodes['a']!.actualFinish, null);
+    // Absent settings become the neutral defaults.
+    assert.equal(g.settings.parallelTracks, 1);
+    assert.equal(g.settings.speedMultiplier, 1);
+    assert.equal(g.settings.targetDate, null);
+  });
+
+  it('fills defaults for a partial/garbage settings blob', () => {
+    let g = fixture();
+    const file = JSON.parse(serializeProject(g)) as {
+      graph: { settings: unknown };
+    };
+    file.graph.settings = { parallelTracks: 4, speedMultiplier: 'fast' };
+    const restored = deserializeProject(JSON.stringify(file));
+    assert.equal(restored.settings.parallelTracks, 4); // kept
+    assert.equal(restored.settings.speedMultiplier, 1); // garbage → default
+    assert.equal(restored.settings.hoursPerDay, 8); // missing → default
+  });
+});
+
+describe('estimation and progress (project-management extension)', () => {
+  it('sets the two estimate axes independently, and clears with null', () => {
+    let g = fixture();
+    g = setEstimate(g, 'login', { effort: 8 });
+    assert.equal(g.nodes['login']!.effort, 8);
+    assert.equal(g.nodes['login']!.durationEstimate, null); // untouched
+    g = setEstimate(g, 'login', { durationEstimate: 4 });
+    assert.equal(g.nodes['login']!.effort, 8); // untouched
+    assert.equal(g.nodes['login']!.durationEstimate, 4);
+    g = setEstimate(g, 'login', { effort: null });
+    assert.equal(g.nodes['login']!.effort, null);
+  });
+
+  it('rejects negative estimates', () => {
+    const g = fixture();
+    assert.throws(() => setEstimate(g, 'login', { effort: -1 }), /negative/);
+    assert.throws(() => setEstimate(g, 'login', { durationEstimate: -2 }), /negative/);
+  });
+
+  it('auto-derives status from actual dates', () => {
+    let g = fixture();
+    g = setActualDates(g, 'login', { actualStart: '2026-07-01' });
+    assert.equal(g.nodes['login']!.status, 'in_progress');
+    g = setActualDates(g, 'login', { actualFinish: '2026-07-05' });
+    assert.equal(g.nodes['login']!.status, 'done');
+    // Clearing the finish while still started reverts to in_progress.
+    g = setActualDates(g, 'login', { actualFinish: null });
+    assert.equal(g.nodes['login']!.status, 'in_progress');
+  });
+
+  it('lets a manually blocked-but-started item stay blocked', () => {
+    let g = fixture();
+    g = updateNode(g, 'login', { status: 'blocked' });
+    g = setActualDates(g, 'login', { actualStart: '2026-07-01' });
+    assert.equal(g.nodes['login']!.status, 'blocked');
+    // ...but finishing it still marks it done.
+    g = setActualDates(g, 'login', { actualFinish: '2026-07-05' });
+    assert.equal(g.nodes['login']!.status, 'done');
+  });
+
+  it('leaves status untouched when no actual dates are set', () => {
+    let g = fixture();
+    g = updateNode(g, 'login', { status: 'blocked' });
+    g = setActualDates(g, 'login', {});
+    assert.equal(g.nodes['login']!.status, 'blocked');
+  });
+});
+
+describe('external refs and settings', () => {
+  it('adds, dedupes and removes external refs', () => {
+    let g = fixture();
+    g = addExternalRef(g, 'login', { system: 'jira', key: 'PT-1' });
+    g = addExternalRef(g, 'login', { system: 'github', key: '42', url: 'http://x/42' });
+    assert.equal(g.nodes['login']!.externalRefs.length, 2);
+    assert.throws(() => addExternalRef(g, 'login', { system: 'jira', key: 'PT-1' }), /Duplicate/);
+    assert.throws(() => addExternalRef(g, 'login', { system: '', key: 'x' }), /system/);
+    g = removeExternalRef(g, 'login', 'jira', 'PT-1');
+    assert.deepEqual(g.nodes['login']!.externalRefs, [
+      { system: 'github', key: '42', url: 'http://x/42' },
+    ]);
+    assert.throws(() => removeExternalRef(g, 'login', 'jira', 'PT-1'), /No external ref/);
+  });
+
+  it('validates capacity and conversion settings', () => {
+    const g = fixture();
+    assert.equal(updateSettings(g, { parallelTracks: 3 }).settings.parallelTracks, 3);
+    assert.throws(() => updateSettings(g, { parallelTracks: 0 }), /positive integer/);
+    assert.throws(() => updateSettings(g, { parallelTracks: 2.5 }), /positive integer/);
+    assert.throws(() => updateSettings(g, { speedMultiplier: 0 }), /speedMultiplier/);
+    assert.throws(() => updateSettings(g, { pointsPerDay: -1 }), /pointsPerDay/);
+    assert.throws(() => updateSettings(g, { hoursPerDay: 0 }), /hoursPerDay/);
   });
 });

@@ -12,12 +12,23 @@
  * sets: stale ids are dropped and missing roots are appended by
  * createdAt — which is exactly the order older files displayed, so
  * migration of ordering is implicit.
+ *
+ * v3 → v4: the project-management extension. Work nodes gain
+ * `durationEstimate`, `actualStart`, `actualFinish`, `externalRefs`; the
+ * graph gains `settings`. Migration is pure backfill of defaults, so no
+ * data is lost — earlier versions migrate straight through to v4.
  */
 
-import type { Edge, EdgeType, ProjectGraph, WorkNode } from './types.ts';
-import { GraphError, createId } from './graph.ts';
+import type {
+  Edge,
+  EdgeType,
+  ProjectGraph,
+  ProjectSettings,
+  WorkNode,
+} from './types.ts';
+import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 3;
+export const FILE_VERSION = 4;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -25,7 +36,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -34,6 +45,7 @@ interface LegacyGraph {
   plans?: Record<string, { id: string; name: string; createdAt: string }>;
   rootOrder?: unknown;
   groupRootOrder?: unknown;
+  settings?: unknown;
 }
 
 export function serializeProject(graph: ProjectGraph): string {
@@ -81,6 +93,34 @@ function reconcileRootOrder(
   return [...order, ...missing];
 }
 
+/** Backfills the v4 work-node fields on any node that predates them. */
+function backfillNodeDefaults(nodes: Record<string, WorkNode>): void {
+  for (const node of Object.values(nodes)) {
+    const n = node as Partial<WorkNode>;
+    if (!Array.isArray(n.externalRefs)) n.externalRefs = [];
+    if (n.durationEstimate === undefined) n.durationEstimate = null;
+    if (n.actualStart === undefined) n.actualStart = null;
+    if (n.actualFinish === undefined) n.actualFinish = null;
+  }
+}
+
+/** Merges a persisted settings blob over defaults, field by field. */
+function normalizeSettings(provided: unknown): ProjectSettings {
+  const base = defaultSettings();
+  if (typeof provided !== 'object' || provided === null) return base;
+  const p = provided as Record<string, unknown>;
+  const num = (value: unknown, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return {
+    startDate: typeof p.startDate === 'string' ? p.startDate : base.startDate,
+    targetDate: typeof p.targetDate === 'string' ? p.targetDate : null,
+    pointsPerDay: num(p.pointsPerDay, base.pointsPerDay),
+    hoursPerDay: num(p.hoursPerDay, base.hoursPerDay),
+    parallelTracks: num(p.parallelTracks, base.parallelTracks),
+    speedMultiplier: num(p.speedMultiplier, base.speedMultiplier),
+  };
+}
+
 /** Rewrites a v1/v2 payload (plans, epics, belongs_to_epic) in place. */
 function migrateLegacy(legacy: LegacyGraph): void {
   const nodes = legacy.nodes;
@@ -99,6 +139,10 @@ function migrateLegacy(legacy: LegacyGraph): void {
       status: 'not_started',
       priority: 'medium',
       effort: null,
+      durationEstimate: null,
+      actualStart: null,
+      actualFinish: null,
+      externalRefs: [],
       tags: [],
       notes: '',
       createdAt: plan.createdAt,
@@ -168,6 +212,7 @@ export function deserializeProject(text: string): ProjectGraph {
     throw new GraphError('Not a valid project file: missing graph data');
   }
   if (file.version < FILE_VERSION) migrateLegacy(graph);
+  backfillNodeDefaults(graph.nodes);
 
   for (const edge of Object.values(graph.edges)) {
     if (!graph.nodes[edge.from] || !graph.nodes[edge.to]) {
@@ -177,6 +222,7 @@ export function deserializeProject(text: string): ProjectGraph {
   return {
     nodes: graph.nodes,
     edges: graph.edges as Record<string, Edge>,
+    settings: normalizeSettings(graph.settings),
     rootOrder: reconcileRootOrder(graph.nodes, graph.edges, graph.rootOrder, 'work'),
     groupRootOrder: reconcileRootOrder(
       graph.nodes,
