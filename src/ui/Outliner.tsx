@@ -28,6 +28,7 @@ import type { Status } from '../model/types.ts';
 import { DependencyEditor } from './DependencyEditor.tsx';
 import { NodeMetaEditor } from './NodeMetaEditor.tsx';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import {
   contiguousSiblingRange,
   indentTarget,
@@ -55,6 +56,8 @@ interface OutlinerProps {
   rowExtras?: (id: string) => ReactNode;
   /** Native DnD handlers to make a row a drop target. */
   rowDropProps?: (id: string) => RowDropProps | undefined;
+  /** Global filter; when active, rows narrow to matches + ancestor context. */
+  filter?: FilterState;
 }
 
 export function Outliner({
@@ -66,6 +69,7 @@ export function Outliner({
   addLabel = '+ Add item',
   rowExtras,
   rowDropProps,
+  filter = EMPTY_FILTER,
 }: OutlinerProps) {
   const graph = useProjectGraph();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -76,9 +80,16 @@ export function Outliner({
   const [focusTick, setFocusTick] = useState(0);
   const inputRefs = useRef(new Map<string, HTMLInputElement>());
 
+  const filterActive = isFilterActive(filter);
   const rows = useMemo(
-    () => visibleRows(graph, collapsed, side),
-    [graph, collapsed, side],
+    () =>
+      visibleRows(
+        graph,
+        collapsed,
+        side,
+        filterActive ? (id) => matchesFilter(graph.nodes[id]!, filter) : undefined,
+      ),
+    [graph, collapsed, side, filterActive, filter],
   );
 
   // Multi-select layered over App's single-selection anchor: ⇧/⌘ click,

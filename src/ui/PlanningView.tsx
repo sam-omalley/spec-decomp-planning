@@ -20,6 +20,7 @@ import {
 } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
+import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { visibleRows } from './outline.ts';
 import {
   coveringGroups,
@@ -39,15 +40,29 @@ interface PlanningViewProps {
   /** Outline vs Table sub-view; lifted so the footer hint can follow it. */
   mode: 'outline' | 'table';
   onModeChange: (mode: 'outline' | 'table') => void;
+  /** Global filter, shared across tabs. */
+  filter?: FilterState;
 }
 
-export function PlanningView({ selectedId, onSelect, mode, onModeChange }: PlanningViewProps) {
+export function PlanningView({
+  selectedId,
+  onSelect,
+  mode,
+  onModeChange,
+  filter = EMPTY_FILTER,
+}: PlanningViewProps) {
   const graph = useProjectGraph();
   const [dropGroupId, setDropGroupId] = useState<string | null>(null);
   const [specDropping, setSpecDropping] = useState(false);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
 
-  const specRows = visibleRows(graph, NO_COLLAPSE, 'work');
+  const filterActive = isFilterActive(filter);
+  const specRows = visibleRows(
+    graph,
+    NO_COLLAPSE,
+    'work',
+    filterActive ? (id) => matchesFilter(graph.nodes[id]!, filter) : undefined,
+  );
   const uncovered = useMemo(() => uncoveredWorkIds(graph), [graph]);
   const shownSpecRows = onlyUnassigned
     ? specRows.filter((row) => uncovered.has(row.id))
@@ -177,7 +192,7 @@ export function PlanningView({ selectedId, onSelect, mode, onModeChange }: Plann
         </button>
       </div>
       {mode === 'table' ? (
-        <PlanTable selectedId={selectedId} onSelect={onSelect} />
+        <PlanTable selectedId={selectedId} onSelect={onSelect} filter={filter} />
       ) : (
         <div className="planning-body">
       <div
@@ -201,7 +216,11 @@ export function PlanningView({ selectedId, onSelect, mode, onModeChange }: Plann
           </label>
         </div>
         {specRows.length === 0 && (
-          <p className="pane-hint">The spec is empty. Add items in the Spec view first.</p>
+          <p className="pane-hint">
+            {filterActive
+              ? 'No spec items match the filter.'
+              : 'The spec is empty. Add items in the Spec view first.'}
+          </p>
         )}
         {specRows.length > 0 && shownSpecRows.length === 0 && (
           <p className="pane-hint">Every spec item is assigned to a group. 🎉</p>
@@ -212,7 +231,9 @@ export function PlanningView({ selectedId, onSelect, mode, onModeChange }: Plann
           return (
             <div
               key={row.id}
-              className={`plan-tree-row${row.id === selectedId ? ' row-selected' : ''}`}
+              className={`plan-tree-row${row.id === selectedId ? ' row-selected' : ''}${
+                row.matched === false ? ' row-context' : row.matched ? ' row-match' : ''
+              }`}
               style={{ paddingLeft: `${row.depth * 18 + 8}px` }}
               draggable
               onDragStart={(e) => startDrag(e, 'spec', row.id)}
@@ -264,6 +285,7 @@ export function PlanningView({ selectedId, onSelect, mode, onModeChange }: Plann
           addLabel="+ Add group"
           rowExtras={rowExtras}
           rowDropProps={rowDropProps}
+          filter={filter}
         />
       </div>
         </div>

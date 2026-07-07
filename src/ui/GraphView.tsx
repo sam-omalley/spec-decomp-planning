@@ -30,6 +30,7 @@ import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import { assignToGroup } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
+import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { layoutGraph } from './graphLayout.ts';
 import { isEmptyLeafGroup, uncoveredWorkIds } from './planning.ts';
 
@@ -140,9 +141,11 @@ function FitOnReflow({ signature }: { signature: string }) {
 interface GraphViewProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Global filter, shared across tabs; dims non-matches in place. */
+  filter?: FilterState;
 }
 
-export function GraphView({ selectedId, onSelect }: GraphViewProps) {
+export function GraphView({ selectedId, onSelect, filter = EMPTY_FILTER }: GraphViewProps) {
   const graph = useProjectGraph();
   const [active, setActive] = useState<Record<FilterKey, boolean>>({
     unassigned: false,
@@ -184,6 +187,18 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
     [onSelect],
   );
 
+  // The global text filter always dims non-matches in place (never hides),
+  // so the graph's structure stays legible; it composes with the local
+  // unassigned/empty spotlight above.
+  const textActive = isFilterActive(filter);
+  const textMatch = useCallback(
+    (id: string): boolean => {
+      const node = graph.nodes[id];
+      return node ? matchesFilter(node, filter) : false;
+    },
+    [graph, filter],
+  );
+
   const hiding = anyFilter && mode === 'hide';
 
   // In hide mode, lay out only the survivors so they re-flow compactly
@@ -211,8 +226,10 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
           isDone: node.status === 'done',
           isWaiting: analysis.waiting.has(placed.id),
           inCycle: analysis.cycles.has(placed.id),
-          dimmed: anyFilter && mode === 'spotlight' && !matched,
-          matched: anyFilter && matched,
+          dimmed:
+            (textActive && !textMatch(placed.id)) ||
+            (anyFilter && mode === 'spotlight' && !matched),
+          matched: (textActive && textMatch(placed.id)) || (anyFilter && matched),
           ...(placed.side === 'group'
             ? {
                 color: rootGroupColor(graph, placed.id),
@@ -225,7 +242,18 @@ export function GraphView({ selectedId, onSelect }: GraphViewProps) {
       });
     }
     return result;
-  }, [graph, selectedId, analysis, anyFilter, mode, matches, assign, visibleSet]);
+  }, [
+    graph,
+    selectedId,
+    analysis,
+    anyFilter,
+    mode,
+    matches,
+    assign,
+    visibleSet,
+    textActive,
+    textMatch,
+  ]);
 
   // Edges to a node hidden in hide mode would dangle, so keep only those
   // whose endpoints are both on the canvas.

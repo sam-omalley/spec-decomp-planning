@@ -125,9 +125,13 @@ export function OutlinerRow({
   const dropClass = dropProps?.dropping ? ' row-drop' : '';
   const openClass = expanded ? ' row-open' : '';
   const multiClass = multiSelected ? ' row-multiselected' : '';
+  // While a filter is active, `row.matched` is set: false = ancestor
+  // shown only as context (dimmed), true = an actual match (highlight).
+  const filterClass =
+    row.matched === false ? ' row-context' : row.matched ? ' row-match' : '';
   return (
     <div
-      className={`row${selected ? ' row-selected' : ''}${multiClass}${dropClass}${openClass}`}
+      className={`row${selected ? ' row-selected' : ''}${multiClass}${dropClass}${openClass}${filterClass}`}
       style={{ paddingLeft: `${row.depth * 22 + 8}px` }}
       onDragOver={dropProps?.onDragOver}
       onDragLeave={dropProps?.onDragLeave}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraphError } from './model/graph.ts';
 import { deserializeProject, serializeProject } from './model/serialize.ts';
 import { store, useProjectGraph } from './store/appStore.ts';
@@ -9,6 +9,7 @@ import { PlanningView } from './ui/PlanningView.tsx';
 import { MetricsView } from './ui/MetricsView.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TimelineView } from './ui/TimelineView.tsx';
+import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
 
 type View = 'spec' | 'planning' | 'graph' | 'markdown' | 'timeline' | 'metrics';
 
@@ -18,7 +19,25 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Lifted so the footer hint can follow the Planning sub-view.
   const [planMode, setPlanMode] = useState<'outline' | 'table'>('outline');
+  // Global filter/search — view state only; never enters the graph, undo,
+  // or autosave. Shared across the Spec / Planning / Graph tabs.
+  const [filterText, setFilterText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const filter: FilterState = useMemo(() => ({ text: filterText }), [filterText]);
+  const filterActive = isFilterActive(filter);
+  // Views the filter applies to; others are left unchanged.
+  const searchable = view === 'spec' || view === 'planning' || view === 'graph';
+  const matchCount = useMemo(() => {
+    if (!filterActive || !searchable) return 0;
+    return Object.values(graph.nodes).filter((n) => {
+      if (!matchesFilter(n, filter)) return false;
+      // Spec shows only work nodes; the Planning table shows only groups.
+      if (view === 'spec') return n.type !== 'group';
+      if (view === 'planning' && planMode === 'table') return n.type === 'group';
+      return true;
+    }).length;
+  }, [filterActive, searchable, graph, filter, view, planMode]);
 
   function exportProject() {
     const blob = new Blob([serializeProject(store.getState())], {
@@ -126,6 +145,29 @@ export function App() {
         <span className="app-count">
           {itemCount} item{itemCount === 1 ? '' : 's'}
         </span>
+        {searchable && (
+          <div className="app-search">
+            <input
+              type="search"
+              className="app-search-input"
+              placeholder="Filter…"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setFilterText('');
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+            {filterActive && (
+              <span className="app-search-count">
+                {matchCount} match{matchCount === 1 ? '' : 'es'}
+              </span>
+            )}
+          </div>
+        )}
         <div className="app-spacer" />
         <input
           ref={fileInputRef}
@@ -155,17 +197,20 @@ export function App() {
         </button>
       </header>
       <main className={`app-main${view === 'spec' ? '' : ' app-main-wide'}`}>
-        {view === 'spec' && <Outliner selectedId={selectedId} onSelect={setSelectedId} />}
+        {view === 'spec' && (
+          <Outliner selectedId={selectedId} onSelect={setSelectedId} filter={filter} />
+        )}
         {view === 'planning' && (
           <PlanningView
             selectedId={selectedId}
             onSelect={setSelectedId}
             mode={planMode}
             onModeChange={setPlanMode}
+            filter={filter}
           />
         )}
         {view === 'graph' && (
-          <GraphView selectedId={selectedId} onSelect={setSelectedId} />
+          <GraphView selectedId={selectedId} onSelect={setSelectedId} filter={filter} />
         )}
         {view === 'timeline' && (
           <TimelineView selectedId={selectedId} onSelect={setSelectedId} />
