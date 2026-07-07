@@ -36,14 +36,16 @@ const NO_COLLAPSE: ReadonlySet<string> = new Set();
 interface PlanningViewProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Outline vs Table sub-view; lifted so the footer hint can follow it. */
+  mode: 'outline' | 'table';
+  onModeChange: (mode: 'outline' | 'table') => void;
 }
 
-export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
+export function PlanningView({ selectedId, onSelect, mode, onModeChange }: PlanningViewProps) {
   const graph = useProjectGraph();
   const [dropGroupId, setDropGroupId] = useState<string | null>(null);
   const [specDropping, setSpecDropping] = useState(false);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
-  const [mode, setMode] = useState<'outline' | 'table'>('outline');
 
   const specRows = visibleRows(graph, NO_COLLAPSE, 'work');
   const uncovered = useMemo(() => uncoveredWorkIds(graph), [graph]);
@@ -163,13 +165,13 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
       <div className="plan-mode-toggle">
         <button
           className={mode === 'outline' ? 'view-tab view-tab-active' : 'view-tab'}
-          onClick={() => setMode('outline')}
+          onClick={() => onModeChange('outline')}
         >
           Outline
         </button>
         <button
           className={mode === 'table' ? 'view-tab view-tab-active' : 'view-tab'}
-          onClick={() => setMode('table')}
+          onClick={() => onModeChange('table')}
         >
           Table
         </button>

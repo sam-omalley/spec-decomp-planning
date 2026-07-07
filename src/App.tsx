@@ -16,6 +16,8 @@ export function App() {
   const graph = useProjectGraph();
   const [view, setView] = useState<View>('spec');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Lifted so the footer hint can follow the Planning sub-view.
+  const [planMode, setPlanMode] = useState<'outline' | 'table'>('outline');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function exportProject() {
@@ -155,7 +157,12 @@ export function App() {
       <main className={`app-main${view === 'spec' ? '' : ' app-main-wide'}`}>
         {view === 'spec' && <Outliner selectedId={selectedId} onSelect={setSelectedId} />}
         {view === 'planning' && (
-          <PlanningView selectedId={selectedId} onSelect={setSelectedId} />
+          <PlanningView
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            mode={planMode}
+            onModeChange={setPlanMode}
+          />
         )}
         {view === 'graph' && (
           <GraphView selectedId={selectedId} onSelect={setSelectedId} />
@@ -169,39 +176,33 @@ export function App() {
       <footer className="app-hints">
         {view === 'spec' && (
           <>
-            Enter sibling · ⇧Enter / Enter at line start = insert above · Tab indent · ⇧Tab
-            outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details · ⌫ on empty / ⌘⌫ delete · paste
-            multi-line text to add rows · ⇧/⌘-click or ⇧↑↓ multi-selects a run to
-            indent/move/delete together · ⌘Z undo · the spec is structural — estimate &amp;
-            track in the Plan
+            <kbd>Enter</kbd> new row · <kbd>Tab</kbd> / <kbd>⇧Tab</kbd> nest · <kbd>⌘↩</kbd>{' '}
+            details · paste lines or <kbd>⇧</kbd>-click to edit in bulk
           </>
         )}
-        {view === 'planning' && (
+        {view === 'planning' && planMode === 'table' && (
+          <>Click a field to edit · <kbd>⇧</kbd>-click rows to bulk-set · parent rows show
+            rolled-up totals</>
+        )}
+        {view === 'planning' && planMode === 'outline' && (
           <>
-            Outline / Table toggle · groups edit like the outliner (Enter · ⇧Enter above ·
-            Tab · ⌥↑↓ · ⌘↩ details, estimates, dependencies) · paste &amp; ⇧/⌘-click
-            multi-select work here too · bullet click = status · Table edits every plan field
-            (bulk-set across a selection) · drag spec items onto groups for traceability ·
-            drop moves, drag to spec pane or × unassigns · Unassigned filter finds uncovered
-            work
+            <kbd>Enter</kbd> new group · <kbd>Tab</kbd> nest · bullet = status · <kbd>⌘↩</kbd>{' '}
+            estimates &amp; dependencies · drag spec items on to assign
           </>
         )}
         {view === 'graph' && (
-          <>Spec on the left, delivery on the right, assignments bridge the middle · click
-            selects · scroll zooms · drag a spec node onto a group to assign · toggle
-            Unassigned / Empty filters, spotlight or hide the rest</>
+          <>Click to select · scroll to zoom · drag a spec node onto a group to assign</>
         )}
         {view === 'timeline' && (
-          <>Plan schedule as a Gantt · bars per delivery group, containers span their units ·
-            ▸ projected finish, 🎯 target date · solid = actual, lighter = planned · set dates
-            &amp; capacity in ⚙ Settings</>
+          <>Plan schedule as a Gantt · ▸ projected finish · 🎯 target date · set dates &amp;
+            capacity in ⚙ Settings</>
         )}
         {view === 'metrics' && (
-          <>Projection summary, burn-up and estimate-vs-actual · figures roll up from the
-            plan&apos;s scheduling units · set a target date in ⚙ Settings for variance</>
+          <>Projection, burn-up &amp; estimate-vs-actual · set a target date in ⚙ Settings for
+            variance</>
         )}
         {view === 'markdown' && (
-          <>The delivery plan as Markdown · toggle sections · Copy to export · read-only</>
+          <>The delivery plan as Markdown · toggle sections · Copy to export</>
         )}
       </footer>
     </div>
