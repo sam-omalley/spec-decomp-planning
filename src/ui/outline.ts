@@ -43,32 +43,53 @@ export function siblingsOf(graph: ProjectGraph, id: string): string[] {
 /**
  * Depth-first flattening of one side's forest into visible rows.
  *
- * Without `match`, it skips collapsed subtrees (the normal outliner).
+ * Without `match`, it skips collapsed subtrees (the normal outliner) and,
+ * when `maxDepth` is given, caps the visible tree to the top N levels
+ * (roots = depth 0, so "N levels" ⇒ depth < N). A node at the cutoff with
+ * hidden descendants renders `collapsed` so it reuses the "+k" child-count
+ * affordance.
+ *
  * With a `match` predicate (a filter is active), it becomes
  * hierarchy-aware: it keeps every matching node plus the ancestor path to
- * each match, drops the rest, and ignores per-node collapse so deep
- * matches always surface. Each surviving row carries `matched` — true for
- * a real match (highlight), false for an ancestor shown as context
- * (dimmed).
+ * each match, drops the rest, and ignores both per-node collapse *and*
+ * `maxDepth` so deep matches always surface (search wins over the depth
+ * cap). Each surviving row carries `matched` — true for a real match
+ * (highlight), false for an ancestor shown as context (dimmed).
  */
 export function visibleRows(
   graph: ProjectGraph,
   collapsed: ReadonlySet<string>,
   side: OutlineSide = 'work',
   match?: (id: string) => boolean,
+  maxDepth?: number,
 ): OutlineRow[] {
   if (match) return filteredRows(graph, side, match);
   const rows: OutlineRow[] = [];
   const visit = (id: string, depth: number): void => {
     const children = childrenOf(graph, id);
-    const isCollapsed = collapsed.has(id) && children.length > 0;
-    rows.push({ id, depth, hasChildren: children.length > 0, collapsed: isCollapsed });
+    const hasChildren = children.length > 0;
+    // Children live at depth+1; if that would reach the cap, stop here and
+    // present the node as collapsed so its hidden descendants show as "+k".
+    const cappedHere = maxDepth !== undefined && depth + 1 >= maxDepth;
+    const isCollapsed = (collapsed.has(id) || cappedHere) && hasChildren;
+    rows.push({ id, depth, hasChildren, collapsed: isCollapsed });
     if (!isCollapsed) {
       for (const child of children) visit(child, depth + 1);
     }
   };
   for (const root of rootsOfSide(graph, side)) visit(root, 0);
   return rows;
+}
+
+/** Number of levels in one side's forest (deepest row depth + 1); 0 if empty. */
+export function treeDepth(graph: ProjectGraph, side: OutlineSide): number {
+  let max = -1;
+  const visit = (id: string, depth: number): void => {
+    if (depth > max) max = depth;
+    for (const child of childrenOf(graph, id)) visit(child, depth + 1);
+  };
+  for (const root of rootsOfSide(graph, side)) visit(root, 0);
+  return max + 1;
 }
 
 /** Filtered variant: keep matches + their ancestors, collapse ignored. */
