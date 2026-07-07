@@ -18,6 +18,12 @@ export interface OutlineRow {
   depth: number;
   hasChildren: boolean;
   collapsed: boolean;
+  /**
+   * Only set while a filter is active (see the `match` argument to
+   * `visibleRows`): true when the row itself matched (highlight), false
+   * when it is only shown as ancestor context for a deeper match (dimmed).
+   */
+  matched?: boolean;
 }
 
 function rootsOfSide(graph: ProjectGraph, side: OutlineSide): string[] {
@@ -34,12 +40,24 @@ export function siblingsOf(graph: ProjectGraph, id: string): string[] {
   return parent === null ? rootsOfSide(graph, sideOf(graph, id)) : childrenOf(graph, parent);
 }
 
-/** Depth-first flattening of one side's forest, skipping collapsed subtrees. */
+/**
+ * Depth-first flattening of one side's forest into visible rows.
+ *
+ * Without `match`, it skips collapsed subtrees (the normal outliner).
+ * With a `match` predicate (a filter is active), it becomes
+ * hierarchy-aware: it keeps every matching node plus the ancestor path to
+ * each match, drops the rest, and ignores per-node collapse so deep
+ * matches always surface. Each surviving row carries `matched` — true for
+ * a real match (highlight), false for an ancestor shown as context
+ * (dimmed).
+ */
 export function visibleRows(
   graph: ProjectGraph,
   collapsed: ReadonlySet<string>,
   side: OutlineSide = 'work',
+  match?: (id: string) => boolean,
 ): OutlineRow[] {
+  if (match) return filteredRows(graph, side, match);
   const rows: OutlineRow[] = [];
   const visit = (id: string, depth: number): void => {
     const children = childrenOf(graph, id);
@@ -50,6 +68,42 @@ export function visibleRows(
     }
   };
   for (const root of rootsOfSide(graph, side)) visit(root, 0);
+  return rows;
+}
+
+/** Filtered variant: keep matches + their ancestors, collapse ignored. */
+function filteredRows(
+  graph: ProjectGraph,
+  side: OutlineSide,
+  match: (id: string) => boolean,
+): OutlineRow[] {
+  // A node is kept if it matches or has any kept descendant.
+  const keep = new Set<string>();
+  const walk = (id: string): boolean => {
+    let kept = match(id);
+    for (const child of childrenOf(graph, id)) {
+      if (walk(child)) kept = true;
+    }
+    if (kept) keep.add(id);
+    return kept;
+  };
+  for (const root of rootsOfSide(graph, side)) walk(root);
+
+  const rows: OutlineRow[] = [];
+  const visit = (id: string, depth: number): void => {
+    const children = childrenOf(graph, id).filter((c) => keep.has(c));
+    rows.push({
+      id,
+      depth,
+      hasChildren: children.length > 0,
+      collapsed: false,
+      matched: match(id),
+    });
+    for (const child of children) visit(child, depth + 1);
+  };
+  for (const root of rootsOfSide(graph, side)) {
+    if (keep.has(root)) visit(root, 0);
+  }
   return rows;
 }
 

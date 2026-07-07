@@ -58,6 +58,35 @@ body {
   flex: 1;
 }
 
+.app-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-search-input {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.app-search-count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .app-header button {
   font: inherit;
   font-size: 13px;
@@ -157,6 +186,26 @@ body {
 .row-selected,
 .row-selected:hover {
   background: var(--accent-soft);
+}
+
+/* Global filter: ancestor rows kept only as context are dimmed; the
+ * actual matches get a subtle accent marker on their input. */
+.row-context,
+.plan-tree-row.row-context {
+  opacity: 0.4;
+}
+
+.row-match .row-input {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.plan-tree-row.row-match .plan-tree-title {
+  box-shadow: inset 2px 0 0 var(--accent);
+  padding-left: 4px;
+}
+
+.plan-table-row.row-match .cell-title {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .chevron {

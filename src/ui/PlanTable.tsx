@@ -17,6 +17,7 @@ import { setActualDates, setEstimate, updateNode } from '../model/graph.ts';
 import { rolledDuration, rolledEffort } from '../model/rollup.ts';
 import type { Priority, ProjectGraph, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { visibleRows } from './outline.ts';
 import { useMultiSelect } from './useMultiSelect.ts';
 
@@ -27,11 +28,23 @@ const NO_COLLAPSE: ReadonlySet<string> = new Set();
 interface PlanTableProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Global filter, shared across tabs. */
+  filter?: FilterState;
 }
 
-export function PlanTable({ selectedId, onSelect }: PlanTableProps) {
+export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanTableProps) {
   const graph = useProjectGraph();
-  const rows = useMemo(() => visibleRows(graph, NO_COLLAPSE, 'group'), [graph]);
+  const filterActive = isFilterActive(filter);
+  const rows = useMemo(
+    () =>
+      visibleRows(
+        graph,
+        NO_COLLAPSE,
+        'group',
+        filterActive ? (id) => matchesFilter(graph.nodes[id]!, filter) : undefined,
+      ),
+    [graph, filterActive, filter],
+  );
   const orderedIds = useMemo(() => rows.map((r) => r.id), [rows]);
   const multi = useMultiSelect(orderedIds, selectedId, onSelect);
   const waiting = useMemo(() => waitingMap(graph), [graph]);
@@ -85,7 +98,11 @@ export function PlanTable({ selectedId, onSelect }: PlanTableProps) {
   if (rows.length === 0) {
     return (
       <div className="plan-table-empty">
-        <p>No delivery plan yet. Add groups in the outline, then edit fields here.</p>
+        <p>
+          {filterActive
+            ? 'No groups match the filter.'
+            : 'No delivery plan yet. Add groups in the outline, then edit fields here.'}
+        </p>
       </div>
     );
   }
@@ -120,7 +137,7 @@ export function PlanTable({ selectedId, onSelect }: PlanTableProps) {
                 key={row.id}
                 className={`plan-table-row${isAnchor ? ' row-selected' : ''}${
                   isMulti ? ' row-multiselected' : ''
-                }`}
+                }${row.matched === false ? ' row-context' : row.matched ? ' row-match' : ''}`}
                 onMouseDown={(e) => onRowMouseDown(row.id, e)}
               >
                 <td className="col-title" style={{ paddingLeft: `${row.depth * 16 + 8}px` }}>
