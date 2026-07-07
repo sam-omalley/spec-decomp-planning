@@ -282,7 +282,8 @@ tested-domain rule.
     matches plus their ancestor path (ancestors dimmed `.row-context`,
     matches marked `.row-match`), drops the rest, and ignores per-node
     collapse so deep matches surface. **PlanningView** filters its spec
-    pane the same way and passes the filter to the group Outliner.
+    pane the same way and passes the filter to the group Outliner and the
+    Table sub-view (`PlanTable`, group rows narrowed the same way).
     **GraphView** dims non-matches in place (never hides — structure must
     stay legible), composing with its existing unassigned/empty spotlight.
     A live match count sits by the box. Scope: Spec, Planning, Graph —
