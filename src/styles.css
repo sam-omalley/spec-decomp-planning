@@ -1412,3 +1412,171 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   color: var(--muted);
   white-space: pre-wrap;
 }
+
+/* --------------------------- multi-selection --------------------------- */
+
+/* Rows in a multi-selection that are not the focused anchor row. */
+.row-multiselected,
+.row-multiselected:hover {
+  background: #dfe4f6;
+}
+
+/* ----------------------------- plan table ------------------------------ */
+
+.plan-mode-toggle {
+  display: flex;
+  gap: 2px;
+  align-self: flex-start;
+  margin-bottom: 12px;
+  background: #ededeb;
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.plan-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.plan-table-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.plan-table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 13px;
+}
+
+.plan-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.plan-table th.col-num {
+  text-align: center;
+}
+
+.plan-table tbody td {
+  padding: 1px 6px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.plan-table td.col-num {
+  text-align: center;
+  color: var(--muted);
+}
+
+.plan-table-row:hover {
+  background: #f6f6f4;
+}
+
+.plan-table-row.row-selected,
+.plan-table-row.row-selected:hover {
+  background: var(--accent-soft);
+}
+
+.plan-table-row.row-multiselected,
+.plan-table-row.row-multiselected:hover {
+  background: #dfe4f6;
+}
+
+.cell-input,
+.cell-select {
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  padding: 4px 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cell-select {
+  min-width: 104px;
+}
+
+.cell-input:hover,
+.cell-select:hover {
+  border-color: var(--border);
+}
+
+.cell-input:focus,
+.cell-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--panel);
+}
+
+.cell-title {
+  min-width: 200px;
+}
+
+.cell-num {
+  width: 64px;
+  text-align: center;
+}
+
+.cell-date {
+  width: 140px;
+  color: var(--muted);
+}
+
+.plan-table .col-title {
+  min-width: 220px;
+}
+
+.status-select.status-in_progress {
+  color: var(--accent);
+}
+
+.status-select.status-done {
+  color: #0e9f6e;
+}
+
+.status-select.status-blocked {
+  color: #c23b3b;
+}
+
+.cell-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: #eef0f4;
+  color: var(--text);
+  cursor: default;
+}
+
+.cell-muted {
+  color: var(--border);
+}
+
+.cell-badge {
+  font-size: 11px;
+  color: #8a5a00;
+  white-space: nowrap;
+}
+
+.cell-badge-cycle {
+  color: #c23b3b;
+  margin-right: 4px;
+}

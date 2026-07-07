@@ -115,3 +115,80 @@ export function reorderTarget(
   if (index < 0 || index >= siblings.length) return null;
   return { parentId: parentOf(graph, id), index };
 }
+
+/* ------------------------------------------------------------------ */
+/* Bulk paste                                                          */
+/* ------------------------------------------------------------------ */
+
+export interface ParsedOutlineLine {
+  title: string;
+  /** Relative depth: the shallowest lines are 0, each level adds 1. */
+  depth: number;
+}
+
+/** Strip a leading list marker (`- `, `* `, `+ `, `1. `) after the indent. */
+function stripMarker(text: string): string {
+  return text.replace(/^(?:[-*+]|\d+[.)])\s+/, '');
+}
+
+/**
+ * Parse pasted multi-line text into titled rows with relative depths,
+ * inferring nesting from each line's leading indentation. Robust to tabs
+ * vs. spaces and to irregular indent widths: distinct indentation widths
+ * are mapped to consecutive depths with a stack, so a depth never jumps
+ * by more than 1 and the shallowest lines sit at depth 0. Blank lines are
+ * dropped; a leading Markdown-style bullet marker is removed.
+ */
+export function parseOutlineText(text: string): ParsedOutlineLine[] {
+  const result: ParsedOutlineLine[] = [];
+  // Stack of indentation widths for the current ancestor chain; its
+  // length (minus one) is the depth of the next line at that indent.
+  const indents: number[] = [];
+  for (const rawLine of text.split(/\r\n|\r|\n/)) {
+    if (rawLine.trim() === '') continue;
+    const indent = rawLine.length - rawLine.trimStart().length;
+    const title = stripMarker(rawLine.trim());
+    // Pop deeper-or-equal indents; what remains are strict ancestors.
+    while (indents.length > 0 && indents[indents.length - 1]! >= indent) {
+      indents.pop();
+    }
+    const depth = indents.length;
+    indents.push(indent);
+    result.push({ title, depth });
+  }
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
+/* Multi-select structural contract                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * When `ids` all share one parent and are consecutive in that parent's
+ * child order, return that parent plus the ids in document order; else
+ * null. Group indent/outdent/reorder operate only on such a clean
+ * contiguous sibling range, keeping their semantics predictable.
+ */
+export function contiguousSiblingRange(
+  graph: ProjectGraph,
+  ids: Iterable<string>,
+): { parentId: string | null; ids: string[] } | null {
+  const set = new Set(ids);
+  if (set.size === 0) return null;
+  const first = set.values().next().value as string;
+  if (!graph.nodes[first]) return null;
+  const parentId = parentOf(graph, first);
+  const siblings = siblingsOf(graph, first);
+  const positions: number[] = [];
+  for (const id of set) {
+    if (parentOf(graph, id) !== parentId) return null;
+    const at = siblings.indexOf(id);
+    if (at === -1) return null;
+    positions.push(at);
+  }
+  positions.sort((a, b) => a - b);
+  for (let i = 1; i < positions.length; i++) {
+    if (positions[i]! !== positions[i - 1]! + 1) return null;
+  }
+  return { parentId, ids: positions.map((p) => siblings[p]!) };
+}

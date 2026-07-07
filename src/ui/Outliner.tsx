@@ -29,15 +29,20 @@ import { DependencyEditor } from './DependencyEditor.tsx';
 import { NodeMetaEditor } from './NodeMetaEditor.tsx';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import {
+  contiguousSiblingRange,
   indentTarget,
+  insertionPointAfter,
   insertionPointBefore,
   insertionPointForEnter,
   outdentTarget,
+  parseOutlineText,
   reorderTarget,
+  siblingsOf,
   visibleRows,
   type OutlineSide,
 } from './outline.ts';
 import { OutlinerRow, type RowActions, type RowDropProps } from './OutlinerRow.tsx';
+import { useMultiSelect } from './useMultiSelect.ts';
 
 interface OutlinerProps {
   side?: OutlineSide;
@@ -75,6 +80,12 @@ export function Outliner({
     () => visibleRows(graph, collapsed, side),
     [graph, collapsed, side],
   );
+
+  // Multi-select layered over App's single-selection anchor: ⇧/⌘ click,
+  // ⇧+Arrow. Structural ops (indent/outdent/reorder/delete) fan out to
+  // the whole selection when it forms a clean contiguous sibling range.
+  const orderedIds = useMemo(() => rows.map((r) => r.id), [rows]);
+  const multi = useMultiSelect(orderedIds, selectedId, onSelect);
 
   // Dependency signals (work side only): who is waiting, who cycles.
   const depInfo = useMemo(
@@ -147,6 +158,7 @@ export function Outliner({
       g = createEmpty(g, newId, parentId ?? undefined);
       return moveNode(g, newId, parentId, index);
     });
+    multi.clear();
     requestFocus(newId);
   }
 
@@ -157,27 +169,84 @@ export function Outliner({
       g = createEmpty(g, newId, parentId ?? undefined);
       return moveNode(g, newId, parentId, index);
     });
+    multi.clear();
     requestFocus(newId);
+  }
+
+  // Turn pasted multi-line text into rows in one undo step, inferring
+  // nesting from indentation. The first line fills the pasted-on row when
+  // it is empty; otherwise every line inserts after it.
+  function pasteRows(anchorId: string, text: string) {
+    const parsed = parseOutlineText(text);
+    if (parsed.length === 0) return;
+    const ids = parsed.map(() => createId());
+    store.commit((g) => {
+      let next = g;
+      const anchor = next.nodes[anchorId];
+      const anchorEmpty = anchor !== undefined && anchor.title.trim() === '';
+      const base = insertionPointAfter(next, anchorId);
+      // parentAtDepth[d] = the id nodes at depth d+1 nest under.
+      const parentAtDepth: (string | null)[] = [];
+      let rootOffset = 0; // depth-0 siblings created after the anchor
+      parsed.forEach((line, i) => {
+        if (i === 0 && anchorEmpty && line.depth === 0) {
+          next = updateNode(next, anchorId, { title: line.title });
+          ids[i] = anchorId; // reuse the row for focus + nesting
+          parentAtDepth.length = 1;
+          parentAtDepth[0] = anchorId;
+          return;
+        }
+        const id = ids[i]!;
+        const parentId =
+          line.depth === 0 ? base.parentId : parentAtDepth[line.depth - 1] ?? base.parentId;
+        next = createEmpty(next, id, parentId ?? undefined);
+        next = updateNode(next, id, { title: line.title });
+        if (line.depth === 0) {
+          next = moveNode(next, id, base.parentId, base.index + rootOffset);
+          rootOffset++;
+        }
+        parentAtDepth.length = line.depth + 1;
+        parentAtDepth[line.depth] = id;
+      });
+      return next;
+    });
+    multi.clear();
+    requestFocus(ids[ids.length - 1]!);
   }
 
   function remove(id: string) {
     const current = store.getState();
     const node = current.nodes[id];
     if (!node) return;
-    const count = subtreeIds(current, id).size;
-    if (count > 1) {
-      const label = node.title.trim() === '' ? 'this item' : `“${node.title}”`;
-      const nested = `${count - 1} nested ${side === 'group' ? 'group' : 'item'}${
-        count > 2 ? 's' : ''
-      }`;
-      const consequence =
-        side === 'group'
-          ? 'Their assignments are removed; work items stay in the spec.'
-          : 'Dependencies and assignments of deleted items are removed too.';
-      if (!window.confirm(`Delete ${label} and ${nested}? ${consequence}`)) return;
+    // Delete the whole selection when it includes this row; else just it.
+    const targets = (
+      multi.size > 1 && multi.selected.has(id) ? [...multi.selected] : [id]
+    ).filter((x) => current.nodes[x]);
+    if (targets.length === 0) return;
+    const consequence =
+      side === 'group'
+        ? 'Their assignments are removed; work items stay in the spec.'
+        : 'Dependencies and assignments of deleted items are removed too.';
+    const removed = new Set<string>();
+    for (const t of targets) for (const s of subtreeIds(current, t)) removed.add(s);
+    const nested = removed.size - targets.length;
+    if (targets.length > 1 || nested > 0) {
+      const label =
+        targets.length > 1
+          ? `${targets.length} ${side === 'group' ? 'groups' : 'items'}`
+          : node.title.trim() === ''
+            ? 'this item'
+            : `“${node.title}”`;
+      const withNested = nested > 0 ? ` and ${nested} nested` : '';
+      if (!window.confirm(`Delete ${label}${withNested}? ${consequence}`)) return;
     }
     const index = rows.findIndex((r) => r.id === id);
-    const next = store.commit((g) => deleteNode(g, id));
+    const next = store.commit((g) => {
+      let n = g;
+      for (const t of targets) if (n.nodes[t]) n = deleteNode(n, t);
+      return n;
+    });
+    multi.clear();
     const nextRows = visibleRows(next, collapsed, side);
     const target = nextRows[Math.min(Math.max(index - 1, 0), nextRows.length - 1)];
     if (target) requestFocus(target.id);
@@ -208,12 +277,29 @@ export function Outliner({
     },
     createAfter,
     createBefore,
-    // Targets are computed inside the commit callback, on the graph
-    // actually being mutated — the rendered `graph` can lag a keystroke
-    // behind when events arrive faster than React re-renders.
+    pasteRows,
+    onRowPointerDown: multi.onRowPointerDown,
+    extendSelection: multi.extendBy,
+    // The selection fans structural ops out when it forms a clean
+    // contiguous sibling run; otherwise each op falls back to the single
+    // anchor row. Targets are computed inside the commit callback, on the
+    // graph actually being mutated — the rendered `graph` can lag a
+    // keystroke behind when events arrive faster than React re-renders.
     indent(id) {
+      const groupIds = multi.size > 1 && multi.selected.has(id) ? [...multi.selected] : null;
       let target: string | null = null;
       store.commit((g) => {
+        if (groupIds) {
+          const range = contiguousSiblingRange(g, groupIds);
+          if (range && range.ids.length > 1) {
+            const t = indentTarget(g, range.ids[0]!);
+            if (t === null) return g;
+            let next = g;
+            for (const rid of range.ids) next = moveNode(next, rid, t);
+            target = t;
+            return next;
+          }
+        }
         target = indentTarget(g, id);
         return target === null ? g : moveNode(g, id, target);
       });
@@ -222,8 +308,22 @@ export function Outliner({
       requestFocus(id);
     },
     outdent(id) {
+      const groupIds = multi.size > 1 && multi.selected.has(id) ? [...multi.selected] : null;
       let moved = false;
       store.commit((g) => {
+        if (groupIds) {
+          const range = contiguousSiblingRange(g, groupIds);
+          if (range && range.ids.length > 1) {
+            const t = outdentTarget(g, range.ids[0]!);
+            if (t === null) return g;
+            let next = g;
+            range.ids.forEach((rid, k) => {
+              next = moveNode(next, rid, t.parentId, t.index + k);
+            });
+            moved = true;
+            return next;
+          }
+        }
         const target = outdentTarget(g, id);
         if (target === null) return g;
         moved = true;
@@ -232,8 +332,28 @@ export function Outliner({
       if (moved) requestFocus(id);
     },
     reorder(id, delta) {
+      const groupIds = multi.size > 1 && multi.selected.has(id) ? [...multi.selected] : null;
       let moved = false;
       store.commit((g) => {
+        if (groupIds) {
+          const range = contiguousSiblingRange(g, groupIds);
+          if (range && range.ids.length > 1) {
+            // Move the block by one by hopping the single neighbour to
+            // the far side, which shifts every selected row together.
+            const siblings = siblingsOf(g, range.ids[0]!);
+            const firstPos = siblings.indexOf(range.ids[0]!);
+            const lastPos = siblings.indexOf(range.ids[range.ids.length - 1]!);
+            if (delta === -1 && firstPos > 0) {
+              moved = true;
+              return moveNode(g, siblings[firstPos - 1]!, range.parentId, lastPos);
+            }
+            if (delta === 1 && lastPos < siblings.length - 1) {
+              moved = true;
+              return moveNode(g, siblings[lastPos + 1]!, range.parentId, firstPos);
+            }
+            return g;
+          }
+        }
         const target = reorderTarget(g, id, delta);
         if (target === null) return g;
         moved = true;
@@ -251,7 +371,10 @@ export function Outliner({
     navigate(id, delta) {
       const index = rows.findIndex((r) => r.id === id);
       const target = rows[index + delta];
-      if (target) requestFocus(target.id);
+      if (target) {
+        multi.clear();
+        requestFocus(target.id);
+      }
     },
     select(id) {
       onSelect(id);
@@ -346,6 +469,7 @@ export function Outliner({
           expanded={row.id === detailsId}
           childCount={row.collapsed ? subtreeIds(graph, row.id).size - 1 : 0}
           selected={row.id === selectedId}
+          multiSelected={multi.size > 1 && row.id !== selectedId && multi.isSelected(row.id)}
           actions={actions}
           extras={
             <>

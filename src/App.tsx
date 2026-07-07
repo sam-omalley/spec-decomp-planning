@@ -170,16 +170,20 @@ export function App() {
         {view === 'spec' && (
           <>
             Enter sibling · ⇧Enter / Enter at line start = insert above · Tab indent · ⇧Tab
-            outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details · ⌫ on empty / ⌘⌫ delete · ⌘Z undo ·
-            the spec is structural — estimate &amp; track in the Plan
+            outdent · ⌥↑↓ move · ⌘. fold · ⌘↩ details · ⌫ on empty / ⌘⌫ delete · paste
+            multi-line text to add rows · ⇧/⌘-click or ⇧↑↓ multi-selects a run to
+            indent/move/delete together · ⌘Z undo · the spec is structural — estimate &amp;
+            track in the Plan
           </>
         )}
         {view === 'planning' && (
           <>
-            Groups edit like the outliner (Enter · ⇧Enter above · Tab · ⌥↑↓ · ⌘↩ details,
-            estimates, dependencies) · bullet click = status · drag spec items onto groups
-            for traceability · drop moves, drag to spec pane or × unassigns · Unassigned
-            filter finds uncovered work · drag the pane edge to resize
+            Outline / Table toggle · groups edit like the outliner (Enter · ⇧Enter above ·
+            Tab · ⌥↑↓ · ⌘↩ details, estimates, dependencies) · paste &amp; ⇧/⌘-click
+            multi-select work here too · bullet click = status · Table edits every plan field
+            (bulk-set across a selection) · drag spec items onto groups for traceability ·
+            drop moves, drag to spec pane or × unassigns · Unassigned filter finds uncovered
+            work
           </>
         )}
         {view === 'graph' && (

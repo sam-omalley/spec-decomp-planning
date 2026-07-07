@@ -235,7 +235,25 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     hand-rolled SVG burn-up (ideal / total / target lines) + est-vs-actual
     bars. Verified in preview.
 
-- v2+: merge/split nodes, bulk edit, critical path, richer graph editing.
+14. ✅ Bulk editing — three surfaces over the existing graph, **no model
+    change** (all reuse existing mutations + pure helpers): (a) **paste
+    multi-line text → rows**, nesting inferred from indentation
+    (`parseOutlineText` in `ui/outline.ts`, tested; wired via
+    `Outliner`/`OutlinerRow` `onPaste` as one undo step, works both
+    sides; the first line fills an empty anchor row, else all insert
+    after). (b) **Multi-select** (⇧/⌘-click, ⇧↑↓) layered on App's single
+    selection anchor via `ui/useMultiSelect.ts`; structural ops fan out
+    over a clean contiguous sibling run — indent/outdent/reorder/delete —
+    gated by `contiguousSiblingRange` (`outline.ts`, tested), else fall
+    back to the single anchor row. (c) **Plan field table** as an
+    Outline/Table toggle inside Planning (`PlanTable.tsx`) — plan-side
+    only (the spec stays structural), one row per group in pre-order,
+    every plan field an inline column reusing
+    `updateNode`/`setEstimate`/`setActualDates`; container rollup shows as
+    a muted placeholder; editing a field with a multi-selection bulk-sets
+    it across the selection in one commit. Verified in preview.
+
+- v2+: merge/split nodes, critical path, richer graph editing.
 
 ## Conventions & environment
 
