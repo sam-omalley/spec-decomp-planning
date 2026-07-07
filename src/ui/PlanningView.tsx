@@ -42,6 +42,9 @@ interface PlanningViewProps {
   onModeChange: (mode: 'outline' | 'table') => void;
   /** Global filter, shared across tabs. */
   filter?: FilterState;
+  /** Depth cap for the plan (group) outliner; undefined = all levels. */
+  maxDepth?: number;
+  onMaxDepthChange?: (maxDepth: number | undefined) => void;
 }
 
 export function PlanningView({
@@ -50,6 +53,8 @@ export function PlanningView({
   mode,
   onModeChange,
   filter = EMPTY_FILTER,
+  maxDepth,
+  onMaxDepthChange,
 }: PlanningViewProps) {
   const graph = useProjectGraph();
   const [dropGroupId, setDropGroupId] = useState<string | null>(null);
@@ -286,6 +291,8 @@ export function PlanningView({
           rowExtras={rowExtras}
           rowDropProps={rowDropProps}
           filter={filter}
+          maxDepth={maxDepth}
+          onMaxDepthChange={onMaxDepthChange}
         />
       </div>
         </div>
