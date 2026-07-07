@@ -170,6 +170,48 @@ body {
   flex-direction: column;
 }
 
+/* Depth stepper: caps the outliner to its top N levels. */
+.depth-stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.depth-stepper-label {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.depth-btn {
+  font: inherit;
+  font-size: 12px;
+  min-width: 26px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.depth-btn:hover:not(:disabled):not(.depth-btn-active) {
+  background: var(--accent-soft);
+}
+
+.depth-btn-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.depth-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .row {
   display: flex;
   align-items: center;

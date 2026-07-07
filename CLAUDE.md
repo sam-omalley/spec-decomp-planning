@@ -174,7 +174,7 @@ Project-management extension (planned, in dependency order — 8 unblocks
 all; 9 and 10 are independent; 11–13 consume 10). Each slice is
 shippable alone and keeps the dependency-free-core / tested-domain rules:
 
-8. ✅ Model foundation — `types.ts` (the fields in Data model above),
+1. ✅ Model foundation — `types.ts` (the fields in Data model above),
    `serialize.ts` v4 + backfill migration (tested), and new `graph.ts`
    mutations: `setEstimate` (non-negative, per-axis), `setActualDates`,
    `addExternalRef` / `removeExternalRef` (dedup on system+key),
@@ -183,7 +183,7 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    set ⇒ `done`; `actualStart` set with no finish ⇒ `in_progress` unless
    manually `blocked` (a started-then-blocked item stays blocked); neither
    set ⇒ status untouched, so manual states survive.
-9. ✅ Entry UI — `NodeMetaEditor.tsx` (details-card fields: status,
+2. ✅ Entry UI — `NodeMetaEditor.tsx` (details-card fields: status,
    priority, the two estimate axes points + duration/days, actual
    start/finish dates, external-ref chips) + a compact rolled `Nd · Npt`
    estimate chip on rows (⚠ when a subtree has unestimated leaves) +
@@ -205,7 +205,7 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    load. Shipped dep tests (`graph`/`analysis`/`projectStore`) flipped to
    groups. Verified in preview: plan rows carry the editor + status; spec
    view is structural-only.
-10. ✅ Scheduler — `src/model/schedule.ts`, pure + heavily tested
+3. ✅ Scheduler — `src/model/schedule.ts`, pure + heavily tested
     (`scheduleProject`, `schedulingUnits`). Schedules the **group tree**
     (the plan). Scheduling units = topmost groups with an own estimate;
     unit deps expand from the raw group dep graph (`analysis.ts`,
@@ -223,20 +223,20 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     `projectStart` / `projectFinish`. (`assigned_to` unused.) Tests: unit
     selection, weekend skipping, dep order, parallelism cap, speed
     multiplier, cycle batch, container span, done/in-progress override.
-11. ✅ Settings UI — header ⚙ popover (`SettingsPanel.tsx`) with
+4. ✅ Settings UI — header ⚙ popover (`SettingsPanel.tsx`) with
     Schedule / Capacity / Conversion sections: `startDate`, `targetDate`,
     `parallelTracks`, `speedMultiplier`, `pointsPerDay`, `hoursPerDay`.
     Edits go through `updateSettings` (undoable, autosaved with the
     graph), coalesced per field; inputs are pre-validated so an invalid
     value is ignored rather than thrown (a throwing commit would
     propagate). Closes on outside-click / Esc. Verified in preview.
-12. ✅ Timeline / Gantt view — 5th tab `TimelineView.tsx` + pure
+5. ✅ Timeline / Gantt view — 5th tab `TimelineView.tsx` + pure
     `timelineLayout.ts` (unit-tested). Bars per scheduled group in
     pre-order (containers span their units), fraction-based geometry over
     the date range, ▸ projected-finish and 🎯 target-date markers, weekly
     gridline ticks, actual (done) bars styled distinctly from planned.
     Hand-rolled SVG, no chart dep. Verified in preview.
-13. ✅ Metrics view — 6th tab `MetricsView.tsx` + pure `src/model/metrics.ts`
+6. ✅ Metrics view — 6th tab `MetricsView.tsx` + pure `src/model/metrics.ts`
     (unit-tested): `projectionSummary` (projected finish, done/remaining
     days + points, calendar-day variance vs target, onTrack),
     `estimateVsActual` (per done-unit + rolled, working-day durations),
@@ -244,7 +244,7 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     hand-rolled SVG burn-up (ideal / total / target lines) + est-vs-actual
     bars. Verified in preview.
 
-14. ✅ Bulk editing — three surfaces over the existing graph, **no model
+7. ✅ Bulk editing — three surfaces over the existing graph, **no model
     change** (all reuse existing mutations + pure helpers): (a) **paste
     multi-line text → rows**, nesting inferred from indentation
     (`parseOutlineText` in `ui/outline.ts`, tested; wired via
@@ -270,7 +270,7 @@ View narrowing + locking + graph modes (planned, slices 15–18). All are
 18 are independent. Each keeps the pure-helpers-in-`model`/`ui`,
 tested-domain rule.
 
-15. ✅ Global filter/search — a header search box (lifted App state, shared
+1. ✅ Global filter/search — a header search box (lifted App state, shared
     across tabs, cleared on Esc; **not** stored in the graph, undo, or
     autosave; rendered only on the searchable tabs). Pure `ui/filter.ts`
     (unit-tested): a `FilterState` (case-insensitive text over
@@ -288,7 +288,7 @@ tested-domain rule.
     stay legible), composing with its existing unassigned/empty spotlight.
     A live match count sits by the box. Scope: Spec, Planning, Graph —
     Timeline/Metrics/Markdown unchanged. Verified in preview.
-16. Depth filtering (Spec + Planning) — a compact depth stepper
+2. ✅ Depth filtering (Spec + Planning) — a compact depth stepper
     (`1 2 3 … All`) in each outliner's toolbar capping visible rows to the
     top N levels (roots = depth 0; "N levels" ⇒ depth < N). A node at the
     cutoff with hidden descendants reuses the existing collapsed
@@ -299,7 +299,7 @@ tested-domain rule.
     independent narrowings, but an active search wins — matched rows and
     their ancestors surface even past the depth cap, so search can always
     reach deep matches.
-17. Structural lock (top-N levels) — freeze the top `specLockDepth` /
+3. Structural lock (top-N levels) — freeze the top `specLockDepth` /
     `planLockDepth` levels of a side against *accidental* edits (a node is
     locked when its depth < the side's lock depth; roots = depth 0). New
     integer fields on `ProjectSettings` (default 0), set via a **Locks**
@@ -319,7 +319,7 @@ tested-domain rule.
     allowed (traceability, not structure), and the plan meta fields
     (status, estimate, dates, deps, refs) remain editable on a locked
     group — you estimate and track against a fixed skeleton.
-18. Graph tab view modes + Dependency View — the Graph tab gets an
+4. Graph tab view modes + Dependency View — the Graph tab gets an
     internal mode switch (segmented control): **Map** (today's spec↔plan
     mirrored layout) and **Dependency**. The Dependency view is **plan
     only, leaf groups only** (groups with no child group — the "stories"),

@@ -11,6 +11,7 @@ import {
   outdentTarget,
   parseOutlineText,
   reorderTarget,
+  treeDepth,
   visibleRows,
 } from './outline.ts';
 
@@ -129,6 +130,59 @@ describe('visibleRows filtered', () => {
       rows.map((r) => r.id),
       ['app', 'billing', 'docs'],
     );
+  });
+});
+
+describe('visibleRows depth cap', () => {
+  it('caps to the top level (N=1), collapsing roots with children', () => {
+    const rows = visibleRows(fixture(), none, 'work', undefined, 1);
+    assert.deepEqual(
+      rows.map((r) => `${r.depth}:${r.id}`),
+      ['0:app', '0:docs'],
+    );
+    // app has hidden children, so it shows the collapsed "+k" affordance.
+    assert.equal(rows.find((r) => r.id === 'app')!.collapsed, true);
+    assert.equal(rows.find((r) => r.id === 'app')!.hasChildren, true);
+    // docs is a childless root — no collapse marker.
+    assert.equal(rows.find((r) => r.id === 'docs')!.collapsed, false);
+  });
+
+  it('caps to two levels (N=2): depth-1 parents collapse, leaves do not', () => {
+    const rows = visibleRows(fixture(), none, 'work', undefined, 2);
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      ['app', 'auth', 'billing', 'docs'],
+    );
+    assert.equal(rows.find((r) => r.id === 'auth')!.collapsed, true);
+    assert.equal(rows.find((r) => r.id === 'billing')!.collapsed, false);
+  });
+
+  it('a cap at or beyond the tree depth is a no-op', () => {
+    const capped = visibleRows(fixture(), none, 'work', undefined, 3);
+    const full = visibleRows(fixture(), none, 'work');
+    assert.deepEqual(
+      capped.map((r) => `${r.depth}:${r.id}:${r.collapsed}`),
+      full.map((r) => `${r.depth}:${r.id}:${r.collapsed}`),
+    );
+  });
+
+  it('an active filter wins over the depth cap (deep matches surface)', () => {
+    const rows = visibleRows(fixture(), none, 'work', (id) => id === 'login', 1);
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      ['app', 'auth', 'login'],
+    );
+  });
+});
+
+describe('treeDepth', () => {
+  it('counts the levels in a side (deepest depth + 1)', () => {
+    assert.equal(treeDepth(fixture(), 'work'), 3);
+  });
+
+  it('is 0 for an empty side', () => {
+    assert.equal(treeDepth(emptyGraph(), 'work'), 0);
+    assert.equal(treeDepth(fixture(), 'group'), 0);
   });
 });
 

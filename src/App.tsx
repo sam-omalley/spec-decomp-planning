@@ -22,6 +22,10 @@ export function App() {
   // Global filter/search — view state only; never enters the graph, undo,
   // or autosave. Shared across the Spec / Planning / Graph tabs.
   const [filterText, setFilterText] = useState('');
+  // Per-side depth caps (undefined = all levels); ephemeral view state,
+  // like planMode — never serialized.
+  const [specMaxDepth, setSpecMaxDepth] = useState<number | undefined>(undefined);
+  const [planMaxDepth, setPlanMaxDepth] = useState<number | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filter: FilterState = useMemo(() => ({ text: filterText }), [filterText]);
@@ -198,7 +202,13 @@ export function App() {
       </header>
       <main className={`app-main${view === 'spec' ? '' : ' app-main-wide'}`}>
         {view === 'spec' && (
-          <Outliner selectedId={selectedId} onSelect={setSelectedId} filter={filter} />
+          <Outliner
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            filter={filter}
+            maxDepth={specMaxDepth}
+            onMaxDepthChange={setSpecMaxDepth}
+          />
         )}
         {view === 'planning' && (
           <PlanningView
@@ -207,6 +217,8 @@ export function App() {
             mode={planMode}
             onModeChange={setPlanMode}
             filter={filter}
+            maxDepth={planMaxDepth}
+            onMaxDepthChange={setPlanMaxDepth}
           />
         )}
         {view === 'graph' && (

@@ -39,6 +39,7 @@ import {
   parseOutlineText,
   reorderTarget,
   siblingsOf,
+  treeDepth,
   visibleRows,
   type OutlineSide,
 } from './outline.ts';
@@ -58,6 +59,10 @@ interface OutlinerProps {
   rowDropProps?: (id: string) => RowDropProps | undefined;
   /** Global filter; when active, rows narrow to matches + ancestor context. */
   filter?: FilterState;
+  /** Depth cap: show only the top N levels (undefined = all). */
+  maxDepth?: number;
+  /** When provided (with maxDepth state), renders the depth stepper toolbar. */
+  onMaxDepthChange?: (maxDepth: number | undefined) => void;
 }
 
 export function Outliner({
@@ -70,6 +75,8 @@ export function Outliner({
   rowExtras,
   rowDropProps,
   filter = EMPTY_FILTER,
+  maxDepth,
+  onMaxDepthChange,
 }: OutlinerProps) {
   const graph = useProjectGraph();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -88,9 +95,15 @@ export function Outliner({
         collapsed,
         side,
         filterActive ? (id) => matchesFilter(graph.nodes[id]!, filter) : undefined,
+        maxDepth,
       ),
-    [graph, collapsed, side, filterActive, filter],
+    [graph, collapsed, side, filterActive, filter, maxDepth],
   );
+
+  // Levels available to cap; the stepper only earns its space once the
+  // tree is at least two deep.
+  const depth = useMemo(() => treeDepth(graph, side), [graph, side]);
+  const showDepthStepper = onMaxDepthChange !== undefined && depth >= 2;
 
   // Multi-select layered over App's single-selection anchor: ⇧/⌘ click,
   // ⇧+Arrow. Structural ops (indent/outdent/reorder/delete) fan out to
@@ -458,18 +471,56 @@ export function Outliner({
     );
   }
 
-  if (rows.length === 0) {
+  // A compact "1 2 3 … All" stepper capping the visible tree to the top N
+  // levels. Inert while a filter is active — search reaches deep matches
+  // regardless of the cap, so the stepper is disabled to avoid implying
+  // otherwise.
+  function depthStepper(): ReactNode {
+    if (!showDepthStepper) return null;
+    const levels = Array.from({ length: depth }, (_, i) => i + 1);
     return (
-      <div className="outliner-empty">
-        <p>{emptyHint}</p>
-        <button className="button-primary" onClick={() => createAfter(null)}>
-          {emptyButtonLabel}
+      <div className="depth-stepper" role="group" aria-label="Depth">
+        <span className="depth-stepper-label">Levels</span>
+        {levels.map((n) => (
+          <button
+            key={n}
+            className={`depth-btn${maxDepth === n ? ' depth-btn-active' : ''}`}
+            aria-pressed={maxDepth === n}
+            disabled={filterActive}
+            onClick={() => onMaxDepthChange!(n)}
+          >
+            {n}
+          </button>
+        ))}
+        <button
+          className={`depth-btn${maxDepth === undefined ? ' depth-btn-active' : ''}`}
+          aria-pressed={maxDepth === undefined}
+          disabled={filterActive}
+          onClick={() => onMaxDepthChange!(undefined)}
+        >
+          All
         </button>
       </div>
     );
   }
 
+  if (rows.length === 0) {
+    return (
+      <>
+        {depthStepper()}
+        <div className="outliner-empty">
+          <p>{emptyHint}</p>
+          <button className="button-primary" onClick={() => createAfter(null)}>
+            {emptyButtonLabel}
+          </button>
+        </div>
+      </>
+    );
+  }
+
   return (
+    <>
+    {depthStepper()}
     <div className="outliner">
       {rows.map((row) => (
         <OutlinerRow
@@ -510,5 +561,6 @@ export function Outliner({
         {addLabel}
       </button>
     </div>
+    </>
   );
 }
