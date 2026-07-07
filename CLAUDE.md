@@ -50,16 +50,25 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
   carry `order` for sibling ordering; root order lives in
   `ProjectGraph.rootOrder` (work side) and `groupRootOrder` (group
   side), maintained by every mutation, reconciled on file load.
-  File version 4; v1/v2 migrate (plans → root groups, epics → child
+  File version 5; v1/v2 migrate (plans → root groups, epics → child
   groups, `belongs_to_epic` → `assigned_to`, first membership wins),
   v3 → v4 backfills the estimate/actual/`externalRefs` node fields and
-  `settings` with defaults. On load, `depends_on`/`blocks` edges that
+  `settings` with defaults, v4 → v5 backfills the lock depths
+  (`specLockDepth` / `planLockDepth`, both 0 = unlocked). On load,
+  `depends_on`/`blocks` edges that
   touch a work node are dropped — dependencies are group-only now, so
   any legacy spec-level deps are discarded (the only lossy migration).
-- **Project settings** (`ProjectGraph.settings: ProjectSettings`) — the
-  scheduling config: `startDate`, `targetDate`, `pointsPerDay`,
-  `hoursPerDay`, `parallelTracks`, `speedMultiplier`. Carried inside the
-  graph so it rides the store/undo/serialize/autosave path unchanged.
+- **Project settings** (`ProjectGraph.settings: ProjectSettings`) —
+  project-level config, carried inside the graph so it rides the
+  store/undo/serialize/autosave path unchanged. Scheduling:
+  `startDate`, `targetDate`, `pointsPerDay`, `hoursPerDay`,
+  `parallelTracks`, `speedMultiplier`. Editing locks (slice 17):
+  `specLockDepth` / `planLockDepth` — how many top levels of each side
+  are frozen against accidental edits (0 = unlocked). Locks are a *config
+  value*, not a graph invariant: they gate the editing UI, not the core
+  mutations. In contrast, ephemeral view narrowing — search/filter (slice
+  15) and depth caps (slice 16) — is *not* stored here; it lives in React
+  view state and never touches the graph, store, or undo history.
 
 The project-management extension (slices 9–13 below) schedules and
 tracks the **plan** (group tree). Rollup runs along group `contains`
@@ -252,6 +261,89 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     `updateNode`/`setEstimate`/`setActualDates`; container rollup shows as
     a muted placeholder; editing a field with a multi-selection bulk-sets
     it across the selection in one commit. Verified in preview.
+
+View narrowing + locking + graph modes (planned, slices 15–18). All are
+**view/config layers over the existing graph — no new node/edge types.**
+15 and 16 are ephemeral view state (React-only, never serialized/undone);
+17 is a persisted config value on `settings`; 18 is a new projection.
+15 lays the toolbar + filtered-`visibleRows` path that 16 extends; 17 and
+18 are independent. Each keeps the pure-helpers-in-`model`/`ui`,
+tested-domain rule.
+
+15. Global filter/search — a header search box (lifted App state, shared
+    across tabs, cleared on Esc; **not** stored in the graph, undo, or
+    autosave). Pure `ui/filter.ts` (unit-tested): a `FilterState`
+    (case-insensitive text over title/description/tags, plus optional
+    facets — priority, and status/tags on the plan side) and a
+    `matchesFilter(node, state)` predicate. Views apply it as a
+    projection, never a mutation: **Outliner** is hierarchy-aware — it
+    keeps matches plus their ancestor path (ancestors shown but dimmed as
+    context, matches highlighted), hides the rest, and reveals matches
+    regardless of per-node collapse while a filter is active (computed in
+    a filtered variant of `visibleRows`). **Graph/Dependency views** dim
+    non-matches to full-context opacity rather than removing nodes (graph
+    structure must stay legible). A live match count sits by the box.
+    Scope: Spec, Planning, Graph — Timeline/Metrics/Markdown unchanged.
+16. Depth filtering (Spec + Planning) — a compact depth stepper
+    (`1 2 3 … All`) in each outliner's toolbar capping visible rows to the
+    top N levels (roots = depth 0; "N levels" ⇒ depth < N). A node at the
+    cutoff with hidden descendants reuses the existing collapsed
+    child-count "+k" affordance. Pure: extend `visibleRows` with an
+    optional `maxDepth` (the recursion already tracks depth — a trivial
+    cutoff), unit-tested. Per-side view state in App (like `planMode`),
+    not serialized. Composes with 15: the cap and the filter are
+    independent narrowings, but an active search wins — matched rows and
+    their ancestors surface even past the depth cap, so search can always
+    reach deep matches.
+17. Structural lock (top-N levels) — freeze the top `specLockDepth` /
+    `planLockDepth` levels of a side against *accidental* edits (a node is
+    locked when its depth < the side's lock depth; roots = depth 0). New
+    integer fields on `ProjectSettings` (default 0), set via a **Locks**
+    section in the ⚙ Settings popover through `updateSettings` (validates
+    non-negative ints; undoable, autosaved, serialized — serialize bumps
+    to v5, backfilling 0). Enforcement is deliberately **UI-level, not a
+    graph invariant**: it gates the editing affordances, so import/undo/
+    programmatic paths still pass through `graph.ts` unchanged — a locked
+    row prevents fat-finger edits, it is not a data guarantee. A pure
+    `isLocked(depth, side, settings)` predicate (tested) drives guards in
+    `Outliner`/`OutlinerRow` and `PlanTable`. Locked rows render faded
+    (muted, reduced opacity) with a small 🔒, `readOnly` title/details,
+    and disabled reorder/indent/outdent/delete. Crucially, lock freezes
+    **shape + naming only**: you can still add *children* below the
+    deepest locked level (new descendants are unlocked — "brainstorm in
+    the leaves"), assignment (`assigned_to`) onto/off a locked group stays
+    allowed (traceability, not structure), and the plan meta fields
+    (status, estimate, dates, deps, refs) remain editable on a locked
+    group — you estimate and track against a fixed skeleton.
+18. Graph tab view modes + Dependency View — the Graph tab gets an
+    internal mode switch (segmented control): **Map** (today's spec↔plan
+    mirrored layout) and **Dependency**. The Dependency view is **plan
+    only, leaf groups only** (groups with no child group — the "stories"),
+    laid out by the `depends_on` relation. Nodes = leaf groups; edges =
+    the dependency relation from `analysis.ts` (`dependencyAdjacency`,
+    already `depends_on` + inverse `blocks`), restricted to leaves — a dep
+    on a container fans out to its descendant leaves (mirroring how
+    `schedule.ts` expands container endpoints to units). New pure
+    `ui/depLayout.ts` (unit-tested, sibling of `graphLayout.ts`): a
+    layered left→right DAG (prerequisites left, dependents right) by
+    longest-path from sources; cycles are collapsed per Tarjan SCC
+    (`dependencyCycles`) and drawn red + animated, reusing the Map view's
+    convention. Nodes coloured per root group via `colors.ts`.
+    Read-mostly first (pan/zoom/click-to-select), matching Graph's v1
+    stance; drag-node-onto-node to author a `depends_on` edge is the
+    natural follow-on (the current `DependencyEditor` is a text list).
+    **Implicit sequential chain (advice on the open question):** yes to a
+    default chain for siblings, but as a *display inference only* — for a
+    set of sibling leaf groups with **no** explicit dep among them, ghost
+    a sequential chain in sibling order (A→B→C), drawn dashed/muted to
+    distinguish it from real edges, and **suppress it the moment any
+    explicit dep exists among those siblings** ("unless otherwise
+    defined"). Derive it purely in `depLayout.ts`; **never write it to the
+    graph and never feed it to the scheduler** — the scheduler stays
+    explicit-deps-only, so inferred edges can't silently move dates and
+    the pure-projection rule holds. A toggle hides the inference; a later
+    "materialise chain → real `depends_on` edges" action can promote it
+    when you actually mean it.
 
 - v2+: merge/split nodes, critical path, richer graph editing.
 
