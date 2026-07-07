@@ -78,6 +78,60 @@ describe('visibleRows', () => {
   });
 });
 
+describe('visibleRows filtered', () => {
+  it('keeps a match plus its ancestor path, dropping unrelated branches', () => {
+    const rows = visibleRows(fixture(), none, 'work', (id) => id === 'login');
+    assert.deepEqual(
+      rows.map((r) => `${r.depth}:${r.id}`),
+      ['0:app', '1:auth', '2:login'],
+    );
+  });
+
+  it('flags matches vs ancestor context', () => {
+    const rows = visibleRows(fixture(), none, 'work', (id) => id === 'login');
+    assert.deepEqual(
+      rows.map((r) => [r.id, r.matched]),
+      [
+        ['app', false],
+        ['auth', false],
+        ['login', true],
+      ],
+    );
+  });
+
+  it('ignores collapse so deep matches still surface', () => {
+    const rows = visibleRows(fixture(), new Set(['auth']), 'work', (id) => id === 'signup');
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      ['app', 'auth', 'signup'],
+    );
+    // The ancestor is shown expanded (not collapsed) so the match is visible.
+    assert.equal(rows.find((r) => r.id === 'auth')!.collapsed, false);
+  });
+
+  it('keeps a matching ancestor even when no descendant matches', () => {
+    const rows = visibleRows(fixture(), none, 'work', (id) => id === 'auth');
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      ['app', 'auth'],
+    );
+    assert.equal(rows.find((r) => r.id === 'auth')!.hasChildren, false);
+  });
+
+  it('returns no rows when nothing matches', () => {
+    const rows = visibleRows(fixture(), none, 'work', () => false);
+    assert.deepEqual(rows, []);
+  });
+
+  it('surfaces matches across multiple roots', () => {
+    const rows = visibleRows(fixture(), none, 'work', (id) => id === 'docs' || id === 'billing');
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      ['app', 'billing', 'docs'],
+    );
+  });
+});
+
 describe('group-side outlining', () => {
   it('flattens the delivery tree and computes targets with group root order', () => {
     let g = fixture();

@@ -270,20 +270,23 @@ View narrowing + locking + graph modes (planned, slices 15–18). All are
 18 are independent. Each keeps the pure-helpers-in-`model`/`ui`,
 tested-domain rule.
 
-15. Global filter/search — a header search box (lifted App state, shared
+15. ✅ Global filter/search — a header search box (lifted App state, shared
     across tabs, cleared on Esc; **not** stored in the graph, undo, or
-    autosave). Pure `ui/filter.ts` (unit-tested): a `FilterState`
-    (case-insensitive text over title/description/tags, plus optional
-    facets — priority, and status/tags on the plan side) and a
-    `matchesFilter(node, state)` predicate. Views apply it as a
-    projection, never a mutation: **Outliner** is hierarchy-aware — it
-    keeps matches plus their ancestor path (ancestors shown but dimmed as
-    context, matches highlighted), hides the rest, and reveals matches
-    regardless of per-node collapse while a filter is active (computed in
-    a filtered variant of `visibleRows`). **Graph/Dependency views** dim
-    non-matches to full-context opacity rather than removing nodes (graph
-    structure must stay legible). A live match count sits by the box.
-    Scope: Spec, Planning, Graph — Timeline/Metrics/Markdown unchanged.
+    autosave; rendered only on the searchable tabs). Pure `ui/filter.ts`
+    (unit-tested): a `FilterState` (case-insensitive text over
+    title/description/tags, plus optional conjunctive facets —
+    priority, status, tags) with `isFilterActive` + `matchesFilter(node,
+    state)`. Views apply it as a projection, never a mutation:
+    **Outliner** is hierarchy-aware via a filtered variant of
+    `visibleRows` (new `match` arg; rows gain a `matched` flag) — it keeps
+    matches plus their ancestor path (ancestors dimmed `.row-context`,
+    matches marked `.row-match`), drops the rest, and ignores per-node
+    collapse so deep matches surface. **PlanningView** filters its spec
+    pane the same way and passes the filter to the group Outliner.
+    **GraphView** dims non-matches in place (never hides — structure must
+    stay legible), composing with its existing unassigned/empty spotlight.
+    A live match count sits by the box. Scope: Spec, Planning, Graph —
+    Timeline/Metrics/Markdown unchanged. Verified in preview.
 16. Depth filtering (Spec + Planning) — a compact depth stepper
     (`1 2 3 … All`) in each outliner's toolbar capping visible rows to the
     top N levels (roots = depth 0; "N levels" ⇒ depth < N). A node at the
