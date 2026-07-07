@@ -266,6 +266,10 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
 - `npm install` only needed for the Vite dev server (React 19, Vite 6,
   @xyflow/react); the core and tests run without it.
 - Git: conventional-commit style messages (`feat:`, `chore:`…).
+  Workflow: branch off `main` (`feat/…`, `chore/…`), commit, push, and
+  open a PR with `gh` rather than committing to `main` directly. Merge
+  with **squash** to keep `main`'s history linear (one commit per slice /
+  change), and delete the branch. Wait for any CI checks before merging.
 - Sandbox notes: npm registry access requires it to be enabled AND a fresh
   session; folder file deletion needs the allow-delete permission (git lock
   files trip this).
