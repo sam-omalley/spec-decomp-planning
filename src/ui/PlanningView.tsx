@@ -192,7 +192,7 @@ export function PlanningView({
         </button>
       </div>
       {mode === 'table' ? (
-        <PlanTable selectedId={selectedId} onSelect={onSelect} />
+        <PlanTable selectedId={selectedId} onSelect={onSelect} filter={filter} />
       ) : (
         <div className="planning-body">
       <div

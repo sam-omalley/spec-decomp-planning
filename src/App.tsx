@@ -31,10 +31,13 @@ export function App() {
   const matchCount = useMemo(() => {
     if (!filterActive || !searchable) return 0;
     return Object.values(graph.nodes).filter((n) => {
-      if (view === 'spec') return n.type !== 'group' && matchesFilter(n, filter);
-      return matchesFilter(n, filter);
+      if (!matchesFilter(n, filter)) return false;
+      // Spec shows only work nodes; the Planning table shows only groups.
+      if (view === 'spec') return n.type !== 'group';
+      if (view === 'planning' && planMode === 'table') return n.type === 'group';
+      return true;
     }).length;
-  }, [filterActive, searchable, graph, filter, view]);
+  }, [filterActive, searchable, graph, filter, view, planMode]);
 
   function exportProject() {
     const blob = new Blob([serializeProject(store.getState())], {
