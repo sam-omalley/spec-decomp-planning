@@ -1,6 +1,7 @@
-import type { DragEvent, KeyboardEvent, ReactNode } from 'react';
+import type { ClipboardEvent, DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import type { Status } from '../model/types.ts';
 import type { OutlineRow } from './outline.ts';
+import type { RowPointerModifiers } from './useMultiSelect.ts';
 
 export interface RowDropProps {
   dropping: boolean;
@@ -23,6 +24,11 @@ export interface RowActions {
   navigate: (id: string, delta: -1 | 1) => void;
   select: (id: string) => void;
   endEditing: () => void;
+  /** Create rows from pasted multi-line text (indent-aware). */
+  pasteRows: (id: string, text: string) => void;
+  /** ⇧-click / ⇧-Arrow / ⌘-click selection over the visible rows. */
+  onRowPointerDown: (id: string, event: RowPointerModifiers) => void;
+  extendSelection: (delta: -1 | 1) => void;
 }
 
 interface OutlinerRowProps {
@@ -45,6 +51,8 @@ interface OutlinerRowProps {
   onCycleStatus?: (id: string) => void;
   /** Extra content inside the expanded details card (dependency editor). */
   detailsExtras?: ReactNode;
+  /** Part of a multi-selection but not the focused anchor row. */
+  multiSelected?: boolean;
 }
 
 export function OutlinerRow({
@@ -61,8 +69,24 @@ export function OutlinerRow({
   status,
   onCycleStatus,
   detailsExtras,
+  multiSelected,
 }: OutlinerRowProps) {
   const { id } = row;
+
+  function onMouseDown(event: MouseEvent<HTMLInputElement>) {
+    // Plain click collapses any multi-selection to this row; ⇧/⌘/Ctrl
+    // clicks extend it and preventDefault so focus stays on the anchor.
+    actions.onRowPointerDown(id, event);
+  }
+
+  function onPaste(event: ClipboardEvent<HTMLInputElement>) {
+    const text = event.clipboardData.getData('text/plain');
+    // Only intercept genuine multi-line pastes; single lines paste normally.
+    if (/\r|\n/.test(text.trimEnd())) {
+      event.preventDefault();
+      actions.pasteRows(id, text);
+    }
+  }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     const mod = event.metaKey || event.ctrlKey;
@@ -85,6 +109,7 @@ export function OutlinerRow({
       const delta = event.key === 'ArrowUp' ? -1 : 1;
       event.preventDefault();
       if (event.altKey) actions.reorder(id, delta);
+      else if (event.shiftKey) actions.extendSelection(delta);
       else actions.navigate(id, delta);
     } else if (event.key === 'Backspace' && (mod || title === '')) {
       event.preventDefault();
@@ -99,9 +124,10 @@ export function OutlinerRow({
 
   const dropClass = dropProps?.dropping ? ' row-drop' : '';
   const openClass = expanded ? ' row-open' : '';
+  const multiClass = multiSelected ? ' row-multiselected' : '';
   return (
     <div
-      className={`row${selected ? ' row-selected' : ''}${dropClass}${openClass}`}
+      className={`row${selected ? ' row-selected' : ''}${multiClass}${dropClass}${openClass}`}
       style={{ paddingLeft: `${row.depth * 22 + 8}px` }}
       onDragOver={dropProps?.onDragOver}
       onDragLeave={dropProps?.onDragLeave}
@@ -140,6 +166,8 @@ export function OutlinerRow({
         placeholder="Untitled"
         onChange={(e) => actions.setTitle(id, e.target.value)}
         onKeyDown={onKeyDown}
+        onMouseDown={onMouseDown}
+        onPaste={onPaste}
         onFocus={() => actions.select(id)}
         onBlur={() => actions.endEditing()}
       />

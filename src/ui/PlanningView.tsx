@@ -29,6 +29,7 @@ import {
 } from './planning.ts';
 import { Outliner } from './Outliner.tsx';
 import type { RowDropProps } from './OutlinerRow.tsx';
+import { PlanTable } from './PlanTable.tsx';
 
 const NO_COLLAPSE: ReadonlySet<string> = new Set();
 
@@ -42,6 +43,7 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
   const [dropGroupId, setDropGroupId] = useState<string | null>(null);
   const [specDropping, setSpecDropping] = useState(false);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+  const [mode, setMode] = useState<'outline' | 'table'>('outline');
 
   const specRows = visibleRows(graph, NO_COLLAPSE, 'work');
   const uncovered = useMemo(() => uncoveredWorkIds(graph), [graph]);
@@ -157,7 +159,25 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
   }
 
   return (
-    <div className="planning-body">
+    <>
+      <div className="plan-mode-toggle">
+        <button
+          className={mode === 'outline' ? 'view-tab view-tab-active' : 'view-tab'}
+          onClick={() => setMode('outline')}
+        >
+          Outline
+        </button>
+        <button
+          className={mode === 'table' ? 'view-tab view-tab-active' : 'view-tab'}
+          onClick={() => setMode('table')}
+        >
+          Table
+        </button>
+      </div>
+      {mode === 'table' ? (
+        <PlanTable selectedId={selectedId} onSelect={onSelect} />
+      ) : (
+        <div className="planning-body">
       <div
         className={`plan-tree${specDropping ? ' plan-tree-drop' : ''}`}
         onDragOver={(e) => {
@@ -244,6 +264,8 @@ export function PlanningView({ selectedId, onSelect }: PlanningViewProps) {
           rowDropProps={rowDropProps}
         />
       </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }

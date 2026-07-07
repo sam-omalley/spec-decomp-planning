@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { createGroup, createNode, emptyGraph, moveNode, rootsOf } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
 import {
+  contiguousSiblingRange,
   indentTarget,
   insertionPointAfter,
   insertionPointBefore,
   insertionPointForEnter,
   outdentTarget,
+  parseOutlineText,
   reorderTarget,
   visibleRows,
 } from './outline.ts';
@@ -182,6 +184,97 @@ describe('keyboard operation targets', () => {
     );
   });
 
+  it('contiguousSiblingRange returns the parent + ordered ids for a clean run', () => {
+    const g = fixture();
+    assert.deepEqual(contiguousSiblingRange(g, ['signup', 'login']), {
+      parentId: 'auth',
+      ids: ['login', 'signup'],
+    });
+    assert.deepEqual(contiguousSiblingRange(g, ['auth', 'billing']), {
+      parentId: 'app',
+      ids: ['auth', 'billing'],
+    });
+    assert.deepEqual(contiguousSiblingRange(g, ['app', 'docs']), {
+      parentId: null,
+      ids: ['app', 'docs'],
+    }, 'roots share the null parent');
+    assert.deepEqual(contiguousSiblingRange(g, ['login']), {
+      parentId: 'auth',
+      ids: ['login'],
+    }, 'a single id is a trivial range');
+  });
+
+  it('contiguousSiblingRange rejects gaps, mixed parents, and empties', () => {
+    let g = fixture();
+    g = createNode(g, { id: 'sso', title: 'SSO' }, 'auth'); // login, signup, sso
+    g = moveNode(g, 'sso', 'auth', 1); // login, sso, signup
+    assert.equal(
+      contiguousSiblingRange(g, ['login', 'signup']),
+      null,
+      'non-adjacent siblings (gap at sso)',
+    );
+    assert.equal(
+      contiguousSiblingRange(g, ['login', 'billing']),
+      null,
+      'different parents',
+    );
+    assert.equal(contiguousSiblingRange(g, []), null, 'empty selection');
+    assert.equal(contiguousSiblingRange(g, ['ghost']), null, 'unknown id');
+  });
+});
+
+describe('parseOutlineText', () => {
+  it('treats flat text as depth-0 siblings and drops blank lines', () => {
+    assert.deepEqual(parseOutlineText('One\n\nTwo\n  \nThree'), [
+      { title: 'One', depth: 0 },
+      { title: 'Two', depth: 0 },
+      { title: 'Three', depth: 0 },
+    ]);
+  });
+
+  it('infers nesting from tab indentation', () => {
+    assert.deepEqual(parseOutlineText('App\n\tAuth\n\t\tLogin\n\tBilling'), [
+      { title: 'App', depth: 0 },
+      { title: 'Auth', depth: 1 },
+      { title: 'Login', depth: 2 },
+      { title: 'Billing', depth: 1 },
+    ]);
+  });
+
+  it('infers nesting from space indentation of any width', () => {
+    assert.deepEqual(parseOutlineText('App\n   Auth\n      Login\nDocs'), [
+      { title: 'App', depth: 0 },
+      { title: 'Auth', depth: 1 },
+      { title: 'Login', depth: 2 },
+      { title: 'Docs', depth: 0 },
+    ]);
+  });
+
+  it('strips leading markdown bullet and numbered markers', () => {
+    assert.deepEqual(parseOutlineText('- App\n  * Auth\n  1. Billing\n+ Docs'), [
+      { title: 'App', depth: 0 },
+      { title: 'Auth', depth: 1 },
+      { title: 'Billing', depth: 1 },
+      { title: 'Docs', depth: 0 },
+    ]);
+  });
+
+  it('normalises irregular indents to consecutive depths without gaps', () => {
+    // Jump from 0 to 8 spaces should still be a single level down.
+    assert.deepEqual(parseOutlineText('A\n        B\n    C\nD'), [
+      { title: 'A', depth: 0 },
+      { title: 'B', depth: 1 },
+      { title: 'C', depth: 1 },
+      { title: 'D', depth: 0 },
+    ]);
+  });
+
+  it('returns an empty list for blank input', () => {
+    assert.deepEqual(parseOutlineText('\n  \n'), []);
+  });
+});
+
+describe('tree-shape round trips', () => {
   it('indent then outdent round-trips the tree shape', () => {
     let g = fixture();
     const target = indentTarget(g, 'billing')!;
