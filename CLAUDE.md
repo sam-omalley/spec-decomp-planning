@@ -348,6 +348,28 @@ tested-domain rule.
     the pure-projection rule holds. A toggle hides the inference; a later
     "materialise chain → real `depends_on` edges" action can promote it
     when you actually mean it.
+5. Author dependencies in the Dependency view (drag-to-connect) — the
+    read-mostly stance from slice 18 gains editing, but via **handle
+    drag**, not node-onto-node drag (node-body drag fought the pan gesture
+    and was unreliable). Each leaf-group node grows connection handles;
+    grabbing a **handle** draws an arrow (React Flow's native connection),
+    while grabbing the **body/pane** still pans — no gesture ambiguity.
+    Direction is the mental model "drag *from* the story that depends *onto*
+    the one it needs": the drag's start node is the dependent, the drop
+    node the prerequisite, committing `addEdge depends_on from=dependent
+    to=prerequisite`. Handles sit on both sides with
+    `connectionMode="loose"` so either side can start or receive, keeping
+    the grab forgiving; `isValidConnection` rejects self-links and the
+    `onConnect` commit no-ops a duplicate (mirrors `DependencyEditor`).
+    Cycles stay allowed — a new edge that closes a loop just renders as
+    one. Deletion rounds out the surface: clicking a **real, directly
+    authored** edge (there is a backing `depends_on`/inverse `blocks` edge
+    between exactly those two leaves — found via `edgeBetween`) confirms
+    then `removeEdge`s it; container-fan-out and inferred (dashed) edges
+    are not click-deletable (no unambiguous single edge to remove). Still
+    plan-only, leaf-only; `depLayout.ts` is unchanged (authoring mutates
+    the graph, the layout re-projects). Only the Dependency view is
+    connectable — the Map view keeps its HTML5 assignment drag untouched.
 
 - v2+: merge/split nodes, critical path, richer graph editing.
 
