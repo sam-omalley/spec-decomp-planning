@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraphError } from './model/graph.ts';
 import { deserializeProject, serializeProject } from './model/serialize.ts';
 import { store, useProjectGraph } from './store/appStore.ts';
-import { GraphView } from './ui/GraphView.tsx';
+import { GraphView, type GraphMode } from './ui/GraphView.tsx';
 import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
 import { PlanningView } from './ui/PlanningView.tsx';
@@ -19,6 +19,8 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Lifted so the footer hint can follow the Planning sub-view.
   const [planMode, setPlanMode] = useState<'outline' | 'table'>('outline');
+  // Likewise the Graph tab's Map/Dependency mode drives its footer hint.
+  const [graphMode, setGraphMode] = useState<GraphMode>('map');
   // Global filter/search — view state only; never enters the graph, undo,
   // or autosave. Shared across the Spec / Planning / Graph tabs.
   const [filterText, setFilterText] = useState('');
@@ -222,7 +224,13 @@ export function App() {
           />
         )}
         {view === 'graph' && (
-          <GraphView selectedId={selectedId} onSelect={setSelectedId} filter={filter} />
+          <GraphView
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            filter={filter}
+            mode={graphMode}
+            onModeChange={setGraphMode}
+          />
         )}
         {view === 'timeline' && (
           <TimelineView selectedId={selectedId} onSelect={setSelectedId} />
@@ -247,8 +255,12 @@ export function App() {
             estimates &amp; dependencies · drag spec items on to assign
           </>
         )}
-        {view === 'graph' && (
+        {view === 'graph' && graphMode === 'map' && (
           <>Click to select · scroll to zoom · drag a spec node onto a group to assign</>
+        )}
+        {view === 'graph' && graphMode === 'dep' && (
+          <>Drag from a story's handle onto the one it needs · click an arrow to remove · scroll
+            to zoom</>
         )}
         {view === 'timeline' && (
           <>Plan schedule as a Gantt · ▸ projected finish · 🎯 target date · set dates &amp;
