@@ -348,7 +348,7 @@ tested-domain rule.
     the pure-projection rule holds. A toggle hides the inference; a later
     "materialise chain → real `depends_on` edges" action can promote it
     when you actually mean it.
-5. Author dependencies in the Dependency view (drag-to-connect) — the
+5. ✅ Author dependencies in the Dependency view (drag-to-connect) — the
     read-mostly stance from slice 18 gains editing, but via **handle
     drag**, not node-onto-node drag (node-body drag fought the pan gesture
     and was unreliable). Each leaf-group node grows a handle on each side;
@@ -366,16 +366,27 @@ tested-domain rule.
     same-side l–l / r–r and self-links) and the `onConnect` commit no-ops a
     duplicate (mirrors `DependencyEditor`). A custom connection-line
     component previews the flow: a dashed line whose arrow always points at
-    the **left** handle. Cycles stay allowed — a new edge that closes a
-    loop just renders as one. Deletion rounds out the surface: clicking a
-    **real, directly authored** edge (there is a backing
-    `depends_on`/inverse `blocks` edge between exactly those two leaves —
-    found via `edgeBetween`) confirms then `removeEdge`s it; container-
-    fan-out and inferred (dashed) edges are not click-deletable (no
-    unambiguous single edge to remove). Still plan-only, leaf-only;
-    `depLayout.ts` is unchanged (authoring mutates the graph, the layout
-    re-projects). Only the Dependency view is connectable — the Map view
-    keeps its HTML5 assignment drag untouched.
+    the **left** handle. **While a connection is in progress (authoring or
+    reconnecting), each card reveals only its *valid* handle and hides the
+    other** — pure `dragHandleVisibility(nodeId, fromNodeId, fromHandle)`
+    in `depAuthoring.ts` (unit-tested) reads React Flow's live `useConnection`
+    state: the from-card keeps its anchored side, every other card shows
+    only the opposite side (the sole valid left↔right target). Cycles stay
+    allowed — a new edge that closes a loop just renders as one. **Removing
+    / moving a dependency is by *grabbing the arrow near one end*
+    (reconnection), not a click**: only a **real, directly authored** edge
+    (a single backing `depends_on`/inverse `blocks` edge between exactly
+    those two leaves — found via `edgeBetween`) is `reconnectable`; grabbing
+    an end detaches it and drags while the other stays anchored — drop it on
+    a valid handle to re-home the dep (`onReconnect` = `removeEdge` old +
+    `addEdge` new, atomic in one commit) or on empty space / an invalid
+    handle to delete it (`onReconnectEnd` with a `reconnected` ref
+    distinguishing the two; no confirm — the drag is the intent).
+    Container-fan-out and inferred (dashed) edges are neither reconnectable
+    nor deletable (no unambiguous single edge to remove). Still plan-only,
+    leaf-only; `depLayout.ts` is unchanged (authoring mutates the graph, the
+    layout re-projects). Only the Dependency view is connectable — the Map
+    view keeps its HTML5 assignment drag untouched.
 
 - v2+: merge/split nodes, critical path, richer graph editing.
 

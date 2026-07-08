@@ -36,3 +36,36 @@ export function resolveDependencyEnds(connection: DepConnection): DepEnds | null
   }
   return null;
 }
+
+export type HandleState = 'show' | 'hide';
+
+export interface HandleVisibility {
+  left: HandleState;
+  right: HandleState;
+}
+
+/**
+ * While a connection is in progress, decide which of a card's two handles to
+ * reveal. `fromHandle` is the anchored end — the origin when authoring, the
+ * still-attached end when reconnecting an existing arrow. A valid target
+ * forms a left↔right flow, so:
+ *   - on the *from* card, only the anchored side stays visible (the drag
+ *     source; the other side would be a self-link);
+ *   - on any *other* card, only the opposite side is a valid target.
+ * Returns null when no connection is in progress (handles keep their default
+ * hover-reveal behaviour).
+ */
+export function dragHandleVisibility(
+  nodeId: string,
+  fromNodeId: string | null | undefined,
+  fromHandle: string | null | undefined,
+): HandleVisibility | null {
+  if (!fromNodeId || (fromHandle !== 'l' && fromHandle !== 'r')) return null;
+  const isFrom = nodeId === fromNodeId;
+  const leftValid = isFrom ? fromHandle === 'l' : fromHandle === 'r';
+  const rightValid = isFrom ? fromHandle === 'r' : fromHandle === 'l';
+  return {
+    left: leftValid ? 'show' : 'hide',
+    right: rightValid ? 'show' : 'hide',
+  };
+}
