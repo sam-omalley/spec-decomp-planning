@@ -319,7 +319,7 @@ tested-domain rule.
     allowed (traceability, not structure), and the plan meta fields
     (status, estimate, dates, deps, refs) remain editable on a locked
     group — you estimate and track against a fixed skeleton.
-4. Graph tab view modes + Dependency View — the Graph tab gets an
+4. ✅ Graph tab view modes + Dependency View — the Graph tab gets an
     internal mode switch (segmented control): **Map** (today's spec↔plan
     mirrored layout) and **Dependency**. The Dependency view is **plan
     only, leaf groups only** (groups with no child group — the "stories"),

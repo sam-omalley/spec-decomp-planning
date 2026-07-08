@@ -30,6 +30,7 @@ import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import { assignToGroup } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
+import { DependencyGraph } from './DependencyGraph.tsx';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { layoutGraph } from './graphLayout.ts';
 import { isEmptyLeafGroup, uncoveredWorkIds } from './planning.ts';
@@ -37,6 +38,8 @@ import { isEmptyLeafGroup, uncoveredWorkIds } from './planning.ts';
 type FilterKey = 'unassigned' | 'empty';
 /** Spotlight dims non-matches in place; hide removes them entirely. */
 type FilterMode = 'spotlight' | 'hide';
+/** Map = the spec↔plan mirror; Dependency = the leaf-group dep DAG. */
+type GraphMode = 'map' | 'dep';
 
 const DND_TYPE = 'text/plain';
 
@@ -147,6 +150,8 @@ interface GraphViewProps {
 
 export function GraphView({ selectedId, onSelect, filter = EMPTY_FILTER }: GraphViewProps) {
   const graph = useProjectGraph();
+  const [graphMode, setGraphMode] = useState<GraphMode>('map');
+  const [inferChains, setInferChains] = useState(false);
   const [active, setActive] = useState<Record<FilterKey, boolean>>({
     unassigned: false,
     empty: false,
@@ -327,45 +332,78 @@ export function GraphView({ selectedId, onSelect, filter = EMPTY_FILTER }: Graph
   return (
     <div className="graph-wrap">
       <div className="graph-filter">
-        {toggles.map((t) => (
+        {(['map', 'dep'] as GraphMode[]).map((m) => (
           <button
-            key={t.key}
-            className={`graph-filter-btn${active[t.key] ? ' graph-filter-btn-active' : ''}`}
-            aria-pressed={active[t.key]}
-            onClick={() => setActive((a) => ({ ...a, [t.key]: !a[t.key] }))}
+            key={m}
+            className={`graph-filter-btn${graphMode === m ? ' graph-filter-btn-active' : ''}`}
+            aria-pressed={graphMode === m}
+            onClick={() => setGraphMode(m)}
           >
-            {t.label}
-            <span className="graph-filter-count">{t.count}</span>
+            {m === 'map' ? 'Map' : 'Dependency'}
           </button>
         ))}
         <span className="graph-filter-sep" />
-        {(['spotlight', 'hide'] as FilterMode[]).map((m) => (
+        {graphMode === 'map' ? (
+          <>
+            {toggles.map((t) => (
+              <button
+                key={t.key}
+                className={`graph-filter-btn${active[t.key] ? ' graph-filter-btn-active' : ''}`}
+                aria-pressed={active[t.key]}
+                onClick={() => setActive((a) => ({ ...a, [t.key]: !a[t.key] }))}
+              >
+                {t.label}
+                <span className="graph-filter-count">{t.count}</span>
+              </button>
+            ))}
+            <span className="graph-filter-sep" />
+            {(['spotlight', 'hide'] as FilterMode[]).map((m) => (
+              <button
+                key={m}
+                className={`graph-filter-btn${mode === m ? ' graph-filter-btn-active' : ''}`}
+                disabled={!anyFilter}
+                onClick={() => setMode(m)}
+              >
+                {m === 'spotlight' ? 'Spotlight' : 'Hide'}
+              </button>
+            ))}
+          </>
+        ) : (
           <button
-            key={m}
-            className={`graph-filter-btn${mode === m ? ' graph-filter-btn-active' : ''}`}
-            disabled={!anyFilter}
-            onClick={() => setMode(m)}
+            className={`graph-filter-btn${inferChains ? ' graph-filter-btn-active' : ''}`}
+            aria-pressed={inferChains}
+            onClick={() => setInferChains((v) => !v)}
+            title="Ghost a sequential chain across sibling stories with no explicit dependency"
           >
-            {m === 'spotlight' ? 'Spotlight' : 'Hide'}
+            Infer chains
           </button>
-        ))}
+        )}
       </div>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        fitView
-        minZoom={0.2}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        onNodeClick={(_, node) => onSelect(node.id)}
-        onPaneClick={() => onSelect(null)}
-      >
-        <Background gap={24} />
-        <Controls showInteractive={false} />
-        <FitOnReflow signature={`${mode}:${active.unassigned}:${active.empty}`} />
-      </ReactFlow>
+      {graphMode === 'map' ? (
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          fitView
+          minZoom={0.2}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          onNodeClick={(_, node) => onSelect(node.id)}
+          onPaneClick={() => onSelect(null)}
+        >
+          <Background gap={24} />
+          <Controls showInteractive={false} />
+          <FitOnReflow signature={`${mode}:${active.unassigned}:${active.empty}`} />
+        </ReactFlow>
+      ) : (
+        <DependencyGraph
+          selectedId={selectedId}
+          onSelect={onSelect}
+          filter={filter}
+          inferChains={inferChains}
+        />
+      )}
     </div>
   );
 }
