@@ -259,8 +259,8 @@ export function App() {
           <>Click to select · scroll to zoom · drag a spec node onto a group to assign</>
         )}
         {view === 'graph' && graphMode === 'dep' && (
-          <>Drag from a story's handle onto the one it needs · click an arrow to remove · scroll
-            to zoom</>
+          <>Drag between two stories' side handles to link them — the arrow shows work flowing
+            left→right · click an arrow to remove</>
         )}
         {view === 'timeline' && (
           <>Plan schedule as a Gantt · ▸ projected finish · 🎯 target date · set dates &amp;
