@@ -1421,7 +1421,7 @@ body {
 
 /* A real dependency edge you can click to remove. */
 .gedge-deletable .react-flow__edge-path {
-  cursor: pointer;
+  cursor: grab;
 }
 
 /* Larger, grabbable connection handles for authoring dependencies. Faint
@@ -1439,6 +1439,23 @@ body {
 .gnode:hover .dephandle,
 .react-flow__node:hover .dephandle {
   opacity: 1;
+}
+
+/* During a connection drag, force the single valid handle visible and hide
+ * the invalid one — so a card near the pointer offers one clear target. The
+ * hide rule beats the hover reveal above with !important. */
+.dephandle-drag-show {
+  opacity: 1;
+}
+
+.dephandle-drag-hide {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+/* Reconnect anchors: grabbing an arrow near an end picks up the dependency. */
+.gedge-deletable .react-flow__edgeupdater {
+  cursor: grab;
 }
 
 .gnode-waiting {
