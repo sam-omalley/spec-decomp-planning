@@ -103,6 +103,15 @@ export interface ProjectSettings {
   parallelTracks: number;
   /** Capacity: global per-track speed multiplier (>0; scales durations). */
   speedMultiplier: number;
+  /**
+   * Editing lock: how many top levels of the spec tree are frozen against
+   * accidental edits (0 = unlocked). Roots are depth 0, so a value of N
+   * freezes depths 0…N-1. UI-level only — it gates the editing affordances,
+   * it is not a graph invariant, so import/undo/programmatic paths ignore it.
+   */
+  specLockDepth: number;
+  /** Editing lock for the plan (group) tree; see specLockDepth. */
+  planLockDepth: number;
 }
 
 export interface ProjectGraph {

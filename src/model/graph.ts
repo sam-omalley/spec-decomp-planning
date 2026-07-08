@@ -47,6 +47,8 @@ export function defaultSettings(): ProjectSettings {
     hoursPerDay: 8,
     parallelTracks: 1,
     speedMultiplier: 1,
+    specLockDepth: 0,
+    planLockDepth: 0,
   };
 }
 
@@ -631,6 +633,12 @@ export function updateSettings(
   }
   if (!(settings.hoursPerDay > 0)) {
     throw new GraphError('hoursPerDay must be greater than 0');
+  }
+  if (!Number.isInteger(settings.specLockDepth) || settings.specLockDepth < 0) {
+    throw new GraphError('specLockDepth must be a non-negative integer');
+  }
+  if (!Number.isInteger(settings.planLockDepth) || settings.planLockDepth < 0) {
+    throw new GraphError('planLockDepth must be a non-negative integer');
   }
   return { ...graph, settings };
 }

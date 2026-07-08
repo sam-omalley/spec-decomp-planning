@@ -18,6 +18,7 @@ import { rolledDuration, rolledEffort } from '../model/rollup.ts';
 import type { Priority, ProjectGraph, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
+import { isLocked } from './locks.ts';
 import { visibleRows } from './outline.ts';
 import { useMultiSelect } from './useMultiSelect.ts';
 
@@ -132,6 +133,10 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
             const duration = rolledDuration(graph, row.id);
             const rowWaiting = waiting.get(row.id);
             const inCycle = cycles.has(row.id);
+            // Locked groups freeze naming only — the title is read-only, but
+            // status/estimate/dates/keys stay editable (plan meta is always
+            // editable against a frozen skeleton).
+            const locked = isLocked(row.depth, 'group', graph.settings);
             return (
               <tr
                 key={row.id}
@@ -140,11 +145,20 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
                 }${row.matched === false ? ' row-context' : row.matched ? ' row-match' : ''}`}
                 onMouseDown={(e) => onRowMouseDown(row.id, e)}
               >
-                <td className="col-title" style={{ paddingLeft: `${row.depth * 16 + 8}px` }}>
+                <td
+                  className={`col-title${locked ? ' cell-locked' : ''}`}
+                  style={{ paddingLeft: `${row.depth * 16 + 8}px` }}
+                >
+                  {locked && (
+                    <span className="row-lock" title="Locked — this level is frozen against edits">
+                      🔒
+                    </span>
+                  )}
                   <input
                     className="cell-input cell-title"
                     value={node.title}
                     placeholder="Untitled"
+                    readOnly={locked}
                     onChange={(e) =>
                       store.commit((g) => updateNode(g, row.id, { title: e.target.value }), {
                         coalesce: `title:${row.id}`,

@@ -250,6 +250,24 @@ body {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* Structural lock: frozen top levels read faded and carry a small 🔒. The
+ * title is read-only; plan meta fields stay live, so only the naming dims. */
+.row-locked .row-input,
+.row-locked .row-details,
+.cell-locked .cell-title {
+  color: var(--muted);
+  cursor: default;
+}
+
+.row-lock {
+  flex: none;
+  font-size: 10px;
+  opacity: 0.6;
+  margin: 0 2px;
+  cursor: default;
+  user-select: none;
+}
+
 .chevron {
   flex: none;
   width: 18px;

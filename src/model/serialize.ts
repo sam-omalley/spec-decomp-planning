@@ -17,6 +17,9 @@
  * `durationEstimate`, `actualStart`, `actualFinish`, `externalRefs`; the
  * graph gains `settings`. Migration is pure backfill of defaults, so no
  * data is lost — earlier versions migrate straight through to v4.
+ *
+ * v4 → v5: `settings` gains the editing-lock depths (`specLockDepth` /
+ * `planLockDepth`), backfilled to 0 (unlocked). Pure backfill, no data loss.
  */
 
 import type {
@@ -28,7 +31,7 @@ import type {
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 4;
+export const FILE_VERSION = 5;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -36,7 +39,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -111,6 +114,9 @@ function normalizeSettings(provided: unknown): ProjectSettings {
   const p = provided as Record<string, unknown>;
   const num = (value: unknown, fallback: number): number =>
     typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  // Lock depths are non-negative integers; anything else falls back.
+  const lockDepth = (value: unknown, fallback: number): number =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
   return {
     startDate: typeof p.startDate === 'string' ? p.startDate : base.startDate,
     targetDate: typeof p.targetDate === 'string' ? p.targetDate : null,
@@ -118,6 +124,8 @@ function normalizeSettings(provided: unknown): ProjectSettings {
     hoursPerDay: num(p.hoursPerDay, base.hoursPerDay),
     parallelTracks: num(p.parallelTracks, base.parallelTracks),
     speedMultiplier: num(p.speedMultiplier, base.speedMultiplier),
+    specLockDepth: lockDepth(p.specLockDepth, base.specLockDepth),
+    planLockDepth: lockDepth(p.planLockDepth, base.planLockDepth),
   };
 }
 

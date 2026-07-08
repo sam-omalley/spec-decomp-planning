@@ -29,6 +29,7 @@ import { DependencyEditor } from './DependencyEditor.tsx';
 import { NodeMetaEditor } from './NodeMetaEditor.tsx';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
+import { isLocked } from './locks.ts';
 import {
   contiguousSiblingRange,
   indentTarget,
@@ -104,6 +105,11 @@ export function Outliner({
   // tree is at least two deep.
   const depth = useMemo(() => treeDepth(graph, side), [graph, side]);
   const showDepthStepper = onMaxDepthChange !== undefined && depth >= 2;
+
+  // Structural lock: the top N levels of this side are frozen. Creating a
+  // new root would add a node at a locked level, so the add-root buttons
+  // hide while depth 0 is locked; per-row edits are gated in OutlinerRow.
+  const rootLocked = isLocked(0, side, graph.settings);
 
   // Multi-select layered over App's single-selection anchor: ⇧/⌘ click,
   // ⇧+Arrow. Structural ops (indent/outdent/reorder/delete) fan out to
@@ -510,9 +516,11 @@ export function Outliner({
         {depthStepper()}
         <div className="outliner-empty">
           <p>{emptyHint}</p>
-          <button className="button-primary" onClick={() => createAfter(null)}>
-            {emptyButtonLabel}
-          </button>
+          {!rootLocked && (
+            <button className="button-primary" onClick={() => createAfter(null)}>
+              {emptyButtonLabel}
+            </button>
+          )}
         </div>
       </>
     );
@@ -551,15 +559,18 @@ export function Outliner({
               </>
             ) : undefined
           }
+          locked={isLocked(row.depth, side, graph.settings)}
           registerInput={(id, el) => {
             if (el) inputRefs.current.set(id, el);
             else inputRefs.current.delete(id);
           }}
         />
       ))}
-      <button className="add-row" onClick={() => createAfter(null)}>
-        {addLabel}
-      </button>
+      {!rootLocked && (
+        <button className="add-row" onClick={() => createAfter(null)}>
+          {addLabel}
+        </button>
+      )}
     </div>
     </>
   );
