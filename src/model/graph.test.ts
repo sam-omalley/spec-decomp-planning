@@ -309,6 +309,7 @@ describe('serialization', () => {
     g = setActualDates(g, 'login', { actualStart: '2026-07-01' });
     g = addExternalRef(g, 'login', { system: 'jira', key: 'PT-1', url: 'http://x/PT-1' });
     g = updateSettings(g, { parallelTracks: 3, speedMultiplier: 1.5, targetDate: '2026-12-01' });
+    g = updateSettings(g, { specLockDepth: 1, planLockDepth: 2 });
     assert.deepEqual(deserializeProject(serializeProject(g)), g);
   });
 
@@ -340,6 +341,26 @@ describe('serialization', () => {
     assert.equal(g.settings.parallelTracks, 1);
     assert.equal(g.settings.speedMultiplier, 1);
     assert.equal(g.settings.targetDate, null);
+    // Lock depths (v5) backfill to unlocked.
+    assert.equal(g.settings.specLockDepth, 0);
+    assert.equal(g.settings.planLockDepth, 0);
+  });
+
+  it('migrates a v4 file by backfilling the lock depths', () => {
+    let g = fixture();
+    g = updateSettings(g, { parallelTracks: 2 });
+    const file = JSON.parse(serializeProject(g)) as {
+      version: number;
+      graph: { settings: Record<string, unknown> };
+    };
+    // Downgrade to a v4 file: strip the v5-only fields.
+    file.version = 4;
+    delete file.graph.settings.specLockDepth;
+    delete file.graph.settings.planLockDepth;
+    const restored = deserializeProject(JSON.stringify(file));
+    assert.equal(restored.settings.parallelTracks, 2); // preserved
+    assert.equal(restored.settings.specLockDepth, 0); // backfilled
+    assert.equal(restored.settings.planLockDepth, 0);
   });
 
   it('fills defaults for a partial/garbage settings blob', () => {
@@ -426,5 +447,9 @@ describe('external refs and settings', () => {
     assert.throws(() => updateSettings(g, { speedMultiplier: 0 }), /speedMultiplier/);
     assert.throws(() => updateSettings(g, { pointsPerDay: -1 }), /pointsPerDay/);
     assert.throws(() => updateSettings(g, { hoursPerDay: 0 }), /hoursPerDay/);
+    assert.equal(updateSettings(g, { specLockDepth: 0 }).settings.specLockDepth, 0);
+    assert.equal(updateSettings(g, { planLockDepth: 3 }).settings.planLockDepth, 3);
+    assert.throws(() => updateSettings(g, { specLockDepth: -1 }), /specLockDepth/);
+    assert.throws(() => updateSettings(g, { planLockDepth: 1.5 }), /planLockDepth/);
   });
 });

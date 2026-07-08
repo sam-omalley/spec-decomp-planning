@@ -51,6 +51,14 @@ export function SettingsPanel() {
     commit({ [field]: value }, field);
   }
 
+  /** Commit a lock depth: a non-negative integer (0 = unlocked). */
+  function commitLock(field: 'specLockDepth' | 'planLockDepth', raw: string) {
+    if (raw.trim() === '') return;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 0) return;
+    commit({ [field]: value }, field);
+  }
+
   return (
     <div className="settings-wrap" ref={ref}>
       <button
@@ -144,6 +152,39 @@ export function SettingsPanel() {
           <p className="settings-note">
             Capacity: {s.parallelTracks} track{s.parallelTracks === 1 ? '' : 's'} · durations ÷{' '}
             {s.speedMultiplier}. Weekends are skipped.
+          </p>
+
+          <div className="settings-section-label">Locks</div>
+          <div className="meta-row">
+            <label className="meta-field">
+              <span className="meta-label">Spec levels</span>
+              <input
+                className="meta-input"
+                type="number"
+                min="0"
+                step="1"
+                value={s.specLockDepth}
+                onChange={(e) => commitLock('specLockDepth', e.target.value)}
+                onBlur={() => store.breakCoalescing()}
+              />
+            </label>
+            <label className="meta-field">
+              <span className="meta-label">Plan levels</span>
+              <input
+                className="meta-input"
+                type="number"
+                min="0"
+                step="1"
+                value={s.planLockDepth}
+                onChange={(e) => commitLock('planLockDepth', e.target.value)}
+                onBlur={() => store.breakCoalescing()}
+              />
+            </label>
+          </div>
+          <p className="settings-note">
+            Freeze the top levels against accidental edits (0 = off). Locked
+            rows keep their shape and name; you can still add children below,
+            assign work, and edit plan fields. 🔒
           </p>
         </div>
       )}

@@ -299,7 +299,7 @@ tested-domain rule.
     independent narrowings, but an active search wins — matched rows and
     their ancestors surface even past the depth cap, so search can always
     reach deep matches.
-3. Structural lock (top-N levels) — freeze the top `specLockDepth` /
+3. ✅ Structural lock (top-N levels) — freeze the top `specLockDepth` /
     `planLockDepth` levels of a side against *accidental* edits (a node is
     locked when its depth < the side's lock depth; roots = depth 0). New
     integer fields on `ProjectSettings` (default 0), set via a **Locks**

@@ -53,6 +53,12 @@ interface OutlinerRowProps {
   detailsExtras?: ReactNode;
   /** Part of a multi-selection but not the focused anchor row. */
   multiSelected?: boolean;
+  /**
+   * Row sits in a frozen top level: title/details are read-only and the
+   * structural keys (Enter, Tab, Alt+Arrow, Backspace, paste) are inert.
+   * Navigation, folding, and opening the details card stay live.
+   */
+  locked?: boolean;
 }
 
 export function OutlinerRow({
@@ -70,6 +76,7 @@ export function OutlinerRow({
   onCycleStatus,
   detailsExtras,
   multiSelected,
+  locked = false,
 }: OutlinerRowProps) {
   const { id } = row;
 
@@ -80,6 +87,7 @@ export function OutlinerRow({
   }
 
   function onPaste(event: ClipboardEvent<HTMLInputElement>) {
+    if (locked) return;
     const text = event.clipboardData.getData('text/plain');
     // Only intercept genuine multi-line pastes; single lines paste normally.
     if (/\r|\n/.test(text.trimEnd())) {
@@ -90,6 +98,30 @@ export function OutlinerRow({
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     const mod = event.metaKey || event.ctrlKey;
+    // A frozen row still navigates, folds, and opens its details card, but
+    // the shape/naming keys are inert. readOnly already blocks typing.
+    if (locked) {
+      if (event.key === 'Enter' && mod) {
+        event.preventDefault();
+        actions.toggleDetails(id);
+      } else if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        const delta = event.key === 'ArrowUp' ? -1 : 1;
+        event.preventDefault();
+        if (event.altKey) return; // reorder blocked
+        if (event.shiftKey) actions.extendSelection(delta);
+        else actions.navigate(id, delta);
+      } else if (event.key === 'Backspace' && (mod || title === '')) {
+        event.preventDefault(); // delete blocked
+      } else if (event.key === '.' && mod) {
+        event.preventDefault();
+        actions.toggleCollapse(id);
+      } else if (event.key === 'Escape') {
+        event.currentTarget.blur();
+      }
+      return;
+    }
     if (event.key === 'Enter' && mod) {
       event.preventDefault();
       actions.toggleDetails(id);
@@ -125,13 +157,14 @@ export function OutlinerRow({
   const dropClass = dropProps?.dropping ? ' row-drop' : '';
   const openClass = expanded ? ' row-open' : '';
   const multiClass = multiSelected ? ' row-multiselected' : '';
+  const lockClass = locked ? ' row-locked' : '';
   // While a filter is active, `row.matched` is set: false = ancestor
   // shown only as context (dimmed), true = an actual match (highlight).
   const filterClass =
     row.matched === false ? ' row-context' : row.matched ? ' row-match' : '';
   return (
     <div
-      className={`row${selected ? ' row-selected' : ''}${multiClass}${dropClass}${openClass}${filterClass}`}
+      className={`row${selected ? ' row-selected' : ''}${multiClass}${dropClass}${openClass}${filterClass}${lockClass}`}
       style={{ paddingLeft: `${row.depth * 22 + 8}px` }}
       onDragOver={dropProps?.onDragOver}
       onDragLeave={dropProps?.onDragLeave}
@@ -168,6 +201,7 @@ export function OutlinerRow({
         className={`row-input${status === 'done' ? ' row-input-done' : ''}`}
         value={title}
         placeholder="Untitled"
+        readOnly={locked}
         onChange={(e) => actions.setTitle(id, e.target.value)}
         onKeyDown={onKeyDown}
         onMouseDown={onMouseDown}
@@ -189,6 +223,11 @@ export function OutlinerRow({
         </button>
       )}
       {row.collapsed && <span className="row-count">{childCount}</span>}
+      {locked && (
+        <span className="row-lock" title="Locked — this level is frozen against edits">
+          🔒
+        </span>
+      )}
       {extras}
       {expanded && (
         <>
@@ -197,6 +236,7 @@ export function OutlinerRow({
             value={details}
             placeholder="Details…"
             autoFocus
+            readOnly={locked}
             onChange={(e) => actions.setDetails(id, e.target.value)}
             onBlur={() => actions.endEditing()}
             onKeyDown={(e) => {
