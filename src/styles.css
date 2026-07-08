@@ -1419,6 +1419,28 @@ body {
   opacity: 0.6;
 }
 
+/* A real dependency edge you can click to remove. */
+.gedge-deletable .react-flow__edge-path {
+  cursor: pointer;
+}
+
+/* Larger, grabbable connection handles for authoring dependencies. Faint
+ * until the node is hovered so the read-mostly view stays uncluttered. */
+.dephandle {
+  width: 11px;
+  height: 11px;
+  background: var(--panel);
+  border: 2px solid var(--group-color, var(--accent));
+  opacity: 0;
+  transition: opacity 80ms ease;
+  cursor: crosshair;
+}
+
+.gnode:hover .dephandle,
+.react-flow__node:hover .dephandle {
+  opacity: 1;
+}
+
 .gnode-waiting {
   border-color: #f0d9a3;
   background: #fffdf6;
