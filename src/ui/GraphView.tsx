@@ -39,7 +39,7 @@ type FilterKey = 'unassigned' | 'empty';
 /** Spotlight dims non-matches in place; hide removes them entirely. */
 type FilterMode = 'spotlight' | 'hide';
 /** Map = the spec↔plan mirror; Dependency = the leaf-group dep DAG. */
-type GraphMode = 'map' | 'dep';
+export type GraphMode = 'map' | 'dep';
 
 const DND_TYPE = 'text/plain';
 
@@ -146,11 +146,19 @@ interface GraphViewProps {
   onSelect: (id: string | null) => void;
   /** Global filter, shared across tabs; dims non-matches in place. */
   filter?: FilterState;
+  /** Map vs Dependency mode; lifted so the footer hint can follow it. */
+  mode: GraphMode;
+  onModeChange: (mode: GraphMode) => void;
 }
 
-export function GraphView({ selectedId, onSelect, filter = EMPTY_FILTER }: GraphViewProps) {
+export function GraphView({
+  selectedId,
+  onSelect,
+  filter = EMPTY_FILTER,
+  mode: graphMode,
+  onModeChange: setGraphMode,
+}: GraphViewProps) {
   const graph = useProjectGraph();
-  const [graphMode, setGraphMode] = useState<GraphMode>('map');
   const [inferChains, setInferChains] = useState(false);
   const [active, setActive] = useState<Record<FilterKey, boolean>>({
     unassigned: false,
