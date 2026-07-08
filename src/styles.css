@@ -1411,6 +1411,14 @@ body {
   opacity: 1;
 }
 
+/* Inferred sequential chain: display-only, so it reads as a faint suggestion. */
+.gedge-dep-inferred .react-flow__edge-path {
+  stroke: #9aa0a6;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: 0.6;
+}
+
 .gnode-waiting {
   border-color: #f0d9a3;
   background: #fffdf6;
