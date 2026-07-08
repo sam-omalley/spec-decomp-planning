@@ -11,10 +11,16 @@
  * which end starts the drag: the card giving its **right** handle is the
  * prerequisite, the card giving its **left** handle is the dependent — so
  * left→right or right→left both author the same edge. A same-side (l–l or
- * r–r) or self connection is rejected. The in-progress line carries an
- * arrow that always points at the left handle, previewing the flow.
- * Clicking a real, directly-authored edge removes it (after confirm);
- * inferred (dashed) and container-fanned edges are not click-deletable.
+ * r–r) or self connection is rejected. While a connection is in progress only
+ * the valid (opposite-side) handle shows on each card; the other is hidden.
+ * The in-progress line carries an arrow that always points at the left handle,
+ * previewing the flow.
+ *
+ * Removing/moving a dependency is by grabbing the arrow near one end
+ * (reconnection): the grabbed end detaches and drags while the other stays
+ * anchored — drop it on a valid handle to re-home the dependency, or on empty
+ * space to delete it. Only real, directly-authored edges are grabbable;
+ * inferred (dashed) and container-fanned edges are not.
  *
  * Real dependency edges are solid; the ghosted sequential-chain inference
  * (dep-free siblings) is dashed and muted. Cycles are red + animated,
@@ -22,7 +28,7 @@
  * non-matches in place so structure stays legible.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   Background,
   ConnectionMode,
@@ -31,6 +37,7 @@ import {
   MarkerType,
   Position,
   ReactFlow,
+  useConnection,
   useReactFlow,
 } from '@xyflow/react';
 import type {
@@ -43,7 +50,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 import { addEdge, edgeBetween, removeEdge } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
-import { resolveDependencyEnds } from './depAuthoring.ts';
+import { dragHandleVisibility, resolveDependencyEnds } from './depAuthoring.ts';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { layoutDependencies } from './depLayout.ts';
 
@@ -65,7 +72,7 @@ interface DepEdgeData extends Record<string, unknown> {
   graphEdgeId?: string;
 }
 
-function DepGraphNode({ data }: NodeProps<DepFlowNode>) {
+function DepGraphNode({ id, data }: NodeProps<DepFlowNode>) {
   const classes = [
     'gnode',
     'gnode-group',
@@ -80,11 +87,43 @@ function DepGraphNode({ data }: NodeProps<DepFlowNode>) {
   // Loose connection mode: both handles are sources, so a drag can start
   // from or land on either side. Which side a card contributes decides the
   // relationship — right = prerequisite (work flows out), left = dependent.
+  //
+  // While a connection is in progress (authoring, or reconnecting an existing
+  // arrow), reveal only the handle that would form a valid left↔right flow and
+  // hide the other, so a card near the pointer offers one unambiguous target.
+  // `fromHandle` is the anchored end — the origin when authoring, the
+  // still-attached end when reconnecting; the valid target is the opposite
+  // side on any *other* card, and the anchored side only on the from-card.
+  // Signature of the in-progress connection (empty when idle) — a primitive so
+  // the selector stays referentially stable across renders.
+  const conn = useConnection((c) =>
+    c.inProgress ? `${c.fromNode?.id ?? ''}:${c.fromHandle?.id ?? ''}` : '',
+  );
+  let leftDrag = '';
+  let rightDrag = '';
+  if (conn) {
+    const sep = conn.indexOf(':');
+    const vis = dragHandleVisibility(id, conn.slice(0, sep), conn.slice(sep + 1));
+    if (vis) {
+      leftDrag = vis.left === 'show' ? 'dephandle-drag-show' : 'dephandle-drag-hide';
+      rightDrag = vis.right === 'show' ? 'dephandle-drag-show' : 'dephandle-drag-hide';
+    }
+  }
   return (
     <div className={classes} style={{ ['--group-color' as string]: data.color }}>
-      <Handle type="source" position={Position.Left} id="l" className="ghandle dephandle" />
+      <Handle
+        type="source"
+        position={Position.Left}
+        id="l"
+        className={`ghandle dephandle ${leftDrag}`}
+      />
       <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
-      <Handle type="source" position={Position.Right} id="r" className="ghandle dephandle" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="r"
+        className={`ghandle dephandle ${rightDrag}`}
+      />
     </div>
   );
 }
@@ -218,6 +257,10 @@ export function DependencyGraph({
           targetHandle: 'l',
           className,
           animated: e.inCycle,
+          // Only a real, directly-authored edge can be grabbed and reconnected
+          // (or dragged off to delete); inferred/fan-out edges have no single
+          // backing edge to pick up.
+          reconnectable: backing ? true : false,
           data: { graphEdgeId: backing?.id },
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -229,6 +272,40 @@ export function DependencyGraph({
       }),
     [layout.edges, graph],
   );
+
+  // Reconnection = "grab the arrow near one end". React Flow detaches the
+  // grabbed end and drags it while the other stays anchored. Dropping it on a
+  // valid handle re-homes the dependency (remove old + add new, atomically);
+  // dropping it on empty space (or an invalid handle) means it was picked up
+  // and not put back — so the edge is deleted. `reconnected` tracks whether a
+  // valid drop landed, distinguishing the two in `onReconnectEnd`.
+  const reconnected = useRef(false);
+
+  function onReconnectStart() {
+    reconnected.current = false;
+  }
+
+  function onReconnect(oldEdge: FlowEdge<DepEdgeData>, connection: Connection) {
+    const graphEdgeId = oldEdge.data?.graphEdgeId;
+    const ends = resolveDependencyEnds(connection);
+    if (!graphEdgeId || !ends) return; // invalid drop → let onReconnectEnd delete
+    reconnected.current = true;
+    const { dependent, prerequisite } = ends;
+    store.commit((g) => {
+      let next = g.edges[graphEdgeId] ? removeEdge(g, graphEdgeId) : g;
+      if (!next.nodes[dependent] || !next.nodes[prerequisite]) return next;
+      if (edgeBetween(next, 'depends_on', dependent, prerequisite)) return next;
+      return addEdge(next, { type: 'depends_on', from: dependent, to: prerequisite });
+    });
+    onSelect(dependent);
+  }
+
+  function onReconnectEnd(_: unknown, edge: FlowEdge<DepEdgeData>) {
+    if (reconnected.current) return; // already re-homed in onReconnect
+    const graphEdgeId = edge.data?.graphEdgeId;
+    if (!graphEdgeId) return;
+    store.commit((g) => (g.edges[graphEdgeId] ? removeEdge(g, graphEdgeId) : g));
+  }
 
   function onConnect(connection: Connection) {
     const ends = resolveDependencyEnds(connection);
@@ -244,16 +321,6 @@ export function DependencyGraph({
 
   function isValidConnection(connection: Connection | FlowEdge): boolean {
     return resolveDependencyEnds(connection) !== null;
-  }
-
-  function onEdgeClick(_: unknown, edge: FlowEdge<DepEdgeData>) {
-    const graphEdgeId = edge.data?.graphEdgeId;
-    if (!graphEdgeId) return; // inferred or container-fanned: nothing single to remove
-    // source = prerequisite, target = dependent (drawn with the flow).
-    const prq = graph.nodes[edge.source]?.title.trim() || 'Untitled';
-    const dep = graph.nodes[edge.target]?.title.trim() || 'Untitled';
-    if (!window.confirm(`Remove dependency: “${dep}” depends on “${prq}”?`)) return;
-    store.commit((g) => (g.edges[graphEdgeId] ? removeEdge(g, graphEdgeId) : g));
   }
 
   if (layout.nodes.length === 0) {
@@ -278,7 +345,9 @@ export function DependencyGraph({
       connectionLineComponent={DepConnectionLine}
       isValidConnection={isValidConnection}
       onConnect={onConnect}
-      onEdgeClick={onEdgeClick}
+      onReconnectStart={onReconnectStart}
+      onReconnect={onReconnect}
+      onReconnectEnd={onReconnectEnd}
       onNodeClick={(_, node) => onSelect(node.id)}
       onPaneClick={() => onSelect(null)}
     >
