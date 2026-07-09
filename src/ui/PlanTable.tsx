@@ -91,11 +91,12 @@ export function PlanTable({
   }
 
   function onRowMouseDown(id: string, event: MouseEvent) {
-    // Only intercept modified clicks so plain clicks on inputs/selects
-    // still edit; the hook preventDefaults ⇧/⌘ to preserve focus.
-    if (event.shiftKey || event.metaKey || event.ctrlKey) {
-      multi.onRowPointerDown(id, event);
-    }
+    // Always route through the hook: ⇧/⌘ extend or toggle (and preventDefault
+    // to preserve focus), while a plain click collapses the selection back to
+    // this row — otherwise a shift-selected range stays highlighted even after
+    // clicking away. The plain branch does not preventDefault, so inputs and
+    // selects still focus and edit normally.
+    multi.onRowPointerDown(id, event);
   }
 
   function onTitleKeyDown(event: KeyboardEvent) {
