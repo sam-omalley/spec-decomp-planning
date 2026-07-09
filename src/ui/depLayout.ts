@@ -232,6 +232,81 @@ function orderWithinLayers(
   }
 }
 
+/** Isotonic regression (pool-adjacent-violators): the minimal-displacement
+ *  positions closest to `desired` (same order) with each at least `gap`
+ *  below the next. Substituting z[i] = pos[i] − i·gap turns the min-gap
+ *  constraint into "z non-decreasing", which PAVA solves optimally. */
+function packWithGap(desired: number[], gap: number): number[] {
+  const n = desired.length;
+  if (n === 0) return [];
+  // Blocks of equal value, kept non-decreasing by merging on violation.
+  const value: number[] = [];
+  const count: number[] = [];
+  const total: number[] = [];
+  for (let i = 0; i < n; i++) {
+    let sum = desired[i]! - i * gap;
+    let cnt = 1;
+    while (value.length > 0 && value[value.length - 1]! > sum / cnt) {
+      sum += total.pop()!;
+      cnt += count.pop()!;
+      value.pop();
+    }
+    value.push(sum / cnt);
+    count.push(cnt);
+    total.push(sum);
+  }
+  const out: number[] = [];
+  for (let b = 0; b < value.length; b++) {
+    for (let k = 0; k < count[b]!; k++) out.push(value[b]! + out.length * gap);
+  }
+  return out;
+}
+
+/** Vertical coordinate assignment. Centring each column on its own row
+ *  count (the old approach) ignored where a node's neighbours sat, so a
+ *  single-neighbour chain drifted apart and its edges bent. Instead, relax
+ *  each node toward the mean row of its neighbours in adjacent layers over a
+ *  few down/up sweeps, packing each layer to keep its order and a minimum
+ *  row gap (`packWithGap`). Straight chains converge to a straight line;
+ *  a fan splits only as much as the gap forces. */
+function assignRowCoordinates(
+  byLayer: Map<number, string[]>,
+  needs: ReadonlyMap<string, ReadonlySet<string>>,
+): Map<string, number> {
+  const neededBy = new Map<string, Set<string>>();
+  for (const [node, prereqs] of needs) {
+    for (const p of prereqs) {
+      let set = neededBy.get(p);
+      if (!set) neededBy.set(p, (set = new Set()));
+      set.add(node);
+    }
+  }
+
+  const layers = [...byLayer.keys()].sort((a, b) => a - b);
+  const y = new Map<string, number>();
+  for (const l of layers) byLayer.get(l)!.forEach((id, i) => y.set(id, i * DEP_ROW_HEIGHT));
+
+  const relax = (l: number, neighboursOf: ReadonlyMap<string, ReadonlySet<string>>): void => {
+    const bucket = byLayer.get(l)!;
+    const desired = bucket.map((id, i) => {
+      const nbrs = [...(neighboursOf.get(id) ?? [])].filter((n) => y.has(n));
+      if (nbrs.length === 0) return y.get(id) ?? i * DEP_ROW_HEIGHT;
+      let sum = 0;
+      for (const n of nbrs) sum += y.get(n)!;
+      return sum / nbrs.length;
+    });
+    const placed = packWithGap(desired, DEP_ROW_HEIGHT);
+    bucket.forEach((id, i) => y.set(id, placed[i]!));
+  };
+
+  const ITERATIONS = 8;
+  for (let s = 0; s < ITERATIONS; s++) {
+    for (let i = 1; i < layers.length; i++) relax(layers[i]!, needs); // align to prereqs
+    for (let i = layers.length - 2; i >= 0; i--) relax(layers[i]!, neededBy); // to dependents
+  }
+  return y;
+}
+
 /** Ghost sequential chains across sibling leaf groups. Suppression is
  *  per-pair: a consecutive pair is skipped only when that exact pair is
  *  already directly connected by an explicit dependency (either
@@ -319,26 +394,15 @@ export function layoutDependencies(
     if (bucket) bucket.push(id);
     else byLayer.set(l, [id]);
   }
-  // Reduce crossings within each column before placing rows.
+  // Reduce crossings within each column, then place each node near its
+  // neighbours' rows so straight chains stay straight.
   orderWithinLayers(byLayer, combined);
-  let maxRows = 0;
-  for (const bucket of byLayer.values()) maxRows = Math.max(maxRows, bucket.length);
-
-  const position = new Map<string, { x: number; y: number }>();
-  for (const [l, bucket] of byLayer) {
-    const offset = (maxRows - bucket.length) / 2;
-    bucket.forEach((id, i) => {
-      position.set(id, {
-        x: l * DEP_COLUMN_WIDTH,
-        y: (i + offset) * DEP_ROW_HEIGHT,
-      });
-    });
-  }
+  const rowY = assignRowCoordinates(byLayer, combined);
 
   const nodes: DepGraphNode[] = leaves.map((id) => ({
     id,
-    x: position.get(id)!.x,
-    y: position.get(id)!.y,
+    x: layer.get(id)! * DEP_COLUMN_WIDTH,
+    y: rowY.get(id)!,
     color: rootGroupColor(graph, id),
     cycle: cycleOf.has(id) ? cycleOf.get(id)! : null,
   }));
