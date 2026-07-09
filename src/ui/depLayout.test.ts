@@ -120,6 +120,20 @@ describe('layoutDependencies', () => {
     );
   });
 
+  it('aligns a single-neighbour node with its neighbour (no bent edge)', () => {
+    // Two roots a, b in column 0; c depends on a alone in column 1. c should
+    // sit level with a rather than being re-centred in its own column (which
+    // used to bend the a→c edge).
+    let g = emptyGraph();
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = createGroup(g, { id: 'b', title: 'B' });
+    g = createGroup(g, { id: 'c', title: 'C' });
+    g = dep(g, 'c', 'a'); // c needs a
+    const byId = new Map(layoutDependencies(g).nodes.map((n) => [n.id, n]));
+    assert.equal(byId.get('c')!.x, DEP_COLUMN_WIDTH);
+    assert.equal(byId.get('c')!.y, byId.get('a')!.y);
+  });
+
   it('orders within a layer to uncross fan edges (barycenter pass)', () => {
     // Two sources, two targets, wired crossed in pre-order: s1→t2, s2→t1.
     // The barycenter pass should place t2 above t1 (reversing pre-order)
