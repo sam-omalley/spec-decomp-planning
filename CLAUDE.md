@@ -170,11 +170,11 @@ items. Its scheduler/views are still to build.
    toggles (details / sub-items / backlog); read-only, Copy to export.
    Members ordered by spec pre-order.)
 
-Project-management extension (planned, in dependency order — 8 unblocks
-all; 9 and 10 are independent; 11–13 consume 10). Each slice is
-shippable alone and keeps the dependency-free-core / tested-domain rules:
+    Project-management extension (planned, in dependency order — 8 unblocks
+    all; 9 and 10 are independent; 11–13 consume 10). Each slice is
+    shippable alone and keeps the dependency-free-core / tested-domain rules:
 
-1. ✅ Model foundation — `types.ts` (the fields in Data model above),
+8. ✅ Model foundation — `types.ts` (the fields in Data model above),
    `serialize.ts` v4 + backfill migration (tested), and new `graph.ts`
    mutations: `setEstimate` (non-negative, per-axis), `setActualDates`,
    `addExternalRef` / `removeExternalRef` (dedup on system+key),
@@ -183,7 +183,7 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    set ⇒ `done`; `actualStart` set with no finish ⇒ `in_progress` unless
    manually `blocked` (a started-then-blocked item stays blocked); neither
    set ⇒ status untouched, so manual states survive.
-2. ✅ Entry UI — `NodeMetaEditor.tsx` (details-card fields: status,
+9. a) ✅ Entry UI — `NodeMetaEditor.tsx` (details-card fields: status,
    priority, the two estimate axes points + duration/days, actual
    start/finish dates, external-ref chips) + a compact rolled `Nd · Npt`
    estimate chip on rows (⚠ when a subtree has unestimated leaves) +
@@ -195,7 +195,7 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    `model/` so the slice-10 scheduler imports it without a ui→model
    back-dependency.) NOTE: first built on the spec/work side by mistake;
    corrected by slice 9a.
-9a. ✅ Re-targeted to the plan. Estimation, actuals, keys, status and
+   b) ✅ Re-targeted to the plan. Estimation, actuals, keys, status and
    dependencies live on the **group (plan)** side; the spec is purely
    structural (title + details only). `Outliner` renders status bullets,
    dep badges, estimate chip and the `NodeMetaEditor`/`DependencyEditor`
@@ -205,7 +205,7 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
    load. Shipped dep tests (`graph`/`analysis`/`projectStore`) flipped to
    groups. Verified in preview: plan rows carry the editor + status; spec
    view is structural-only.
-3. ✅ Scheduler — `src/model/schedule.ts`, pure + heavily tested
+10. ✅ Scheduler — `src/model/schedule.ts`, pure + heavily tested
     (`scheduleProject`, `schedulingUnits`). Schedules the **group tree**
     (the plan). Scheduling units = topmost groups with an own estimate;
     unit deps expand from the raw group dep graph (`analysis.ts`,
@@ -223,20 +223,20 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     `projectStart` / `projectFinish`. (`assigned_to` unused.) Tests: unit
     selection, weekend skipping, dep order, parallelism cap, speed
     multiplier, cycle batch, container span, done/in-progress override.
-4. ✅ Settings UI — header ⚙ popover (`SettingsPanel.tsx`) with
+11. ✅ Settings UI — header ⚙ popover (`SettingsPanel.tsx`) with
     Schedule / Capacity / Conversion sections: `startDate`, `targetDate`,
     `parallelTracks`, `speedMultiplier`, `pointsPerDay`, `hoursPerDay`.
     Edits go through `updateSettings` (undoable, autosaved with the
     graph), coalesced per field; inputs are pre-validated so an invalid
     value is ignored rather than thrown (a throwing commit would
     propagate). Closes on outside-click / Esc. Verified in preview.
-5. ✅ Timeline / Gantt view — 5th tab `TimelineView.tsx` + pure
+12. ✅ Timeline / Gantt view — 5th tab `TimelineView.tsx` + pure
     `timelineLayout.ts` (unit-tested). Bars per scheduled group in
     pre-order (containers span their units), fraction-based geometry over
     the date range, ▸ projected-finish and 🎯 target-date markers, weekly
     gridline ticks, actual (done) bars styled distinctly from planned.
     Hand-rolled SVG, no chart dep. Verified in preview.
-6. ✅ Metrics view — 6th tab `MetricsView.tsx` + pure `src/model/metrics.ts`
+13. ✅ Metrics view — 6th tab `MetricsView.tsx` + pure `src/model/metrics.ts`
     (unit-tested): `projectionSummary` (projected finish, done/remaining
     days + points, calendar-day variance vs target, onTrack),
     `estimateVsActual` (per done-unit + rolled, working-day durations),
@@ -244,7 +244,7 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     hand-rolled SVG burn-up (ideal / total / target lines) + est-vs-actual
     bars. Verified in preview.
 
-7. ✅ Bulk editing — three surfaces over the existing graph, **no model
+14. ✅ Bulk editing — three surfaces over the existing graph, **no model
     change** (all reuse existing mutations + pure helpers): (a) **paste
     multi-line text → rows**, nesting inferred from indentation
     (`parseOutlineText` in `ui/outline.ts`, tested; wired via
@@ -262,15 +262,15 @@ shippable alone and keeps the dependency-free-core / tested-domain rules:
     a muted placeholder; editing a field with a multi-selection bulk-sets
     it across the selection in one commit. Verified in preview.
 
-View narrowing + locking + graph modes (planned, slices 15–18). All are
-**view/config layers over the existing graph — no new node/edge types.**
-15 and 16 are ephemeral view state (React-only, never serialized/undone);
-17 is a persisted config value on `settings`; 18 is a new projection.
-15 lays the toolbar + filtered-`visibleRows` path that 16 extends; 17 and
-18 are independent. Each keeps the pure-helpers-in-`model`/`ui`,
-tested-domain rule.
+    View narrowing + locking + graph modes (planned, slices 15–18). All are
+    **view/config layers over the existing graph — no new node/edge types.**
+    15 and 16 are ephemeral view state (React-only, never serialized/undone);
+    17 is a persisted config value on `settings`; 18 is a new projection.
+    15 lays the toolbar + filtered-`visibleRows` path that 16 extends; 17 and
+    18 are independent. Each keeps the pure-helpers-in-`model`/`ui`,
+    tested-domain rule.
 
-1. ✅ Global filter/search — a header search box (lifted App state, shared
+15. ✅ Global filter/search — a header search box (lifted App state, shared
     across tabs, cleared on Esc; **not** stored in the graph, undo, or
     autosave; rendered only on the searchable tabs). Pure `ui/filter.ts`
     (unit-tested): a `FilterState` (case-insensitive text over
@@ -288,7 +288,7 @@ tested-domain rule.
     stay legible), composing with its existing unassigned/empty spotlight.
     A live match count sits by the box. Scope: Spec, Planning, Graph —
     Timeline/Metrics/Markdown unchanged. Verified in preview.
-2. ✅ Depth filtering (Spec + Planning) — a compact depth stepper
+16. ✅ Depth filtering (Spec + Planning) — a compact depth stepper
     (`1 2 3 … All`) in each outliner's toolbar capping visible rows to the
     top N levels (roots = depth 0; "N levels" ⇒ depth < N). A node at the
     cutoff with hidden descendants reuses the existing collapsed
@@ -299,7 +299,7 @@ tested-domain rule.
     independent narrowings, but an active search wins — matched rows and
     their ancestors surface even past the depth cap, so search can always
     reach deep matches.
-3. ✅ Structural lock (top-N levels) — freeze the top `specLockDepth` /
+17. ✅ Structural lock (top-N levels) — freeze the top `specLockDepth` /
     `planLockDepth` levels of a side against *accidental* edits (a node is
     locked when its depth < the side's lock depth; roots = depth 0). New
     integer fields on `ProjectSettings` (default 0), set via a **Locks**
@@ -319,7 +319,7 @@ tested-domain rule.
     allowed (traceability, not structure), and the plan meta fields
     (status, estimate, dates, deps, refs) remain editable on a locked
     group — you estimate and track against a fixed skeleton.
-4. ✅ Graph tab view modes + Dependency View — the Graph tab gets an
+18. ✅ Graph tab view modes + Dependency View — the Graph tab gets an
     internal mode switch (segmented control): **Map** (today's spec↔plan
     mirrored layout) and **Dependency**. The Dependency view is **plan
     only, leaf groups only** (groups with no child group — the "stories"),
@@ -348,7 +348,7 @@ tested-domain rule.
     the pure-projection rule holds. A toggle hides the inference; a later
     "materialise chain → real `depends_on` edges" action can promote it
     when you actually mean it.
-5. ✅ Author dependencies in the Dependency view (drag-to-connect) — the
+19. ✅ Author dependencies in the Dependency view (drag-to-connect) — the
     read-mostly stance from slice 18 gains editing, but via **handle
     drag**, not node-onto-node drag (node-body drag fought the pan gesture
     and was unreliable). Each leaf-group node grows a handle on each side;
@@ -388,13 +388,13 @@ tested-domain rule.
     layout re-projects). Only the Dependency view is connectable — the Map
     view keeps its HTML5 assignment drag untouched.
 
-UX + fixes pass (slices 20–24, from real-use feedback). All are
-**view/UI-layer changes over the existing graph — no new node/edge types,
-no model change** except slice 24, which only *simplifies the entry UI*
-over the unchanged `ExternalRef` shape. Each keeps the
-pure-helpers-in-`model`/`ui`, tested-domain rule.
+    UX + fixes pass (slices 20–24, from real-use feedback). All are
+    **view/UI-layer changes over the existing graph — no new node/edge types,
+    no model change** except slice 24, which only *simplifies the entry UI*
+    over the unchanged `ExternalRef` shape. Each keeps the
+    pure-helpers-in-`model`/`ui`, tested-domain rule.
 
-20. Dependency-view crossing reduction — the layered left→right DAG in
+20. ✅ Dependency-view crossing reduction — the layered left→right DAG in
     `depLayout.ts` ordered nodes within a layer by pre-order, so
     fan-out/fan-in (parallelisation) edges crossed badly and read as a
     dense grid. Add a Sugiyama-style **barycenter ordering** pass: after
@@ -403,7 +403,7 @@ pure-helpers-in-`model`/`ui`, tested-domain rule.
     layer (pure, deterministic, stable-tie-broken by initial pre-order),
     then assign `y` from the resulting per-layer order. Pure + unit-tested
     in `depLayout.ts`; no change to columns (`x`) or the edge set.
-21. Inferred chains coexist with explicit deps — `inferredChains` used to
+21. ✅ Inferred chains coexist with explicit deps — `inferredChains` used to
     drop a sibling group's *entire* ghost chain the moment any explicit dep
     touched those siblings (all-or-nothing). Switch to **per-pair
     suppression** keyed on the **transitive** explicit relation: ghost a
@@ -416,7 +416,7 @@ pure-helpers-in-`model`/`ui`, tested-domain rule.
     ran against the flow and closed a cycle — the tangle in the bug report).
     Still display-only — never written to the graph, never fed to the
     scheduler. Unit-tested (`transitiveNeeds` closure + contradiction case).
-22. Structural-lock "phantom level" fix — locking N levels of a side that
+22. ✅ Structural-lock "phantom level" fix — locking N levels of a side that
     has fewer than N levels froze a level that doesn't exist yet, which
     hid the add-root / "Add the first item" button so you could never
     create the first node (and, more generally, the first child at a
@@ -428,7 +428,7 @@ pure-helpers-in-`model`/`ui`, tested-domain rule.
     `treeDepth`. An empty side clamps to 0 (nothing locked → create
     allowed); a roots-only side with a deeper lock still freezes the roots
     but lets you add children. UI-only, tested in `locks.test.ts`.
-23. Cross-view navigation + de-truncation — read-only views (Table,
+23. ✅ Cross-view navigation + de-truncation — read-only views (Table,
     Metrics, Timeline) truncate titles and offered no way back to a
     group's definition. Add an App-level `reveal(id)` that jumps to the
     node's home surface (group → Planning/outline, work → Spec) and
@@ -436,7 +436,7 @@ pure-helpers-in-`model`/`ui`, tested-domain rule.
     in outline" (⤢) button + full-title `title` tooltip on the title
     input. **MetricsView**: est-vs-actual rows become clickable → reveal.
     **TimelineView**: row click reveals (was select-only). No model change.
-24. Key entry, simplified — the external-ref entry UI asked for
+24. ✅ Key entry, simplified — the external-ref entry UI asked for
     system + key + url; in practice everything is a Jira key. Extract a
     shared **`KeyEditor`** component: existing refs render as chips
     (keeping any `url` link + non-`jira` `system` label from imported
@@ -446,8 +446,6 @@ pure-helpers-in-`model`/`ui`, tested-domain rule.
     `PlanTable` (was a read-only count) so keys are enterable from the
     table. The `ExternalRef` model (system/key/url) is untouched — the UI
     just narrows to key-only, leaving room to grow.
-
-- v2+: merge/split nodes, critical path, richer graph editing.
 
 ## Conventions & environment
 
