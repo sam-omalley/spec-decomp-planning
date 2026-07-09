@@ -106,10 +106,12 @@ export function Outliner({
   const depth = useMemo(() => treeDepth(graph, side), [graph, side]);
   const showDepthStepper = onMaxDepthChange !== undefined && depth >= 2;
 
-  // Structural lock: the top N levels of this side are frozen. Creating a
-  // new root would add a node at a locked level, so the add-root buttons
-  // hide while depth 0 is locked; per-row edits are gated in OutlinerRow.
-  const rootLocked = isLocked(0, side, graph.settings);
+  // Structural lock: the top N levels of this side are frozen, but only up
+  // to the levels that actually exist (`depth` = treeDepth). Creating a new
+  // root would add a node at a locked level, so the add-root buttons hide
+  // while depth 0 is locked — yet an empty side clamps to 0 levels, so the
+  // "add the first item" button stays live. Per-row edits are gated below.
+  const rootLocked = isLocked(0, side, graph.settings, depth);
 
   // Multi-select layered over App's single-selection anchor: ⇧/⌘ click,
   // ⇧+Arrow. Structural ops (indent/outdent/reorder/delete) fan out to
@@ -559,7 +561,7 @@ export function Outliner({
               </>
             ) : undefined
           }
-          locked={isLocked(row.depth, side, graph.settings)}
+          locked={isLocked(row.depth, side, graph.settings, depth)}
           registerInput={(id, el) => {
             if (el) inputRefs.current.set(id, el);
             else inputRefs.current.delete(id);

@@ -13,12 +13,21 @@
  * collapsed per Tarjan SCC (they share a column) and reported so the view
  * can draw them red + animated.
  *
- * Implicit sequential chain (display inference only): for a set of sibling
- * leaf groups with NO explicit dependency among them, a sequential chain
- * in sibling order (A→B→C) is inferred and marked `inferred`. It is
- * suppressed the moment any explicit dependency exists among those
- * siblings. It never touches the graph and never reaches the scheduler —
- * it only influences this projection.
+ * Within a layer, nodes are ordered by a Sugiyama-style barycenter pass
+ * (a few down/up sweeps sorting each layer by the mean position of its
+ * neighbours in the adjacent layer) to reduce edge crossings — fan-out /
+ * fan-in parallelisation would otherwise read as a dense, crossed grid.
+ * The pass is deterministic and stable (ties break by the initial
+ * pre-order), and touches `y` only — columns (`x`) and the edge set are
+ * unchanged.
+ *
+ * Implicit sequential chain (display inference only): for sibling leaf
+ * groups, a sequential chain in sibling order (A→B→C) is inferred and
+ * marked `inferred`. Suppression is per-pair, not all-or-nothing — a
+ * consecutive pair loses its ghost edge only if that exact pair is already
+ * directly connected by an explicit dependency, so inferred chains coexist
+ * with explicit cross-links. It never touches the graph and never reaches
+ * the scheduler — it only influences this projection.
  */
 
 import { childrenOf, groupRootsOf, subtreeIds } from '../model/graph.ts';
@@ -168,8 +177,65 @@ function longestPathLayers(
   return layer;
 }
 
-/** Ghost sequential chains across sibling leaf groups that carry no
- *  explicit dependency among themselves. */
+/** Barycenter crossing-reduction: reorder the nodes inside each layer so
+ *  they sit near their neighbours in the adjacent layers, cutting edge
+ *  crossings for fan-out / fan-in. Deterministic — a fixed number of
+ *  down (order by prerequisites) / up (order by dependents) sweeps, ties
+ *  broken by the incoming order so it is stable. Mutates the per-layer
+ *  buckets in place. `needs` is the (combined) dependency relation. */
+function orderWithinLayers(
+  byLayer: Map<number, string[]>,
+  needs: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
+  const neededBy = new Map<string, Set<string>>();
+  for (const [node, prereqs] of needs) {
+    for (const p of prereqs) {
+      let set = neededBy.get(p);
+      if (!set) neededBy.set(p, (set = new Set()));
+      set.add(node);
+    }
+  }
+
+  const layers = [...byLayer.keys()].sort((a, b) => a - b);
+  const order = new Map<string, number>();
+  const reindex = (bucket: string[]): void => bucket.forEach((id, i) => order.set(id, i));
+  for (const l of layers) reindex(byLayer.get(l)!);
+
+  const sweep = (
+    l: number,
+    neighboursOf: ReadonlyMap<string, ReadonlySet<string>>,
+  ): void => {
+    const bucket = byLayer.get(l)!;
+    const bary = new Map<string, number>();
+    bucket.forEach((id, i) => {
+      const nbrs = [...(neighboursOf.get(id) ?? [])].filter((n) => order.has(n));
+      if (nbrs.length === 0) {
+        bary.set(id, i); // no anchor on this side — hold current position
+        return;
+      }
+      let sum = 0;
+      for (const n of nbrs) sum += order.get(n)!;
+      bary.set(id, sum / nbrs.length);
+    });
+    const sorted = bucket
+      .map((id, i) => ({ id, i }))
+      .sort((a, b) => bary.get(a.id)! - bary.get(b.id)! || a.i - b.i)
+      .map((x) => x.id);
+    byLayer.set(l, sorted);
+    reindex(sorted);
+  };
+
+  const SWEEPS = 4;
+  for (let s = 0; s < SWEEPS; s++) {
+    for (let i = 1; i < layers.length; i++) sweep(layers[i]!, needs);
+    for (let i = layers.length - 2; i >= 0; i--) sweep(layers[i]!, neededBy);
+  }
+}
+
+/** Ghost sequential chains across sibling leaf groups. Suppression is
+ *  per-pair: a consecutive pair is skipped only when that exact pair is
+ *  already directly connected by an explicit dependency (either
+ *  direction), so inferred chains coexist with explicit cross-links. */
 function inferredChains(
   graph: ProjectGraph,
   leafSet: ReadonlySet<string>,
@@ -182,25 +248,18 @@ function inferredChains(
     if (kids.length > 0) siblingLists.push(kids);
   }
 
+  const linked = (a: string, b: string): boolean =>
+    (realNeeds.get(a)?.has(b) ?? false) || (realNeeds.get(b)?.has(a) ?? false);
+
   const result: { dependent: string; prerequisite: string }[] = [];
   for (const siblings of siblingLists) {
     const leaves = siblings.filter((s) => leafSet.has(s));
     if (leaves.length < 2) continue;
-    const members = new Set(leaves);
-    // An explicit dependency between any two members suppresses the chain.
-    let hasExplicit = false;
-    for (const m of leaves) {
-      for (const n of realNeeds.get(m) ?? []) {
-        if (members.has(n)) {
-          hasExplicit = true;
-          break;
-        }
-      }
-      if (hasExplicit) break;
-    }
-    if (hasExplicit) continue;
     for (let i = 1; i < leaves.length; i++) {
-      result.push({ dependent: leaves[i]!, prerequisite: leaves[i - 1]! });
+      const prev = leaves[i - 1]!;
+      const next = leaves[i]!;
+      if (linked(prev, next)) continue; // pair already explicitly sequenced
+      result.push({ dependent: next, prerequisite: prev });
     }
   }
   return result;
@@ -260,6 +319,8 @@ export function layoutDependencies(
     if (bucket) bucket.push(id);
     else byLayer.set(l, [id]);
   }
+  // Reduce crossings within each column before placing rows.
+  orderWithinLayers(byLayer, combined);
   let maxRows = 0;
   for (const bucket of byLayer.values()) maxRows = Math.max(maxRows, bucket.length);
 

@@ -1052,27 +1052,36 @@ body {
   color: var(--muted);
 }
 
-.ref-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.ref-input-system {
-  width: 70px;
-}
-
 .ref-input-key {
   width: 90px;
-}
-
-.ref-input-url {
-  width: 130px;
 }
 
 .ref-add-button:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* Shared key editor (chips + single key input), used in the details card
+   and — compact — in the plan table's Keys cell. */
+.key-editor {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.key-editor-compact {
+  gap: 4px;
+}
+
+.key-editor-compact .ref-chip {
+  font-size: 11px;
+  padding: 1px 3px;
+}
+
+.key-editor-compact .ref-input-key {
+  width: 68px;
+  font-size: 12px;
 }
 
 .est-chip {
@@ -1337,6 +1346,15 @@ body {
   grid-template-columns: 160px 1fr 52px;
   align-items: center;
   gap: 10px;
+}
+.eva-row-link {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+.eva-row-link:hover {
+  background: var(--accent-soft);
 }
 .eva-title {
   font-size: 13px;
@@ -1710,6 +1728,44 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   min-width: 220px;
 }
 
+.plan-table td.col-title {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Reveal ("open in outline") button: quiet until the row is hovered. */
+.cell-reveal {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 5px;
+  opacity: 0;
+}
+
+.plan-table-row:hover .cell-reveal,
+.cell-reveal:focus-visible {
+  opacity: 1;
+}
+
+.cell-reveal:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.plan-table th.col-keys {
+  text-align: left;
+}
+
+.plan-table td.col-keys {
+  min-width: 150px;
+}
+
 .status-select.status-in_progress {
   color: var(--accent);
 }
@@ -1720,16 +1776,6 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 
 .status-select.status-blocked {
   color: #c23b3b;
-}
-
-.cell-count {
-  display: inline-block;
-  min-width: 18px;
-  padding: 1px 6px;
-  border-radius: 9px;
-  background: #eef0f4;
-  color: var(--text);
-  cursor: default;
 }
 
 .cell-muted {

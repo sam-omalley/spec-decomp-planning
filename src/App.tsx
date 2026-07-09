@@ -83,6 +83,21 @@ export function App() {
 
   const itemCount = Object.values(graph.nodes).filter((n) => n.type !== 'group').length;
 
+  // Jump from a read-only view (Table, Metrics, Timeline) to a node's home
+  // surface and select it: groups live in the Planning outline (where the
+  // full title, details and dependencies open), work nodes in the Spec view.
+  function reveal(id: string) {
+    const node = store.getState().nodes[id];
+    if (!node) return;
+    setSelectedId(id);
+    if (node.type === 'group') {
+      setPlanMode('outline');
+      setView('planning');
+    } else {
+      setView('spec');
+    }
+  }
+
   // Selection is view state; heal it when the node disappears
   // (delete, undo).
   useEffect(() => {
@@ -221,6 +236,7 @@ export function App() {
             filter={filter}
             maxDepth={planMaxDepth}
             onMaxDepthChange={setPlanMaxDepth}
+            onReveal={reveal}
           />
         )}
         {view === 'graph' && (
@@ -233,9 +249,9 @@ export function App() {
           />
         )}
         {view === 'timeline' && (
-          <TimelineView selectedId={selectedId} onSelect={setSelectedId} />
+          <TimelineView selectedId={selectedId} onSelect={setSelectedId} onReveal={reveal} />
         )}
-        {view === 'metrics' && <MetricsView />}
+        {view === 'metrics' && <MetricsView onReveal={reveal} />}
         {view === 'markdown' && <MarkdownView />}
       </main>
       <footer className="app-hints">
@@ -246,8 +262,8 @@ export function App() {
           </>
         )}
         {view === 'planning' && planMode === 'table' && (
-          <>Click a field to edit · <kbd>⇧</kbd>-click rows to bulk-set · parent rows show
-            rolled-up totals</>
+          <>Click a field to edit · <kbd>⇧</kbd>-click rows to bulk-set · <kbd>⤢</kbd> opens the
+            outline · parent rows show rolled-up totals</>
         )}
         {view === 'planning' && planMode === 'outline' && (
           <>
@@ -263,12 +279,12 @@ export function App() {
             left→right · click an arrow to remove</>
         )}
         {view === 'timeline' && (
-          <>Plan schedule as a Gantt · ▸ projected finish · 🎯 target date · set dates &amp;
-            capacity in ⚙ Settings</>
+          <>Plan schedule as a Gantt · click a bar to open its group · ▸ projected finish · 🎯
+            target date · dates &amp; capacity in ⚙ Settings</>
         )}
         {view === 'metrics' && (
-          <>Projection, burn-up &amp; estimate-vs-actual · set a target date in ⚙ Settings for
-            variance</>
+          <>Projection, burn-up &amp; estimate-vs-actual · click a unit to open its group · set a
+            target date in ⚙ Settings for variance</>
         )}
         {view === 'markdown' && (
           <>The delivery plan as Markdown · toggle sections · Copy to export</>
