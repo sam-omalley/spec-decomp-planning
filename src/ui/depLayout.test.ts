@@ -98,10 +98,45 @@ describe('layoutDependencies', () => {
     assert.equal(byId.get('epicB')!.x, DEP_COLUMN_WIDTH);
   });
 
-  it('suppresses the inferred chain when siblings carry an explicit dep', () => {
-    let g = fixture();
-    g = dep(g, 'epicB', 'epicA'); // explicit dep between the siblings
+  it('suppresses only the explicitly-linked pair, keeping the rest inferred', () => {
+    // Three sibling leaves a, b, c under one block; explicit dep on the
+    // (a,b) pair only. Per-pair suppression drops the a→b ghost but keeps
+    // the b→c ghost — inference coexists with the explicit link.
+    let g = emptyGraph();
+    g = createGroup(g, { id: 'blk', title: 'Block' });
+    g = createGroup(g, { id: 'a', title: 'A' }, 'blk');
+    g = createGroup(g, { id: 'b', title: 'B' }, 'blk');
+    g = createGroup(g, { id: 'c', title: 'C' }, 'blk');
+    g = dep(g, 'b', 'a'); // explicit, consecutive pair (a,b)
     const layout = layoutDependencies(g, { inferChains: true });
-    assert.ok(layout.edges.every((e) => !e.inferred));
+    const inferred = layout.edges
+      .filter((e) => e.inferred)
+      .map((e) => `${e.dependent}->${e.prerequisite}`)
+      .sort();
+    assert.deepEqual(inferred, ['c->b']);
+    // The explicit edge is still present and not marked inferred.
+    assert.ok(
+      layout.edges.some((e) => !e.inferred && e.dependent === 'b' && e.prerequisite === 'a'),
+    );
+  });
+
+  it('orders within a layer to uncross fan edges (barycenter pass)', () => {
+    // Two sources, two targets, wired crossed in pre-order: s1→t2, s2→t1.
+    // The barycenter pass should place t2 above t1 (reversing pre-order)
+    // so the edges run straight instead of crossing.
+    let g = emptyGraph();
+    g = createGroup(g, { id: 's1', title: 'S1' });
+    g = createGroup(g, { id: 's2', title: 'S2' });
+    g = createGroup(g, { id: 't1', title: 'T1' });
+    g = createGroup(g, { id: 't2', title: 'T2' });
+    g = dep(g, 't2', 's1'); // t2 needs s1
+    g = dep(g, 't1', 's2'); // t1 needs s2
+    const byId = new Map(layoutDependencies(g).nodes.map((n) => [n.id, n]));
+    // Sources share column 0, targets column 1.
+    assert.equal(byId.get('s1')!.x, 0);
+    assert.equal(byId.get('t1')!.x, DEP_COLUMN_WIDTH);
+    // Uncrossed: t2 (aligned with s1) sits above t1 (aligned with s2).
+    assert.ok(byId.get('t2')!.y < byId.get('t1')!.y);
+    assert.ok(byId.get('s1')!.y < byId.get('s2')!.y);
   });
 });

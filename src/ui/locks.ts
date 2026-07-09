@@ -12,6 +12,14 @@
  * locked level are unlocked, assignment onto/off a locked group stays
  * allowed, and a locked group's plan meta (status, estimate, dates, deps,
  * refs) remains editable.
+ *
+ * The effective lock depth is clamped to the levels that actually exist
+ * (`levelCount` = the side's `treeDepth`): you cannot freeze a level that
+ * has no nodes yet. So an empty side locks nothing — the "add the first
+ * item" button stays live — and a roots-only side with a deeper configured
+ * lock still freezes its roots but lets you add children. Callers that
+ * don't pass `levelCount` get the unclamped behaviour (no existing test or
+ * path relies on the phantom-level lock).
  */
 
 import type { ProjectSettings } from '../model/types.ts';
@@ -21,7 +29,9 @@ export function isLocked(
   depth: number,
   side: OutlineSide,
   settings: ProjectSettings,
+  levelCount = Infinity,
 ): boolean {
-  const lockDepth = side === 'group' ? settings.planLockDepth : settings.specLockDepth;
-  return depth < lockDepth;
+  const configured = side === 'group' ? settings.planLockDepth : settings.specLockDepth;
+  const effective = Math.min(configured, levelCount);
+  return depth < effective;
 }
