@@ -16,7 +16,12 @@ const CHART_W = 620;
 const CHART_H = 200;
 const PAD = 28;
 
-export function MetricsView() {
+interface MetricsViewProps {
+  /** Jump to a unit's group definition in the plan outline. */
+  onReveal?: (id: string) => void;
+}
+
+export function MetricsView({ onReveal }: MetricsViewProps = {}) {
   const graph = useProjectGraph();
   const summary = projectionSummary(graph);
   const variance = estimateVsActual(graph);
@@ -66,7 +71,7 @@ export function MetricsView() {
         {variance.rows.length === 0 ? (
           <p className="metric-hint">No completed units yet — finish some to compare.</p>
         ) : (
-          <EstimateVsActual variance={variance} />
+          <EstimateVsActual variance={variance} onReveal={onReveal} />
         )}
       </section>
     </div>
@@ -158,7 +163,13 @@ function BurnUpChart({
   );
 }
 
-function EstimateVsActual({ variance }: { variance: ReturnType<typeof estimateVsActual> }) {
+function EstimateVsActual({
+  variance,
+  onReveal,
+}: {
+  variance: ReturnType<typeof estimateVsActual>;
+  onReveal?: (id: string) => void;
+}) {
   const max = Math.max(
     1,
     ...variance.rows.flatMap((r) => [r.estimateDays ?? 0, r.actualDays ?? 0]),
@@ -168,10 +179,13 @@ function EstimateVsActual({ variance }: { variance: ReturnType<typeof estimateVs
       {variance.rows.map((row) => {
         const over = (row.varianceDays ?? 0) > 0;
         return (
-          <div key={row.id} className="eva-row">
-            <div className="eva-title" title={row.title}>
-              {row.title}
-            </div>
+          <div
+            key={row.id}
+            className={`eva-row${onReveal ? ' eva-row-link' : ''}`}
+            onClick={onReveal ? () => onReveal(row.id) : undefined}
+            title={onReveal ? `${row.title} — open in the plan outline` : row.title}
+          >
+            <div className="eva-title">{row.title}</div>
             <div className="eva-bars">
               <div className="eva-bar-wrap">
                 <span className="eva-tag">est</span>

@@ -11,6 +11,8 @@ import { buildTimeline } from './timelineLayout.ts';
 interface TimelineViewProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Jump to a bar's group definition in the plan outline. */
+  onReveal?: (id: string) => void;
 }
 
 const LABEL_W = 220;
@@ -19,7 +21,7 @@ const ROW_H = 26;
 const HEAD_H = 34;
 const PAD = 12;
 
-export function TimelineView({ selectedId, onSelect }: TimelineViewProps) {
+export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewProps) {
   const graph = useProjectGraph();
   const model = buildTimeline(graph);
 
@@ -67,7 +69,11 @@ export function TimelineView({ selectedId, onSelect }: TimelineViewProps) {
             (row.source === 'actual' ? ' tl-bar-actual' : '') +
             (selected ? ' tl-bar-selected' : '');
           return (
-            <g key={row.id} className="tl-row" onClick={() => onSelect(row.id)}>
+            <g
+              key={row.id}
+              className="tl-row"
+              onClick={() => (onReveal ? onReveal(row.id) : onSelect(row.id))}
+            >
               <rect x={0} y={y} width={width} height={ROW_H} className="tl-row-hit" />
               <text
                 x={PAD + row.depth * 14}

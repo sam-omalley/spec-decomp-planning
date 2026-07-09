@@ -18,8 +18,9 @@ import { rolledDuration, rolledEffort } from '../model/rollup.ts';
 import type { Priority, ProjectGraph, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
+import { KeyEditor } from './KeyEditor.tsx';
 import { isLocked } from './locks.ts';
-import { visibleRows } from './outline.ts';
+import { treeDepth, visibleRows } from './outline.ts';
 import { useMultiSelect } from './useMultiSelect.ts';
 
 const STATUSES: Status[] = ['not_started', 'in_progress', 'blocked', 'done'];
@@ -31,9 +32,16 @@ interface PlanTableProps {
   onSelect: (id: string | null) => void;
   /** Global filter, shared across tabs. */
   filter?: FilterState;
+  /** Jump to a group's definition in the outline (de-truncation / detail). */
+  onReveal?: (id: string) => void;
 }
 
-export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanTableProps) {
+export function PlanTable({
+  selectedId,
+  onSelect,
+  filter = EMPTY_FILTER,
+  onReveal,
+}: PlanTableProps) {
   const graph = useProjectGraph();
   const filterActive = isFilterActive(filter);
   const rows = useMemo(
@@ -50,6 +58,9 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
   const multi = useMultiSelect(orderedIds, selectedId, onSelect);
   const waiting = useMemo(() => waitingMap(graph), [graph]);
   const cycles = useMemo(() => cycleIndexOf(graph), [graph]);
+  // Levels that actually exist, so a lock deeper than the tree cannot
+  // freeze a phantom level.
+  const levels = useMemo(() => treeDepth(graph, 'group'), [graph]);
 
   /** Fan a mutation out over the selection when this row is part of it. */
   function targetsFor(id: string): string[] {
@@ -120,7 +131,7 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
             <th className="col-num">Days</th>
             <th>Start</th>
             <th>Finish</th>
-            <th className="col-num">Keys</th>
+            <th className="col-keys">Keys</th>
             <th className="col-num">Deps</th>
           </tr>
         </thead>
@@ -136,7 +147,7 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
             // Locked groups freeze naming only — the title is read-only, but
             // status/estimate/dates/keys stay editable (plan meta is always
             // editable against a frozen skeleton).
-            const locked = isLocked(row.depth, 'group', graph.settings);
+            const locked = isLocked(row.depth, 'group', graph.settings, levels);
             return (
               <tr
                 key={row.id}
@@ -157,6 +168,7 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
                   <input
                     className="cell-input cell-title"
                     value={node.title}
+                    title={node.title || undefined}
                     placeholder="Untitled"
                     readOnly={locked}
                     onChange={(e) =>
@@ -168,6 +180,15 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
                     onKeyDown={onTitleKeyDown}
                     onBlur={() => store.breakCoalescing()}
                   />
+                  {onReveal && (
+                    <button
+                      className="cell-reveal"
+                      title="Open in the plan outline (details, dependencies)"
+                      onClick={() => onReveal(row.id)}
+                    >
+                      ⤢
+                    </button>
+                  )}
                 </td>
                 <td>
                   <select
@@ -267,19 +288,8 @@ export function PlanTable({ selectedId, onSelect, filter = EMPTY_FILTER }: PlanT
                     }
                   />
                 </td>
-                <td className="col-num">
-                  {node.externalRefs.length > 0 ? (
-                    <span
-                      className="cell-count"
-                      title={node.externalRefs
-                        .map((r) => `${r.system} ${r.key}`)
-                        .join('\n')}
-                    >
-                      {node.externalRefs.length}
-                    </span>
-                  ) : (
-                    <span className="cell-muted">—</span>
-                  )}
+                <td className="col-keys">
+                  <KeyEditor id={row.id} compact />
                 </td>
                 <td className="col-num">
                   {inCycle && (

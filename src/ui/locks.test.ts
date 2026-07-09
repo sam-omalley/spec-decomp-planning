@@ -31,4 +31,20 @@ describe('isLocked', () => {
     assert.equal(isLocked(1, 'group', s), false);
     assert.equal(isLocked(0, 'work', s), false);
   });
+
+  it('clamps the lock to existing levels — an empty side locks nothing', () => {
+    const s = settings({ specLockDepth: 2, planLockDepth: 3 });
+    // levelCount 0 (no nodes yet): nothing is locked, so the "create first
+    // item" affordance stays live.
+    assert.equal(isLocked(0, 'work', s, 0), false);
+    assert.equal(isLocked(0, 'group', s, 0), false);
+  });
+
+  it('clamps a deep lock to a shallow tree, still freezing what exists', () => {
+    const s = settings({ specLockDepth: 3 });
+    // Roots-only side (one level): the roots freeze, but depth-1 children
+    // are addable/unlocked because level 1 does not exist yet.
+    assert.equal(isLocked(0, 'work', s, 1), true);
+    assert.equal(isLocked(1, 'work', s, 1), false);
+  });
 });

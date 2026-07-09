@@ -388,6 +388,61 @@ tested-domain rule.
     layout re-projects). Only the Dependency view is connectable — the Map
     view keeps its HTML5 assignment drag untouched.
 
+UX + fixes pass (slices 20–24, from real-use feedback). All are
+**view/UI-layer changes over the existing graph — no new node/edge types,
+no model change** except slice 24, which only *simplifies the entry UI*
+over the unchanged `ExternalRef` shape. Each keeps the
+pure-helpers-in-`model`/`ui`, tested-domain rule.
+
+20. Dependency-view crossing reduction — the layered left→right DAG in
+    `depLayout.ts` ordered nodes within a layer by pre-order, so
+    fan-out/fan-in (parallelisation) edges crossed badly and read as a
+    dense grid. Add a Sugiyama-style **barycenter ordering** pass: after
+    longest-path layering, run a fixed number of down/up sweeps that sort
+    each layer by the mean order-index of its neighbours in the adjacent
+    layer (pure, deterministic, stable-tie-broken by initial pre-order),
+    then assign `y` from the resulting per-layer order. Pure + unit-tested
+    in `depLayout.ts`; no change to columns (`x`) or the edge set.
+21. Inferred chains coexist with explicit deps — `inferredChains` used to
+    drop a sibling group's *entire* ghost chain the moment any explicit dep
+    touched those siblings (all-or-nothing). Switch to **per-pair
+    suppression**: ghost a sequential edge between each consecutive sibling
+    pair *unless that specific pair is already directly connected by an
+    explicit dependency* (either direction). So explicit cross-links (e.g.
+    a fan-out/in) and the inferred default chain show together; only the
+    exact pairs you've defined lose their ghost edge. Still display-only —
+    never written to the graph, never fed to the scheduler. Unit-tested.
+22. Structural-lock "phantom level" fix — locking N levels of a side that
+    has fewer than N levels froze a level that doesn't exist yet, which
+    hid the add-root / "Add the first item" button so you could never
+    create the first node (and, more generally, the first child at a
+    not-yet-existing depth). Fix: **clamp the effective lock depth to the
+    number of levels that actually exist** on that side —
+    `effective = min(configured, treeDepth(side))`. `isLocked` gains an
+    optional `levelCount` arg (default ∞ = no clamp, so existing callers/
+    tests are unchanged); `Outliner`/`PlanTable` pass the side's real
+    `treeDepth`. An empty side clamps to 0 (nothing locked → create
+    allowed); a roots-only side with a deeper lock still freezes the roots
+    but lets you add children. UI-only, tested in `locks.test.ts`.
+23. Cross-view navigation + de-truncation — read-only views (Table,
+    Metrics, Timeline) truncate titles and offered no way back to a
+    group's definition. Add an App-level `reveal(id)` that jumps to the
+    node's home surface (group → Planning/outline, work → Spec) and
+    selects it, threaded down as `onReveal`. **PlanTable**: a per-row "open
+    in outline" (⤢) button + full-title `title` tooltip on the title
+    input. **MetricsView**: est-vs-actual rows become clickable → reveal.
+    **TimelineView**: row click reveals (was select-only). No model change.
+24. Key entry, simplified — the external-ref entry UI asked for
+    system + key + url; in practice everything is a Jira key. Extract a
+    shared **`KeyEditor`** component: existing refs render as chips
+    (keeping any `url` link + non-`jira` `system` label from imported
+    data), and the add form is a **single key input that defaults
+    `system: 'jira'`** (no url). Use it in `NodeMetaEditor` (replacing the
+    three-field block) and add it as an editable **Keys** cell in
+    `PlanTable` (was a read-only count) so keys are enterable from the
+    table. The `ExternalRef` model (system/key/url) is untouched — the UI
+    just narrows to key-only, leaving room to grow.
+
 - v2+: merge/split nodes, critical path, richer graph editing.
 
 ## Conventions & environment

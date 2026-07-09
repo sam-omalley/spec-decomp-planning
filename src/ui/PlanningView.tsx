@@ -45,6 +45,8 @@ interface PlanningViewProps {
   /** Depth cap for the plan (group) outliner; undefined = all levels. */
   maxDepth?: number;
   onMaxDepthChange?: (maxDepth: number | undefined) => void;
+  /** Jump to a group's definition in the outline (used by the table). */
+  onReveal?: (id: string) => void;
 }
 
 export function PlanningView({
@@ -55,6 +57,7 @@ export function PlanningView({
   filter = EMPTY_FILTER,
   maxDepth,
   onMaxDepthChange,
+  onReveal,
 }: PlanningViewProps) {
   const graph = useProjectGraph();
   const [dropGroupId, setDropGroupId] = useState<string | null>(null);
@@ -197,7 +200,12 @@ export function PlanningView({
         </button>
       </div>
       {mode === 'table' ? (
-        <PlanTable selectedId={selectedId} onSelect={onSelect} filter={filter} />
+        <PlanTable
+          selectedId={selectedId}
+          onSelect={onSelect}
+          filter={filter}
+          onReveal={onReveal}
+        />
       ) : (
         <div className="planning-body">
       <div
