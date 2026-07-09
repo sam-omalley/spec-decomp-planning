@@ -406,12 +406,16 @@ pure-helpers-in-`model`/`ui`, tested-domain rule.
 21. Inferred chains coexist with explicit deps — `inferredChains` used to
     drop a sibling group's *entire* ghost chain the moment any explicit dep
     touched those siblings (all-or-nothing). Switch to **per-pair
-    suppression**: ghost a sequential edge between each consecutive sibling
-    pair *unless that specific pair is already directly connected by an
-    explicit dependency* (either direction). So explicit cross-links (e.g.
-    a fan-out/in) and the inferred default chain show together; only the
-    exact pairs you've defined lose their ghost edge. Still display-only —
-    never written to the graph, never fed to the scheduler. Unit-tested.
+    suppression** keyed on the **transitive** explicit relation: ghost a
+    sequential edge between each consecutive sibling pair *unless the
+    explicit dependencies already order those two siblings in either
+    direction, directly or indirectly*. So the inference only fills in
+    sequencing the explicit graph leaves genuinely undecided; it never
+    contradicts an existing order (an early version keyed on *direct* edges
+    only, so a pair ordered purely transitively still got a ghost edge that
+    ran against the flow and closed a cycle — the tangle in the bug report).
+    Still display-only — never written to the graph, never fed to the
+    scheduler. Unit-tested (`transitiveNeeds` closure + contradiction case).
 22. Structural-lock "phantom level" fix — locking N levels of a side that
     has fewer than N levels froze a level that doesn't exist yet, which
     hid the add-root / "Add the first item" button so you could never
