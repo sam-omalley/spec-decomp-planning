@@ -307,10 +307,33 @@ function assignRowCoordinates(
   return y;
 }
 
+/** Transitive closure of a dependency relation (cycle-safe): reach.get(x)
+ *  is every node x depends on, directly or indirectly. */
+function transitiveNeeds(
+  needs: ReadonlyMap<string, ReadonlySet<string>>,
+): Map<string, Set<string>> {
+  const reach = new Map<string, Set<string>>();
+  for (const start of needs.keys()) {
+    const seen = new Set<string>();
+    const stack = [...(needs.get(start) ?? [])];
+    while (stack.length > 0) {
+      const n = stack.pop()!;
+      if (seen.has(n)) continue;
+      seen.add(n);
+      for (const m of needs.get(n) ?? []) if (!seen.has(m)) stack.push(m);
+    }
+    reach.set(start, seen);
+  }
+  return reach;
+}
+
 /** Ghost sequential chains across sibling leaf groups. Suppression is
- *  per-pair: a consecutive pair is skipped only when that exact pair is
- *  already directly connected by an explicit dependency (either
- *  direction), so inferred chains coexist with explicit cross-links. */
+ *  per-pair and considers the *transitive* explicit relation: a consecutive
+ *  pair is skipped when the explicit dependencies already order those two
+ *  siblings in either direction, directly or indirectly. So the inference
+ *  only fills in sequencing the explicit graph leaves genuinely undecided —
+ *  it never contradicts an existing ordering (which would draw a ghost edge
+ *  against the flow and close a cycle). */
 function inferredChains(
   graph: ProjectGraph,
   leafSet: ReadonlySet<string>,
@@ -323,8 +346,9 @@ function inferredChains(
     if (kids.length > 0) siblingLists.push(kids);
   }
 
-  const linked = (a: string, b: string): boolean =>
-    (realNeeds.get(a)?.has(b) ?? false) || (realNeeds.get(b)?.has(a) ?? false);
+  const reach = transitiveNeeds(realNeeds);
+  const ordered = (a: string, b: string): boolean =>
+    (reach.get(a)?.has(b) ?? false) || (reach.get(b)?.has(a) ?? false);
 
   const result: { dependent: string; prerequisite: string }[] = [];
   for (const siblings of siblingLists) {
@@ -333,7 +357,7 @@ function inferredChains(
     for (let i = 1; i < leaves.length; i++) {
       const prev = leaves[i - 1]!;
       const next = leaves[i]!;
-      if (linked(prev, next)) continue; // pair already explicitly sequenced
+      if (ordered(prev, next)) continue; // already sequenced by explicit deps
       result.push({ dependent: next, prerequisite: prev });
     }
   }

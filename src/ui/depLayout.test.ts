@@ -120,6 +120,31 @@ describe('layoutDependencies', () => {
     );
   });
 
+  it('does not infer a chain that contradicts a transitive explicit order', () => {
+    // Sibling order a, b, c, d, but explicit deps order them a→d→b (a needs
+    // d, d needs b). The (a,b) pair is ordered only transitively, so the
+    // ghost a→b must be suppressed — inferring it would run against the flow
+    // and close a cycle (the bug from the report). The undecided pairs stay.
+    let g = emptyGraph();
+    g = createGroup(g, { id: 'blk', title: 'Block' });
+    g = createGroup(g, { id: 'a', title: 'A' }, 'blk');
+    g = createGroup(g, { id: 'b', title: 'B' }, 'blk');
+    g = createGroup(g, { id: 'c', title: 'C' }, 'blk');
+    g = createGroup(g, { id: 'd', title: 'D' }, 'blk');
+    g = dep(g, 'a', 'd'); // a needs d
+    g = dep(g, 'd', 'b'); // d needs b  ⇒ a transitively needs b
+    const layout = layoutDependencies(g, { inferChains: true });
+    const inferred = layout.edges
+      .filter((e) => e.inferred)
+      .map((e) => `${e.dependent}->${e.prerequisite}`)
+      .sort();
+    // No ghost between a and b (already ordered); the rest are undecided.
+    assert.ok(!inferred.includes('b->a'));
+    assert.deepEqual(inferred, ['c->b', 'd->c']);
+    // The result stays acyclic — nothing lands in a cycle.
+    assert.ok(layout.nodes.every((n) => n.cycle === null));
+  });
+
   it('aligns a single-neighbour node with its neighbour (no bent edge)', () => {
     // Two roots a, b in column 0; c depends on a alone in column 1. c should
     // sit level with a rather than being re-centred in its own column (which
