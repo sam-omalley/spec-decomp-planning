@@ -7,11 +7,12 @@ import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
 import { PlanningView } from './ui/PlanningView.tsx';
 import { MetricsView } from './ui/MetricsView.tsx';
+import { ConcernsView } from './ui/ConcernsView.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TimelineView } from './ui/TimelineView.tsx';
 import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
 
-type View = 'spec' | 'planning' | 'graph' | 'markdown' | 'timeline' | 'metrics';
+type View = 'spec' | 'planning' | 'graph' | 'markdown' | 'timeline' | 'metrics' | 'concerns';
 
 export function App() {
   const graph = useProjectGraph();
@@ -157,6 +158,12 @@ export function App() {
             Metrics
           </button>
           <button
+            className={view === 'concerns' ? 'view-tab view-tab-active' : 'view-tab'}
+            onClick={() => setView('concerns')}
+          >
+            Concerns
+          </button>
+          <button
             className={view === 'markdown' ? 'view-tab view-tab-active' : 'view-tab'}
             onClick={() => setView('markdown')}
           >
@@ -252,6 +259,7 @@ export function App() {
           <TimelineView selectedId={selectedId} onSelect={setSelectedId} onReveal={reveal} />
         )}
         {view === 'metrics' && <MetricsView onReveal={reveal} />}
+        {view === 'concerns' && <ConcernsView onReveal={reveal} />}
         {view === 'markdown' && <MarkdownView />}
       </main>
       <footer className="app-hints">
@@ -285,6 +293,10 @@ export function App() {
         {view === 'metrics' && (
           <>Projection, burn-up &amp; estimate-vs-actual · click a unit to open its group · set a
             target date in ⚙ Settings for variance</>
+        )}
+        {view === 'concerns' && (
+          <>Monitoring signals for the plan · overdue, blocked, cycles, gaps &amp; behind-target ·
+            click a concern to open its group</>
         )}
         {view === 'markdown' && (
           <>The delivery plan as Markdown · toggle sections · Copy to export</>

@@ -449,8 +449,8 @@ items. Its scheduler/views are still to build.
 
     SCRUM-monitoring pass (slices 25–27, from open feature requests #22/#24/#25).
     25 is UI-only; 26 is a model change (resourcing); 27 is a new pure
-    analysis + view that benefits from 26. Each keeps the
-    pure-helpers-in-`model`/`ui`, tested-domain rule.
+    analysis + view that builds on 26 (unassigned/thin-WIP concerns read the
+    team). Each keeps the pure-helpers-in-`model`/`ui`, tested-domain rule.
 
 25. ✅ Metric hover explanations (#22) — every metric now carries a small
     `ⓘ` affordance describing *how it is calculated*, so the numbers are
@@ -481,6 +481,20 @@ items. Its scheduler/views are still to build.
     `NodeMetaEditor` and the `PlanTable` column. Tested (graph/serialize/
     schedule); verified in preview (live migration + FTE moved the projected
     finish).
+27. ✅ Concerns view (#24) — a 7th tab that surfaces the monitoring signals a
+    SCRUM lead watches, from a new pure `src/model/concerns.ts`
+    (`analyzeConcerns(graph, now)`, unit-tested). Per-unit concerns:
+    **overdue** (in-progress unit past its projected finish), **blocked**,
+    **cycle** (in a dependency cycle), **unestimated** (leaf group with no
+    duration → invisible to the schedule), **unassigned** (not-done unit
+    with no resource — only once a team exists, else it's noise).
+    Project-level (`id: null`): **thin WIP** (fewer units in progress than
+    capacity while work waits) and **behind target** (projection past the
+    target date). Each concern carries a severity (high/medium/low), sorted
+    high-first. `ConcernsView.tsx` renders a severity tally + a list with
+    coloured left-borders, `onReveal` jumping node-level concerns to the
+    plan outline. Read-only projection like Metrics — no model change.
+    Tested (12 cases); verified in preview.
 
 ## Conventions & environment
 
