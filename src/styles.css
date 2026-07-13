@@ -1532,7 +1532,10 @@ body {
 }
 .info-tip {
   position: absolute;
-  bottom: calc(100% + 6px);
+  /* Opens below the glyph: the dots sit on card labels / panel headings with
+     content beneath, so downward never clips, while an upward tip clips off
+     the top when its row scrolls near the viewport top. */
+  top: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
   width: max-content;
