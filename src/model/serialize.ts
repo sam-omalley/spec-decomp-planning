@@ -20,6 +20,13 @@
  *
  * v4 → v5: `settings` gains the editing-lock depths (`specLockDepth` /
  * `planLockDepth`), backfilled to 0 (unlocked). Pure backfill, no data loss.
+ *
+ * v5 → v6: resourcing. Settings drop the anonymous `parallelTracks` count
+ * and `hoursPerDay`; they gain a `resources` team and `hoursPerWeek`.
+ * Migration converts `hoursPerDay × 5 → hoursPerWeek` (default 38) and, to
+ * preserve capacity, turns `parallelTracks > 1` into that many generic
+ * full-time resources (a single track stays an empty team). Nodes gain
+ * `resourceId` (backfilled null). No data loss.
  */
 
 import type {
@@ -27,11 +34,12 @@ import type {
   EdgeType,
   ProjectGraph,
   ProjectSettings,
+  Resource,
   WorkNode,
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 5;
+export const FILE_VERSION = 6;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -39,7 +47,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -96,7 +104,7 @@ function reconcileRootOrder(
   return [...order, ...missing];
 }
 
-/** Backfills the v4 work-node fields on any node that predates them. */
+/** Backfills the v4/v6 work-node fields on any node that predates them. */
 function backfillNodeDefaults(nodes: Record<string, WorkNode>): void {
   for (const node of Object.values(nodes)) {
     const n = node as Partial<WorkNode>;
@@ -104,7 +112,24 @@ function backfillNodeDefaults(nodes: Record<string, WorkNode>): void {
     if (n.durationEstimate === undefined) n.durationEstimate = null;
     if (n.actualStart === undefined) n.actualStart = null;
     if (n.actualFinish === undefined) n.actualFinish = null;
+    if (n.resourceId === undefined) n.resourceId = null;
   }
+}
+
+/** Sanitises a persisted resources array; drops entries that aren't valid. */
+function normalizeResources(provided: unknown): Resource[] | null {
+  if (!Array.isArray(provided)) return null;
+  const out: Resource[] = [];
+  const seen = new Set<string>();
+  for (const item of provided) {
+    if (typeof item !== 'object' || item === null) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.id !== 'string' || r.id === '' || seen.has(r.id)) continue;
+    const fte = typeof r.fte === 'number' && r.fte > 0 ? r.fte : 1;
+    out.push({ id: r.id, name: typeof r.name === 'string' ? r.name : '', fte });
+    seen.add(r.id);
+  }
+  return out;
 }
 
 /** Merges a persisted settings blob over defaults, field by field. */
@@ -117,12 +142,37 @@ function normalizeSettings(provided: unknown): ProjectSettings {
   // Lock depths are non-negative integers; anything else falls back.
   const lockDepth = (value: unknown, fallback: number): number =>
     typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
+
+  // hoursPerWeek: use it if present, else migrate the old hoursPerDay × 5.
+  const hoursPerWeek =
+    typeof p.hoursPerWeek === 'number' && p.hoursPerWeek > 0
+      ? p.hoursPerWeek
+      : typeof p.hoursPerDay === 'number' && p.hoursPerDay > 0
+        ? p.hoursPerDay * 5
+        : base.hoursPerWeek;
+
+  // resources: use a valid team if present; else migrate a legacy
+  // parallelTracks > 1 into that many generic full-time resources so
+  // capacity is preserved (a single track becomes an empty team).
+  let resources = normalizeResources(p.resources);
+  if (resources === null) {
+    const tracks = typeof p.parallelTracks === 'number' ? Math.floor(p.parallelTracks) : 1;
+    resources =
+      tracks > 1
+        ? Array.from({ length: tracks }, (_, i) => ({
+            id: createId(),
+            name: `Resource ${i + 1}`,
+            fte: 1,
+          }))
+        : [];
+  }
+
   return {
     startDate: typeof p.startDate === 'string' ? p.startDate : base.startDate,
     targetDate: typeof p.targetDate === 'string' ? p.targetDate : null,
     pointsPerDay: num(p.pointsPerDay, base.pointsPerDay),
-    hoursPerDay: num(p.hoursPerDay, base.hoursPerDay),
-    parallelTracks: num(p.parallelTracks, base.parallelTracks),
+    hoursPerWeek,
+    resources,
     speedMultiplier: num(p.speedMultiplier, base.speedMultiplier),
     specLockDepth: lockDepth(p.specLockDepth, base.specLockDepth),
     planLockDepth: lockDepth(p.planLockDepth, base.planLockDepth),
@@ -150,6 +200,7 @@ function migrateLegacy(legacy: LegacyGraph): void {
       durationEstimate: null,
       actualStart: null,
       actualFinish: null,
+      resourceId: null,
       externalRefs: [],
       tags: [],
       notes: '',

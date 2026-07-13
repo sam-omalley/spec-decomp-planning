@@ -13,7 +13,7 @@
 import { useMemo } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
-import { setActualDates, setEstimate, updateNode } from '../model/graph.ts';
+import { assignResource, setActualDates, setEstimate, updateNode } from '../model/graph.ts';
 import { rolledDuration, rolledEffort } from '../model/rollup.ts';
 import type { Priority, ProjectGraph, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
@@ -128,6 +128,7 @@ export function PlanTable({
             <th className="col-title">Group</th>
             <th>Status</th>
             <th>Priority</th>
+            <th>Resource</th>
             <th className="col-num">Points</th>
             <th className="col-num">Days</th>
             <th>Start</th>
@@ -221,6 +222,22 @@ export function PlanTable({
                     {PRIORITIES.map((p) => (
                       <option key={p} value={p}>
                         {p}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    className="cell-select"
+                    value={node.resourceId ?? ''}
+                    onChange={(e) =>
+                      bulkCommit(row.id, (g, t) => assignResource(g, t, e.target.value || null))
+                    }
+                  >
+                    <option value="">—</option>
+                    {graph.settings.resources.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name.trim() || 'Unnamed'}
                       </option>
                     ))}
                   </select>

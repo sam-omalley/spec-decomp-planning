@@ -11,7 +11,7 @@ import type { ProjectGraph } from '../model/types.ts';
 
 function fixture(): ProjectGraph {
   let g = emptyGraph();
-  g = updateSettings(g, { startDate: '2024-01-01', parallelTracks: 1, targetDate: '2024-01-05' });
+  g = updateSettings(g, { startDate: '2024-01-01', targetDate: '2024-01-05' });
   g = createGroup(g, { id: 'block', title: 'Block' });
   g = createGroup(g, { id: 'e1', title: 'Epic 1' }, 'block');
   g = createGroup(g, { id: 'e2', title: 'Epic 2' }, 'block');
