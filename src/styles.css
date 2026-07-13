@@ -1583,15 +1583,27 @@ body {
   text-transform: none;
   white-space: normal;
   z-index: 20;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s ease;
   pointer-events: none;
+  /* display:none (not just visibility:hidden) so a hidden tip contributes
+     nothing to layout — a visibility-hidden tip still has its 280px box and
+     would overflow the panel, inflating the scroll container's width. */
+  display: none;
 }
 .info-dot:hover .info-tip,
 .info-dot:focus-visible .info-tip {
-  opacity: 1;
-  visibility: visible;
+  display: block;
+}
+/* Open toward the interior for dots near a container edge, so the tip never
+   overflows into a horizontal scrollbar / off screen. */
+.info-tip-start {
+  left: 0;
+  right: auto;
+  transform: none;
+}
+.info-tip-end {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 .crit-path {
   display: flex;

@@ -68,7 +68,7 @@ export function AssigneeMetricsView() {
             <span className="asg-num">Done</span>
             <span>Estimate vs actual (days)</span>
             <span className="asg-num">
-              Pts/day <InfoDot text={HELP.pointsPerDay} />
+              Pts/day <InfoDot text={HELP.pointsPerDay} align="end" />
             </span>
           </div>
           {m.rows.map((r) => {
