@@ -40,14 +40,15 @@ const HELP = {
 
 /**
  * A small ⓘ glyph that reveals an explanation of a metric on hover/focus.
- * `down` opens the tip below the glyph instead of above — used near the top
- * of the view (the summary cards) so the tip never clips off the viewport.
+ * The tip opens *below* the glyph: every dot here sits on a card label or a
+ * panel heading with content beneath it, so downward never clips — whereas an
+ * upward tip clips off the top whenever its row scrolls near the viewport top.
  */
-function InfoDot({ text, down }: { text: string; down?: boolean }) {
+function InfoDot({ text }: { text: string }) {
   return (
     <span className="info-dot" tabIndex={0} role="note" aria-label={text}>
       <span aria-hidden="true">ⓘ</span>
-      <span className={`info-tip${down ? ' info-tip-down' : ''}`} role="tooltip">
+      <span className="info-tip" role="tooltip">
         {text}
       </span>
     </span>
@@ -168,7 +169,7 @@ function Card({
     <div className={`metric-card${tone ? ` metric-card-${tone}` : ''}`}>
       <div className="metric-card-label">
         {label}
-        {help && <InfoDot text={help} down />}
+        {help && <InfoDot text={help} />}
       </div>
       <div className="metric-card-value">{value}</div>
       {sub && <div className="metric-card-sub">{sub}</div>}
