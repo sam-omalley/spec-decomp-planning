@@ -63,6 +63,32 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
         />
       </section>
 
+      {summary.criticalPath.length > 0 && (
+        <section className="metric-panel">
+          <h3>Critical path — what sets the projected finish</h3>
+          <div className="crit-path">
+            {summary.criticalPath.map((u, i) => (
+              <span key={u.id} className="crit-step">
+                {i > 0 && <span className="crit-arrow">→</span>}
+                <button
+                  type="button"
+                  className={`crit-node${onReveal ? ' crit-node-link' : ''}`}
+                  onClick={onReveal ? () => onReveal(u.id) : undefined}
+                  title={onReveal ? `${u.title} — open in the plan outline` : u.title}
+                >
+                  {u.title}
+                </button>
+              </span>
+            ))}
+          </div>
+          <p className="metric-hint">
+            {summary.criticalPath.length > 1
+              ? 'These units run back-to-back by dependency; shortening or resequencing this chain moves the finish date. Independent work off this path does not.'
+              : 'The finish is set by this single unit (capacity- or start-bound), not a dependency chain.'}
+          </p>
+        </section>
+      )}
+
       <section className="metric-panel">
         <h3>Burn-up — completed vs total scope (days)</h3>
         <BurnUpChart graph={graph} summary={summary} burn={burn} />
