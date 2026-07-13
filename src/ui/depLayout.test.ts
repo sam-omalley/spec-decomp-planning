@@ -145,6 +145,45 @@ describe('layoutDependencies', () => {
     assert.ok(layout.nodes.every((n) => n.cycle === null));
   });
 
+  it('does not chain siblings that share a common prerequisite (issue #17)', () => {
+    // A is an explicit prerequisite of B, C, D, E (all siblings). They fan
+    // out in parallel — inference must not serialise them into A→B→C→D→E.
+    let g = emptyGraph();
+    g = createGroup(g, { id: 'A', title: 'A' });
+    g = createGroup(g, { id: 'B', title: 'B' });
+    g = createGroup(g, { id: 'C', title: 'C' });
+    g = createGroup(g, { id: 'D', title: 'D' });
+    g = createGroup(g, { id: 'E', title: 'E' });
+    for (const d of ['B', 'C', 'D', 'E']) g = dep(g, d, 'A'); // each needs A
+    const layout = layoutDependencies(g, { inferChains: true });
+    assert.deepEqual(
+      layout.edges.filter((e) => e.inferred),
+      [],
+    );
+    // B, C, D, E all sit one column right of A (parallel), not cascaded.
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]));
+    assert.equal(byId.get('A')!.x, 0);
+    for (const d of ['B', 'C', 'D', 'E']) {
+      assert.equal(byId.get(d)!.x, DEP_COLUMN_WIDTH);
+    }
+  });
+
+  it('does not chain sibling prerequisites of a common dependent', () => {
+    // Mirror of #17: B, C, D all feed a common dependent R — a parallel
+    // fan-in that must not be chained B→C→D either.
+    let g = emptyGraph();
+    g = createGroup(g, { id: 'B', title: 'B' });
+    g = createGroup(g, { id: 'C', title: 'C' });
+    g = createGroup(g, { id: 'D', title: 'D' });
+    g = createGroup(g, { id: 'R', title: 'R' });
+    for (const p of ['B', 'C', 'D']) g = dep(g, 'R', p); // R needs each
+    const layout = layoutDependencies(g, { inferChains: true });
+    assert.deepEqual(
+      layout.edges.filter((e) => e.inferred),
+      [],
+    );
+  });
+
   it('aligns a single-neighbour node with its neighbour (no bent edge)', () => {
     // Two roots a, b in column 0; c depends on a alone in column 1. c should
     // sit level with a rather than being re-centred in its own column (which
