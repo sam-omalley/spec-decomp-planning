@@ -24,10 +24,12 @@
  * Implicit sequential chain (display inference only): for sibling leaf
  * groups, a sequential chain in sibling order (A→B→C) is inferred and
  * marked `inferred`. Suppression is per-pair, not all-or-nothing — a
- * consecutive pair loses its ghost edge only if that exact pair is already
- * directly connected by an explicit dependency, so inferred chains coexist
- * with explicit cross-links. It never touches the graph and never reaches
- * the scheduler — it only influences this projection.
+ * consecutive pair loses its ghost edge when the explicit deps already
+ * order it (either direction, transitively) or make the two siblings a
+ * parallel fan (they share a transitive prerequisite or dependent), so
+ * inferred chains coexist with explicit cross-links without serialising
+ * genuine fan-out. It never touches the graph and never reaches the
+ * scheduler — it only influences this projection.
  */
 
 import { childrenOf, groupRootsOf, subtreeIds } from '../model/graph.ts';
@@ -330,10 +332,12 @@ function transitiveNeeds(
 /** Ghost sequential chains across sibling leaf groups. Suppression is
  *  per-pair and considers the *transitive* explicit relation: a consecutive
  *  pair is skipped when the explicit dependencies already order those two
- *  siblings in either direction, directly or indirectly. So the inference
- *  only fills in sequencing the explicit graph leaves genuinely undecided —
- *  it never contradicts an existing ordering (which would draw a ghost edge
- *  against the flow and close a cycle). */
+ *  siblings in either direction (directly or indirectly), or make them a
+ *  parallel fan — sharing a transitive prerequisite or dependent, e.g. both
+ *  depending on a common A. So the inference only fills in sequencing the
+ *  explicit graph leaves genuinely undecided — it never contradicts an
+ *  existing ordering (a ghost against the flow, closing a cycle) nor
+ *  serialises deliberate fan-out (issue #17). */
 function inferredChains(
   graph: ProjectGraph,
   leafSet: ReadonlySet<string>,
@@ -347,8 +351,39 @@ function inferredChains(
   }
 
   const reach = transitiveNeeds(realNeeds);
+
+  // Transitive dependents (the mirror closure), so a shared *downstream*
+  // node counts as a parallel fan just like a shared prerequisite.
+  const neededBy = new Map<string, Set<string>>();
+  for (const [node, prereqs] of realNeeds) {
+    for (const p of prereqs) {
+      let set = neededBy.get(p);
+      if (!set) neededBy.set(p, (set = new Set()));
+      set.add(node);
+    }
+  }
+  const reachDependent = transitiveNeeds(neededBy);
+
   const ordered = (a: string, b: string): boolean =>
     (reach.get(a)?.has(b) ?? false) || (reach.get(b)?.has(a) ?? false);
+
+  const intersects = (
+    a: ReadonlySet<string> | undefined,
+    b: ReadonlySet<string> | undefined,
+  ): boolean => {
+    if (!a || !b || a.size === 0 || b.size === 0) return false;
+    const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+    for (const x of small) if (large.has(x)) return true;
+    return false;
+  };
+
+  // Two siblings are a parallel fan — not a sequence — when they share a
+  // transitive prerequisite or a transitive dependent (e.g. B, C, D, E all
+  // depending on a common A). Chaining them would serialise work the
+  // explicit deps deliberately ran in parallel (issue #17).
+  const parallel = (a: string, b: string): boolean =>
+    intersects(reach.get(a), reach.get(b)) ||
+    intersects(reachDependent.get(a), reachDependent.get(b));
 
   const result: { dependent: string; prerequisite: string }[] = [];
   for (const siblings of siblingLists) {
@@ -357,7 +392,9 @@ function inferredChains(
     for (let i = 1; i < leaves.length; i++) {
       const prev = leaves[i - 1]!;
       const next = leaves[i]!;
-      if (ordered(prev, next)) continue; // already sequenced by explicit deps
+      // Skip when the explicit deps already sequence the pair (either
+      // direction, transitively) or make them a parallel fan.
+      if (ordered(prev, next) || parallel(prev, next)) continue;
       result.push({ dependent: next, prerequisite: prev });
     }
   }
