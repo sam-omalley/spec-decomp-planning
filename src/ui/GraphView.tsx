@@ -483,6 +483,9 @@ export function GraphView({
           elementsSelectable={false}
           connectionMode={ConnectionMode.Loose}
           connectionLineComponent={MapConnectionLine}
+          // Only assignment edges opt in (reconnectable: true); this stops the
+          // dependency/contains edges from being grabbable and detached.
+          edgesReconnectable={false}
           isValidConnection={(c) => resolveAssignmentEnds(c, isGroup) !== null}
           onConnect={onConnect}
           onReconnectStart={onReconnectStart}
