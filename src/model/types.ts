@@ -58,7 +58,7 @@ export interface WorkNode {
   effort: number | null;
   /**
    * Estimated duration in working days (the scheduler's canonical unit;
-   * hours are a display convenience via `ProjectSettings.hoursPerDay`).
+   * hours are a display convenience via `ProjectSettings.hoursPerWeek`).
    * A distinct axis from `effort` — size and time are estimated apart,
    * convertible via `pointsPerDay`. null = unestimated.
    */
@@ -67,6 +67,13 @@ export interface WorkNode {
   actualStart: string | null;
   /** Actual finish (ISO date), or null if unfinished. */
   actualFinish: string | null;
+  /**
+   * The `Resource` (team member) this item is assigned to; null = unassigned.
+   * Only meaningful on group nodes (the plan side) — it pins the scheduling
+   * unit to that resource's track and applies its FTE. References an id in
+   * `ProjectSettings.resources`; a dangling id is treated as unassigned.
+   */
+  resourceId: string | null;
   /** External-tracker pointers (Jira, GitHub, …). Allowed on groups too. */
   externalRefs: ExternalRef[];
   tags: string[];
@@ -87,6 +94,21 @@ export interface Edge {
 }
 
 /**
+ * A team member the plan can be resourced against. Capacity is expressed as
+ * a set of resources (replacing the old anonymous `parallelTracks` count):
+ * each resource is one scheduling track, and its `fte` scales throughput —
+ * a 0.8-FTE resource takes its work `1 / 0.8` longer. A group assigned to a
+ * resource (`WorkNode.resourceId`) is pinned to that track. Lives inside
+ * `ProjectSettings` so it rides the store/undo/serialize path unchanged.
+ */
+export interface Resource {
+  id: string;
+  name: string;
+  /** Full-time-equivalent capacity (> 0; 1 = full time, 0.8 = four days). */
+  fte: number;
+}
+
+/**
  * Project-scoped scheduling configuration. Lives inside the graph so it
  * rides the existing store/undo/serialize/autosave path unchanged.
  */
@@ -97,10 +119,13 @@ export interface ProjectSettings {
   targetDate: string | null;
   /** Points↔days conversion factor (points per working day). */
   pointsPerDay: number;
-  /** Hours per working day, for hours↔days display. */
-  hoursPerDay: number;
-  /** Capacity: how many work items may run at once (positive integer). */
-  parallelTracks: number;
+  /** Hours in a working week, for hours↔capacity display (38 by default). */
+  hoursPerWeek: number;
+  /**
+   * The delivery team. Capacity = one track per resource (an empty team
+   * falls back to a single full-time track). Replaces `parallelTracks`.
+   */
+  resources: Resource[];
   /** Capacity: global per-track speed multiplier (>0; scales durations). */
   speedMultiplier: number;
   /**

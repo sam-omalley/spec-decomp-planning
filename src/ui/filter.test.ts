@@ -15,6 +15,7 @@ function node(partial: Partial<WorkNode>): WorkNode {
     durationEstimate: null,
     actualStart: null,
     actualFinish: null,
+    resourceId: null,
     externalRefs: [],
     tags: [],
     notes: '',

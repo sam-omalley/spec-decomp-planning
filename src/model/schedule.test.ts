@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addEdge,
+  assignResource,
   createGroup,
   emptyGraph,
   setActualDates,
@@ -15,8 +16,13 @@ import type { ProjectGraph } from './types.ts';
 // 0=Jan1 Mon, 1=Jan2, 2=Jan3, 3=Jan4, 4=Jan5 Fri, 5=Jan8 Mon, 6=Jan9…
 function base(overrides: Partial<Parameters<typeof updateSettings>[1]> = {}): ProjectGraph {
   let g = emptyGraph();
-  g = updateSettings(g, { startDate: '2024-01-01', parallelTracks: 1, ...overrides });
+  g = updateSettings(g, { startDate: '2024-01-01', ...overrides });
   return g;
+}
+
+/** N full-time tracks, ids r0..r(N-1) — capacity is one track per resource. */
+function tracks(n: number, fte = 1) {
+  return Array.from({ length: n }, (_, i) => ({ id: `r${i}`, name: `R${i}`, fte }));
 }
 
 function group(g: ProjectGraph, id: string, days: number | null, parent?: string): ProjectGraph {
@@ -69,8 +75,8 @@ describe('scheduleProject — calendar & weekends', () => {
 });
 
 describe('scheduleProject — capacity', () => {
-  it('runs independent units in parallel up to parallelTracks', () => {
-    let g = base({ parallelTracks: 2 });
+  it('runs independent units in parallel up to the track count', () => {
+    let g = base({ resources: tracks(2) });
     g = group(g, 'a', 3);
     g = group(g, 'b', 3);
     const s = scheduleProject(g);
@@ -79,7 +85,7 @@ describe('scheduleProject — capacity', () => {
   });
 
   it('queues the third unit when only two tracks exist', () => {
-    let g = base({ parallelTracks: 2 });
+    let g = base({ resources: tracks(2) });
     g = group(g, 'a', 3); // offset 0..3
     g = group(g, 'b', 3); // offset 0..3
     g = group(g, 'c', 1);
@@ -93,6 +99,45 @@ describe('scheduleProject — capacity', () => {
     g = group(g, 'a', 4); // 4 / 2 = 2 working days → Mon..Tue
     const s = scheduleProject(g);
     assert.equal(s.groups.get('a')!.finish, '2024-01-02');
+  });
+});
+
+describe('scheduleProject — resourcing', () => {
+  it('stretches a duration by the assigned resource FTE', () => {
+    let g = base({ resources: [{ id: 'r0', name: 'Half', fte: 0.5 }] });
+    g = group(g, 'a', 2); // 2 / (1 × 0.5) = 4 working days → Mon..Thu
+    g = assignResource(g, 'a', 'r0');
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.finish, '2024-01-04');
+  });
+
+  it('pins assigned units to their resource track, serialising them', () => {
+    let g = base({ resources: tracks(2) }); // two free tracks r0, r1
+    g = group(g, 'a', 3);
+    g = group(g, 'b', 3);
+    g = assignResource(g, 'a', 'r0');
+    g = assignResource(g, 'b', 'r0'); // both on r0, so b waits for a
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-01');
+    assert.equal(s.groups.get('b')!.start, '2024-01-04'); // after a, not on idle r1
+  });
+
+  it('lets an unassigned unit take the earliest-free track', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    g = group(g, 'b', 3); // unassigned → floats to the free r1, runs in parallel
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('b')!.start, '2024-01-01');
+  });
+
+  it('treats an empty team as one full-time track', () => {
+    let g = base(); // no resources
+    g = group(g, 'a', 2);
+    g = group(g, 'b', 2); // queued behind a on the single track
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-01');
+    assert.equal(s.groups.get('b')!.start, '2024-01-03');
   });
 });
 
@@ -111,7 +156,7 @@ describe('scheduleProject — cycles & containers', () => {
   });
 
   it('spans a container group over its child units', () => {
-    let g = base({ parallelTracks: 1 });
+    let g = base();
     g = group(g, 'block', null);
     g = group(g, 'e1', 2, 'block'); // Jan1..Jan2
     g = group(g, 'e2', 2, 'block'); // queued: Jan3..Jan4
@@ -198,7 +243,7 @@ describe('scheduleProject — critical path', () => {
   });
 
   it('follows the longer of two parallel dependency chains', () => {
-    let g = base({ parallelTracks: 2 });
+    let g = base({ resources: tracks(2) });
     g = group(g, 'a', 2);
     g = group(g, 'b', 2); // short chain a→b
     g = group(g, 'c', 3);
@@ -210,7 +255,7 @@ describe('scheduleProject — critical path', () => {
   });
 
   it('is just the final unit when nothing gates it (capacity-bound)', () => {
-    let g = base({ parallelTracks: 3 });
+    let g = base({ resources: tracks(3) });
     g = group(g, 'a', 4);
     g = group(g, 'b', 2);
     // No dependencies: a finishes last, gated by nothing.
