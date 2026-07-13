@@ -13,13 +13,13 @@
  * collapsed per Tarjan SCC (they share a column) and reported so the view
  * can draw them red + animated.
  *
- * Within a layer, nodes are ordered by a Sugiyama-style barycenter pass
- * (a few down/up sweeps sorting each layer by the mean position of its
- * neighbours in the adjacent layer) to reduce edge crossings — fan-out /
- * fan-in parallelisation would otherwise read as a dense, crossed grid.
- * The pass is deterministic and stable (ties break by the initial
- * pre-order), and touches `y` only — columns (`x`) and the edge set are
- * unchanged.
+ * Within a layer, nodes keep the plan order (group pre-order). That order
+ * is deterministic and stable as dependencies are added — adding an edge
+ * can move a node to another column but never reshuffles the vertical
+ * order (issue #18). Row coordinates then relax each node toward its
+ * neighbours' rows to straighten chains, preserving the order. (An earlier
+ * Sugiyama barycenter pass reordered layers to minimise crossings, but the
+ * reshuffle-on-every-edit was worse than the crossings it removed.)
  *
  * Implicit sequential chain (display inference only): for sibling leaf
  * groups, a sequential chain in sibling order (A→B→C) is inferred and
@@ -177,61 +177,6 @@ function longestPathLayers(
   const layer = new Map<string, number>();
   for (const n of nodes) layer.set(n, depth(componentOf.get(n)!));
   return layer;
-}
-
-/** Barycenter crossing-reduction: reorder the nodes inside each layer so
- *  they sit near their neighbours in the adjacent layers, cutting edge
- *  crossings for fan-out / fan-in. Deterministic — a fixed number of
- *  down (order by prerequisites) / up (order by dependents) sweeps, ties
- *  broken by the incoming order so it is stable. Mutates the per-layer
- *  buckets in place. `needs` is the (combined) dependency relation. */
-function orderWithinLayers(
-  byLayer: Map<number, string[]>,
-  needs: ReadonlyMap<string, ReadonlySet<string>>,
-): void {
-  const neededBy = new Map<string, Set<string>>();
-  for (const [node, prereqs] of needs) {
-    for (const p of prereqs) {
-      let set = neededBy.get(p);
-      if (!set) neededBy.set(p, (set = new Set()));
-      set.add(node);
-    }
-  }
-
-  const layers = [...byLayer.keys()].sort((a, b) => a - b);
-  const order = new Map<string, number>();
-  const reindex = (bucket: string[]): void => bucket.forEach((id, i) => order.set(id, i));
-  for (const l of layers) reindex(byLayer.get(l)!);
-
-  const sweep = (
-    l: number,
-    neighboursOf: ReadonlyMap<string, ReadonlySet<string>>,
-  ): void => {
-    const bucket = byLayer.get(l)!;
-    const bary = new Map<string, number>();
-    bucket.forEach((id, i) => {
-      const nbrs = [...(neighboursOf.get(id) ?? [])].filter((n) => order.has(n));
-      if (nbrs.length === 0) {
-        bary.set(id, i); // no anchor on this side — hold current position
-        return;
-      }
-      let sum = 0;
-      for (const n of nbrs) sum += order.get(n)!;
-      bary.set(id, sum / nbrs.length);
-    });
-    const sorted = bucket
-      .map((id, i) => ({ id, i }))
-      .sort((a, b) => bary.get(a.id)! - bary.get(b.id)! || a.i - b.i)
-      .map((x) => x.id);
-    byLayer.set(l, sorted);
-    reindex(sorted);
-  };
-
-  const SWEEPS = 4;
-  for (let s = 0; s < SWEEPS; s++) {
-    for (let i = 1; i < layers.length; i++) sweep(layers[i]!, needs);
-    for (let i = layers.length - 2; i >= 0; i--) sweep(layers[i]!, neededBy);
-  }
 }
 
 /** Isotonic regression (pool-adjacent-violators): the minimal-displacement
@@ -455,9 +400,10 @@ export function layoutDependencies(
     if (bucket) bucket.push(id);
     else byLayer.set(l, [id]);
   }
-  // Reduce crossings within each column, then place each node near its
-  // neighbours' rows so straight chains stay straight.
-  orderWithinLayers(byLayer, combined);
+  // Within a column, keep the plan (group pre-order) order — it is stable
+  // as dependencies are added (issue #18), unlike a barycenter reshuffle.
+  // Row coordinates then align each node near its neighbours so straight
+  // chains stay straight, without changing the order.
   const rowY = assignRowCoordinates(byLayer, combined);
 
   const nodes: DepGraphNode[] = leaves.map((id) => ({
