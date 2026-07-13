@@ -41,6 +41,16 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
+  /* Toolbar chrome: never leave a text selection or blinking caret behind on
+     clicks (Firefox will place a caret in non-editable text where Chromium
+     won't). The search input re-enables both below. */
+  user-select: none;
+  caret-color: transparent;
+}
+
+.app-header input {
+  user-select: text;
+  caret-color: auto;
 }
 
 .app-header h1 {
@@ -87,7 +97,10 @@ body {
   white-space: nowrap;
 }
 
-.app-header button {
+/* Generic header buttons (Open/Save/Undo/Redo/Settings). The nav pills
+   (.view-tab) are excluded so they keep their segmented-control styling
+   instead of rendering as bordered buttons. */
+.app-header button:not(.view-tab) {
   font: inherit;
   font-size: 13px;
   padding: 4px 10px;
@@ -98,11 +111,11 @@ body {
   cursor: pointer;
 }
 
-.app-header button:hover:not(:disabled) {
+.app-header button:not(.view-tab):hover:not(:disabled) {
   background: var(--accent-soft);
 }
 
-.app-header button:disabled {
+.app-header button:not(.view-tab):disabled {
   opacity: 0.4;
   cursor: default;
 }
@@ -155,12 +168,31 @@ body {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  user-select: none;
+}
+
+.view-tab:hover:not(.view-tab-active) {
+  color: var(--text);
 }
 
 .view-tab-active {
   background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Secondary pill nav for the active section's sub-views. Subordinate to the
+   primary tabs: lighter track, a hair smaller, so hierarchy reads at a glance. */
+.view-subtabs {
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 1px;
+}
+
+.view-subtabs .view-tab {
+  font-size: 12px;
+  padding: 3px 10px;
 }
 
 /* ------------------------------- outliner ------------------------------ */
@@ -1892,16 +1924,6 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 }
 
 /* ----------------------------- plan table ------------------------------ */
-
-.plan-mode-toggle {
-  display: flex;
-  gap: 2px;
-  align-self: flex-start;
-  margin-bottom: 12px;
-  background: #ededeb;
-  border-radius: 8px;
-  padding: 2px;
-}
 
 .plan-table-wrap {
   flex: 1;
