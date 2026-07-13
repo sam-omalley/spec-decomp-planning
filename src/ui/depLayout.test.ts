@@ -198,10 +198,10 @@ describe('layoutDependencies', () => {
     assert.equal(byId.get('c')!.y, byId.get('a')!.y);
   });
 
-  it('orders within a layer to uncross fan edges (barycenter pass)', () => {
-    // Two sources, two targets, wired crossed in pre-order: s1→t2, s2→t1.
-    // The barycenter pass should place t2 above t1 (reversing pre-order)
-    // so the edges run straight instead of crossing.
+  it('keeps within-column order in plan order, not a crossing reshuffle (#18)', () => {
+    // Two sources, two targets, wired crossed in plan order: s1→t2, s2→t1.
+    // Ordering follows the Plan (group pre-order) — t1 stays above t2 in
+    // its column rather than being reshuffled to uncross the edges.
     let g = emptyGraph();
     g = createGroup(g, { id: 's1', title: 'S1' });
     g = createGroup(g, { id: 's2', title: 'S2' });
@@ -213,8 +213,28 @@ describe('layoutDependencies', () => {
     // Sources share column 0, targets column 1.
     assert.equal(byId.get('s1')!.x, 0);
     assert.equal(byId.get('t1')!.x, DEP_COLUMN_WIDTH);
-    // Uncrossed: t2 (aligned with s1) sits above t1 (aligned with s2).
-    assert.ok(byId.get('t2')!.y < byId.get('t1')!.y);
+    // Plan order preserved top-to-bottom in each column.
     assert.ok(byId.get('s1')!.y < byId.get('s2')!.y);
+    assert.ok(byId.get('t1')!.y < byId.get('t2')!.y);
+  });
+
+  it('does not reorder existing nodes when a dependency is added (#18)', () => {
+    // Roots a, b, c in plan order, all dep-free ⇒ all in column 0, ordered
+    // a, b, c top-to-bottom. Adding c→a moves c to the next column but must
+    // not permute the vertical order of the nodes left in column 0.
+    let g = emptyGraph();
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = createGroup(g, { id: 'b', title: 'B' });
+    g = createGroup(g, { id: 'c', title: 'C' });
+    const columnOrder = (graph: ProjectGraph, x: number): string[] =>
+      layoutDependencies(graph)
+        .nodes.filter((n) => n.x === x)
+        .sort((p, q) => p.y - q.y)
+        .map((n) => n.id);
+    assert.deepEqual(columnOrder(g, 0), ['a', 'b', 'c']);
+    g = dep(g, 'c', 'a'); // c needs a
+    // a, b keep their plan order in column 0; only c moved right.
+    assert.deepEqual(columnOrder(g, 0), ['a', 'b']);
+    assert.deepEqual(columnOrder(g, DEP_COLUMN_WIDTH), ['c']);
   });
 });
