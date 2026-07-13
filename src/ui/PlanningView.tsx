@@ -37,9 +37,8 @@ const NO_COLLAPSE: ReadonlySet<string> = new Set();
 interface PlanningViewProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  /** Outline vs Table sub-view; lifted so the footer hint can follow it. */
+  /** Outline vs Table sub-view; selected by the header sub-tab bar. */
   mode: 'outline' | 'table';
-  onModeChange: (mode: 'outline' | 'table') => void;
   /** Global filter, shared across tabs. */
   filter?: FilterState;
   /** Depth cap for the plan (group) outliner; undefined = all levels. */
@@ -53,7 +52,6 @@ export function PlanningView({
   selectedId,
   onSelect,
   mode,
-  onModeChange,
   filter = EMPTY_FILTER,
   maxDepth,
   onMaxDepthChange,
@@ -185,20 +183,6 @@ export function PlanningView({
 
   return (
     <>
-      <div className="plan-mode-toggle">
-        <button
-          className={mode === 'outline' ? 'view-tab view-tab-active' : 'view-tab'}
-          onClick={() => onModeChange('outline')}
-        >
-          Outline
-        </button>
-        <button
-          className={mode === 'table' ? 'view-tab view-tab-active' : 'view-tab'}
-          onClick={() => onModeChange('table')}
-        >
-          Table
-        </button>
-      </div>
       {mode === 'table' ? (
         <PlanTable
           selectedId={selectedId}
