@@ -1155,6 +1155,59 @@ body {
   color: var(--muted);
 }
 
+/* team / resource editor inside the settings popover */
+.resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.resource-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.resource-name {
+  flex: 1;
+}
+.resource-fte {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 64px;
+  flex: 0 0 auto;
+}
+.resource-remove {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.resource-remove:hover {
+  color: #d1495b;
+  border-color: #d1495b;
+}
+.resource-add {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+.resource-add:hover {
+  border-color: var(--muted);
+}
+
 /* ------------------------------ timeline view ------------------------------ */
 
 .timeline-wrap {

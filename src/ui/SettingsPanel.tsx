@@ -1,14 +1,21 @@
 /**
  * Project settings popover (header ⚙): the scheduling knobs — start /
- * target dates, points↔days conversion, hours per day, and the two
- * capacity controls (parallel tracks + speed multiplier). Every edit goes
- * through `updateSettings`, so it is undoable and autosaved with the
- * graph. Inputs are pre-validated here because `updateSettings` throws on
- * an invalid value and a throwing commit would propagate.
+ * target dates, points↔days conversion, hours per week, the delivery team
+ * (resources with FTE, which set capacity + stretch durations), and the
+ * speed multiplier. Every edit goes through `updateSettings` / the resource
+ * mutations, so it is undoable and autosaved with the graph. Inputs are
+ * pre-validated here because those throw on an invalid value and a throwing
+ * commit would propagate.
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { updateSettings } from '../model/graph.ts';
+import {
+  addResource,
+  createId,
+  removeResource,
+  updateResource,
+  updateSettings,
+} from '../model/graph.ts';
 import type { ProjectSettings } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 
@@ -40,7 +47,7 @@ export function SettingsPanel() {
 
   /** Commit a positive number (optionally integer); ignore invalid input. */
   function commitNumber(
-    field: 'pointsPerDay' | 'hoursPerDay' | 'parallelTracks' | 'speedMultiplier',
+    field: 'pointsPerDay' | 'hoursPerWeek' | 'speedMultiplier',
     raw: string,
     integer = false,
   ) {
@@ -49,6 +56,22 @@ export function SettingsPanel() {
     if (!Number.isFinite(value) || value <= 0) return;
     if (integer && !Number.isInteger(value)) return;
     commit({ [field]: value }, field);
+  }
+
+  function addTeamResource() {
+    store.commit((g) => addResource(g, { id: createId(), name: '', fte: 1 }));
+  }
+  function renameResource(id: string, name: string) {
+    store.commit((g) => updateResource(g, id, { name }), { coalesce: `res-name:${id}` });
+  }
+  function setResourceFte(id: string, raw: string) {
+    if (raw.trim() === '') return;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return;
+    store.commit((g) => updateResource(g, id, { fte: value }), { coalesce: `res-fte:${id}` });
+  }
+  function dropResource(id: string) {
+    store.commit((g) => removeResource(g, id));
   }
 
   /** Commit a lock depth: a non-negative integer (0 = unlocked). */
@@ -94,20 +117,53 @@ export function SettingsPanel() {
             </label>
           </div>
 
-          <div className="settings-section-label">Capacity</div>
+          <div className="settings-section-label">Team</div>
+          {s.resources.length === 0 ? (
+            <p className="settings-note">
+              No resources yet — the plan schedules on a single full-time
+              track. Add people to parallelise and to assign work.
+            </p>
+          ) : (
+            <div className="resource-list">
+              {s.resources.map((r) => (
+                <div className="resource-row" key={r.id}>
+                  <input
+                    className="meta-input resource-name"
+                    type="text"
+                    placeholder="Name"
+                    value={r.name}
+                    onChange={(e) => renameResource(r.id, e.target.value)}
+                    onBlur={() => store.breakCoalescing()}
+                  />
+                  <label className="resource-fte">
+                    <span className="meta-label">FTE</span>
+                    <input
+                      className="meta-input"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={r.fte}
+                      onChange={(e) => setResourceFte(r.id, e.target.value)}
+                      onBlur={() => store.breakCoalescing()}
+                    />
+                  </label>
+                  <button
+                    className="resource-remove"
+                    title="Remove this resource"
+                    onClick={() => dropResource(r.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button className="resource-add" onClick={addTeamResource}>
+            + Add resource
+          </button>
+
+          <div className="settings-section-label">Scheduling</div>
           <div className="meta-row">
-            <label className="meta-field">
-              <span className="meta-label">Parallel tracks</span>
-              <input
-                className="meta-input"
-                type="number"
-                min="1"
-                step="1"
-                value={s.parallelTracks}
-                onChange={(e) => commitNumber('parallelTracks', e.target.value, true)}
-                onBlur={() => store.breakCoalescing()}
-              />
-            </label>
             <label className="meta-field">
               <span className="meta-label">Speed ×</span>
               <input
@@ -117,6 +173,18 @@ export function SettingsPanel() {
                 step="0.1"
                 value={s.speedMultiplier}
                 onChange={(e) => commitNumber('speedMultiplier', e.target.value)}
+                onBlur={() => store.breakCoalescing()}
+              />
+            </label>
+            <label className="meta-field">
+              <span className="meta-label">Hours / week</span>
+              <input
+                className="meta-input"
+                type="number"
+                min="0"
+                step="1"
+                value={s.hoursPerWeek}
+                onChange={(e) => commitNumber('hoursPerWeek', e.target.value)}
                 onBlur={() => store.breakCoalescing()}
               />
             </label>
@@ -136,22 +204,14 @@ export function SettingsPanel() {
                 onBlur={() => store.breakCoalescing()}
               />
             </label>
-            <label className="meta-field">
-              <span className="meta-label">Hours / day</span>
-              <input
-                className="meta-input"
-                type="number"
-                min="0"
-                step="0.5"
-                value={s.hoursPerDay}
-                onChange={(e) => commitNumber('hoursPerDay', e.target.value)}
-                onBlur={() => store.breakCoalescing()}
-              />
-            </label>
           </div>
           <p className="settings-note">
-            Capacity: {s.parallelTracks} track{s.parallelTracks === 1 ? '' : 's'} · durations ÷{' '}
-            {s.speedMultiplier}. Weekends are skipped.
+            Capacity:{' '}
+            {s.resources.length === 0
+              ? '1 full-time track'
+              : `${s.resources.length} resource${s.resources.length === 1 ? '' : 's'}`}{' '}
+            · durations ÷ speed, then ÷ each resource's FTE. Weekends are
+            skipped.
           </p>
 
           <div className="settings-section-label">Locks</div>

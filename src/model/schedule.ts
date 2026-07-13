@@ -6,9 +6,13 @@
  * Scheduling units = the topmost groups with an own `durationEstimate`
  * (the rollup/scheduling-unit rule): such a group is atomic and its
  * subtree is not descended into. Units are placed in dependency order
- * (reusing `analysis.ts`) onto the earliest-free of `settings.parallelTracks`
- * tracks; a unit's duration is `durationEstimate / speedMultiplier`
- * working days on a skip-weekends calendar anchored at `settings.startDate`.
+ * (reusing `analysis.ts`) onto tracks. Capacity is one track per
+ * `settings.resources` entry (an empty team is a single full-time track);
+ * a unit assigned to a resource (`resourceId`) is pinned to that resource's
+ * track, otherwise it takes the earliest-free track. A unit's duration is
+ * `durationEstimate / (speedMultiplier × fte)` working days — the track's
+ * resource FTE stretches it (fte < 1 ⇒ proportionally longer) — on a
+ * skip-weekends calendar anchored at `settings.startDate`.
  *
  * Actuals blend over the projection: a done group (has `actualFinish`)
  * uses its real dates; an in-progress group (has `actualStart`) starts on
@@ -200,8 +204,14 @@ export function scheduleProject(
   }
 
   const speed = settings.speedMultiplier > 0 ? settings.speedMultiplier : 1;
-  const trackCount = Math.max(1, Math.floor(settings.parallelTracks));
-  const tracks = new Array<number>(trackCount).fill(0); // free working-day offset
+  // Capacity is one track per resource; an empty team is a single full-time
+  // track. Each track carries its resource's FTE (stretches its durations),
+  // and assigned units pin to their resource's track.
+  const resources = settings.resources;
+  const trackFte = resources.length > 0 ? resources.map((r) => (r.fte > 0 ? r.fte : 1)) : [1];
+  const resourceTrack = new Map<string, number>();
+  resources.forEach((r, i) => resourceTrack.set(r.id, i));
+  const tracks = new Array<number>(trackFte.length).fill(0); // free working-day offset
   const finishOffset = new Map<string, number>(); // exclusive: next free day
   const startOffset = new Map<string, number>(); // where each unit begins
   const groups = new Map<string, ScheduledGroup>();
@@ -219,15 +229,25 @@ export function scheduleProject(
     remaining.delete(u);
 
     const node = graph.nodes[u]!;
-    const duration = (node.durationEstimate ?? 0) / speed;
+
+    // Track: pinned to the assigned resource when it maps to one, else the
+    // earliest-free track (any resource may pick up unassigned work).
+    const pinned = node.resourceId !== null ? resourceTrack.get(node.resourceId) : undefined;
+    let track: number;
+    if (pinned !== undefined) {
+      track = pinned;
+    } else {
+      track = 0;
+      for (let k = 1; k < tracks.length; k++) if (tracks[k]! < tracks[track]!) track = k;
+    }
+    // The track's FTE stretches the projected duration (fte < 1 ⇒ longer).
+    const duration = (node.durationEstimate ?? 0) / (speed * trackFte[track]!);
 
     let prereqFinish = 0;
     for (const p of unitPrereqs.get(u)!) {
       const f = finishOffset.get(p);
       if (f !== undefined) prereqFinish = Math.max(prereqFinish, f);
     }
-    let track = 0;
-    for (let k = 1; k < tracks.length; k++) if (tracks[k]! < tracks[track]!) track = k;
 
     if (node.actualFinish !== null) {
       // Done: real dates win; a past unit frees no future capacity.

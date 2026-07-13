@@ -462,6 +462,25 @@ items. Its scheduler/views are still to build.
     progress) and each panel heading (critical path, burn-up, estimate vs
     actual). Presentational only — no model or domain-logic change, so no
     new unit tests. Verified in preview.
+26. ✅ Resourcing (#25) — the plan is scheduled against a **team** instead of
+    an anonymous track count. New `Resource` (`{ id, name, fte }`) lives in
+    `ProjectSettings.resources`, and a `resourceId` node field assigns a
+    group to a resource. **Capacity = one track per resource** (an empty
+    team falls back to a single full-time track), replacing `parallelTracks`;
+    `hoursPerDay` becomes `hoursPerWeek` (38 default). Scheduler
+    (`schedule.ts`): an assigned unit is **pinned** to its resource's track,
+    an unassigned unit takes the earliest-free track, and **FTE stretches
+    the duration** — `durationEstimate / (speedMultiplier × fte)`, so a
+    0.8-FTE resource's work takes `1/0.8` longer. New mutations
+    (`addResource`/`updateResource`/`removeResource`/`assignResource`;
+    removing a resource clears every assignment to it). `serialize` bumps to
+    **v6**: `hoursPerDay × 5 → hoursPerWeek`, `parallelTracks > 1 →` that
+    many generic full-time resources (a single track stays an empty team),
+    `resourceId` backfilled null. UI: a **Team** section in the ⚙ Settings
+    popover (name + FTE rows, add/remove) and a **Resource** picker in both
+    `NodeMetaEditor` and the `PlanTable` column. Tested (graph/serialize/
+    schedule); verified in preview (live migration + FTE moved the projected
+    finish).
 
 ## Conventions & environment
 

@@ -23,6 +23,7 @@ import type {
   Priority,
   ProjectGraph,
   ProjectSettings,
+  Resource,
   Status,
   WorkNode,
 } from './types.ts';
@@ -38,14 +39,14 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Neutral defaults for a fresh project (1 track, no speed-up, no target). */
+/** Neutral defaults for a fresh project (no team, no speed-up, no target). */
 export function defaultSettings(): ProjectSettings {
   return {
     startDate: todayIso(),
     targetDate: null,
     pointsPerDay: 1,
-    hoursPerDay: 8,
-    parallelTracks: 1,
+    hoursPerWeek: 38,
+    resources: [],
     speedMultiplier: 1,
     specLockDepth: 0,
     planLockDepth: 0,
@@ -234,6 +235,7 @@ export function createNode(
     durationEstimate: null,
     actualStart: null,
     actualFinish: null,
+    resourceId: null,
     externalRefs: [],
     tags: input.tags ?? [],
     notes: input.notes ?? '',
@@ -280,6 +282,7 @@ export function createGroup(
     durationEstimate: null,
     actualStart: null,
     actualFinish: null,
+    resourceId: null,
     externalRefs: [],
     tags: [],
     notes: '',
@@ -622,17 +625,26 @@ export function updateSettings(
   patch: Partial<ProjectSettings>,
 ): ProjectGraph {
   const settings: ProjectSettings = { ...graph.settings, ...patch };
-  if (!Number.isInteger(settings.parallelTracks) || settings.parallelTracks < 1) {
-    throw new GraphError('parallelTracks must be a positive integer');
-  }
   if (!(settings.speedMultiplier > 0)) {
     throw new GraphError('speedMultiplier must be greater than 0');
   }
   if (!(settings.pointsPerDay > 0)) {
     throw new GraphError('pointsPerDay must be greater than 0');
   }
-  if (!(settings.hoursPerDay > 0)) {
-    throw new GraphError('hoursPerDay must be greater than 0');
+  if (!(settings.hoursPerWeek > 0)) {
+    throw new GraphError('hoursPerWeek must be greater than 0');
+  }
+  if (!Array.isArray(settings.resources)) {
+    throw new GraphError('resources must be an array');
+  }
+  const seen = new Set<string>();
+  for (const r of settings.resources) {
+    if (typeof r.id !== 'string' || r.id === '') {
+      throw new GraphError('resource needs an id');
+    }
+    if (seen.has(r.id)) throw new GraphError(`duplicate resource id: ${r.id}`);
+    seen.add(r.id);
+    if (!(r.fte > 0)) throw new GraphError('resource fte must be greater than 0');
   }
   if (!Number.isInteger(settings.specLockDepth) || settings.specLockDepth < 0) {
     throw new GraphError('specLockDepth must be a non-negative integer');
@@ -641,4 +653,70 @@ export function updateSettings(
     throw new GraphError('planLockDepth must be a non-negative integer');
   }
   return { ...graph, settings };
+}
+
+/* -------------------------------- resources ------------------------------- */
+
+/** Adds a team resource (defaults to full time). Rejects a blank name. */
+export function addResource(
+  graph: ProjectGraph,
+  input: { id: string; name: string; fte?: number },
+): ProjectGraph {
+  const name = input.name.trim();
+  const fte = input.fte ?? 1;
+  const resource: Resource = { id: input.id, name, fte };
+  return updateSettings(graph, {
+    resources: [...graph.settings.resources, resource],
+  });
+}
+
+/** Patches a resource's name and/or fte; validation runs in updateSettings. */
+export function updateResource(
+  graph: ProjectGraph,
+  id: string,
+  patch: { name?: string; fte?: number },
+): ProjectGraph {
+  if (!graph.settings.resources.some((r) => r.id === id)) {
+    throw new GraphError(`No resource with id ${id}`);
+  }
+  const resources = graph.settings.resources.map((r) =>
+    r.id === id
+      ? { ...r, ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.fte !== undefined ? { fte: patch.fte } : {}) }
+      : r,
+  );
+  return updateSettings(graph, { resources });
+}
+
+/**
+ * Removes a resource and clears it from every node assigned to it, so no
+ * `resourceId` dangles. Undoable as one step with the settings change.
+ */
+export function removeResource(graph: ProjectGraph, id: string): ProjectGraph {
+  if (!graph.settings.resources.some((r) => r.id === id)) {
+    throw new GraphError(`No resource with id ${id}`);
+  }
+  let next = updateSettings(graph, {
+    resources: graph.settings.resources.filter((r) => r.id !== id),
+  });
+  for (const node of Object.values(next.nodes)) {
+    if (node.resourceId === id) next = putNode(next, { ...node, resourceId: null });
+  }
+  return next;
+}
+
+/**
+ * Assigns a node to a resource (or clears with null). Traceability-style —
+ * meaningful on group nodes, where it pins the scheduling unit to that
+ * resource's track. Rejects an unknown resource id.
+ */
+export function assignResource(
+  graph: ProjectGraph,
+  id: string,
+  resourceId: string | null,
+): ProjectGraph {
+  const node = requireNode(graph, id);
+  if (resourceId !== null && !graph.settings.resources.some((r) => r.id === resourceId)) {
+    throw new GraphError(`No resource with id ${resourceId}`);
+  }
+  return putNode(graph, { ...node, resourceId });
 }

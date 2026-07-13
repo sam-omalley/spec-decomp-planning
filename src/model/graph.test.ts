@@ -4,6 +4,8 @@ import {
   GraphError,
   addEdge,
   addExternalRef,
+  addResource,
+  assignResource,
   assignToGroup,
   childrenOf,
   createGroup,
@@ -18,11 +20,13 @@ import {
   parentOf,
   removeExternalRef,
   removeFromGroup,
+  removeResource,
   rootsOf,
   setActualDates,
   setEstimate,
   subtreeIds,
   updateNode,
+  updateResource,
   updateSettings,
 } from './graph.ts';
 import { deserializeProject, serializeProject } from './serialize.ts';
@@ -308,7 +312,11 @@ describe('serialization', () => {
     g = setEstimate(g, 'login', { effort: 5, durationEstimate: 3 });
     g = setActualDates(g, 'login', { actualStart: '2026-07-01' });
     g = addExternalRef(g, 'login', { system: 'jira', key: 'PT-1', url: 'http://x/PT-1' });
-    g = updateSettings(g, { parallelTracks: 3, speedMultiplier: 1.5, targetDate: '2026-12-01' });
+    g = updateSettings(g, {
+      resources: [{ id: 'r1', name: 'Ada', fte: 0.8 }],
+      speedMultiplier: 1.5,
+      targetDate: '2026-12-01',
+    });
     g = updateSettings(g, { specLockDepth: 1, planLockDepth: 2 });
     assert.deepEqual(deserializeProject(serializeProject(g)), g);
   });
@@ -338,29 +346,54 @@ describe('serialization', () => {
     assert.equal(g.nodes['a']!.actualStart, null);
     assert.equal(g.nodes['a']!.actualFinish, null);
     // Absent settings become the neutral defaults.
-    assert.equal(g.settings.parallelTracks, 1);
+    assert.deepEqual(g.settings.resources, []);
+    assert.equal(g.settings.hoursPerWeek, 38);
     assert.equal(g.settings.speedMultiplier, 1);
     assert.equal(g.settings.targetDate, null);
+    assert.equal(g.nodes['a']!.resourceId, null); // v6 field backfilled
     // Lock depths (v5) backfill to unlocked.
     assert.equal(g.settings.specLockDepth, 0);
     assert.equal(g.settings.planLockDepth, 0);
   });
 
-  it('migrates a v4 file by backfilling the lock depths', () => {
-    let g = fixture();
-    g = updateSettings(g, { parallelTracks: 2 });
-    const file = JSON.parse(serializeProject(g)) as {
-      version: number;
-      graph: { settings: Record<string, unknown> };
+  it('migrates a v5 file to resourcing (parallelTracks → team, hours/day → hours/week)', () => {
+    // A v5-shaped settings blob: the old capacity/conversion fields.
+    const v5 = {
+      version: 5,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {},
+        edges: {},
+        rootOrder: [],
+        groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerDay: 8, parallelTracks: 3, speedMultiplier: 1,
+          specLockDepth: 0, planLockDepth: 0,
+        },
+      },
     };
-    // Downgrade to a v4 file: strip the v5-only fields.
-    file.version = 4;
-    delete file.graph.settings.specLockDepth;
-    delete file.graph.settings.planLockDepth;
-    const restored = deserializeProject(JSON.stringify(file));
-    assert.equal(restored.settings.parallelTracks, 2); // preserved
-    assert.equal(restored.settings.specLockDepth, 0); // backfilled
-    assert.equal(restored.settings.planLockDepth, 0);
+    const g = deserializeProject(JSON.stringify(v5));
+    // parallelTracks: 3 → three generic full-time resources (capacity kept).
+    assert.equal(g.settings.resources.length, 3);
+    assert.ok(g.settings.resources.every((r) => r.fte === 1 && r.name !== ''));
+    assert.equal(g.settings.hoursPerWeek, 40); // 8 × 5
+    assert.equal('parallelTracks' in g.settings, false);
+    assert.equal('hoursPerDay' in g.settings, false);
+  });
+
+  it('keeps a single legacy track as an empty team', () => {
+    const v5 = {
+      version: 5,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: { startDate: '2026-01-01', parallelTracks: 1, hoursPerDay: 7.6 },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(v5));
+    assert.deepEqual(g.settings.resources, []); // one track ⇒ no explicit team
+    assert.equal(g.settings.hoursPerWeek, 38); // 7.6 × 5
   });
 
   it('fills defaults for a partial/garbage settings blob', () => {
@@ -368,11 +401,11 @@ describe('serialization', () => {
     const file = JSON.parse(serializeProject(g)) as {
       graph: { settings: unknown };
     };
-    file.graph.settings = { parallelTracks: 4, speedMultiplier: 'fast' };
+    file.graph.settings = { hoursPerWeek: 30, speedMultiplier: 'fast' };
     const restored = deserializeProject(JSON.stringify(file));
-    assert.equal(restored.settings.parallelTracks, 4); // kept
+    assert.equal(restored.settings.hoursPerWeek, 30); // kept
     assert.equal(restored.settings.speedMultiplier, 1); // garbage → default
-    assert.equal(restored.settings.hoursPerDay, 8); // missing → default
+    assert.deepEqual(restored.settings.resources, []); // missing → default
   });
 });
 
@@ -441,15 +474,38 @@ describe('external refs and settings', () => {
 
   it('validates capacity and conversion settings', () => {
     const g = fixture();
-    assert.equal(updateSettings(g, { parallelTracks: 3 }).settings.parallelTracks, 3);
-    assert.throws(() => updateSettings(g, { parallelTracks: 0 }), /positive integer/);
-    assert.throws(() => updateSettings(g, { parallelTracks: 2.5 }), /positive integer/);
+    assert.equal(updateSettings(g, { hoursPerWeek: 30 }).settings.hoursPerWeek, 30);
+    assert.throws(() => updateSettings(g, { hoursPerWeek: 0 }), /hoursPerWeek/);
     assert.throws(() => updateSettings(g, { speedMultiplier: 0 }), /speedMultiplier/);
     assert.throws(() => updateSettings(g, { pointsPerDay: -1 }), /pointsPerDay/);
-    assert.throws(() => updateSettings(g, { hoursPerDay: 0 }), /hoursPerDay/);
     assert.equal(updateSettings(g, { specLockDepth: 0 }).settings.specLockDepth, 0);
     assert.equal(updateSettings(g, { planLockDepth: 3 }).settings.planLockDepth, 3);
     assert.throws(() => updateSettings(g, { specLockDepth: -1 }), /specLockDepth/);
     assert.throws(() => updateSettings(g, { planLockDepth: 1.5 }), /planLockDepth/);
+  });
+
+  it('manages the resource team and pins assignments', () => {
+    let g = fixture();
+    g = addResource(g, { id: 'r1', name: 'Ada', fte: 0.8 });
+    g = addResource(g, { id: 'r2', name: 'Grace' }); // fte defaults to 1
+    assert.equal(g.settings.resources.length, 2);
+    assert.equal(g.settings.resources[1]!.fte, 1);
+    assert.throws(() => addResource(g, { id: 'r1', name: 'Dup' }), /duplicate resource id/);
+    assert.throws(() => addResource(g, { id: 'r3', name: 'X', fte: 0 }), /fte/);
+
+    g = updateResource(g, 'r1', { fte: 0.5 });
+    assert.equal(g.settings.resources[0]!.fte, 0.5);
+    assert.throws(() => updateResource(g, 'nope', { fte: 1 }), /No resource/);
+
+    // Assignment must reference a real resource; clears with null.
+    g = assignResource(g, 'login', 'r1');
+    assert.equal(g.nodes['login']!.resourceId, 'r1');
+    assert.throws(() => assignResource(g, 'login', 'ghost'), /No resource/);
+
+    // Removing a resource clears it from every assigned node.
+    g = removeResource(g, 'r1');
+    assert.equal(g.settings.resources.length, 1);
+    assert.equal(g.nodes['login']!.resourceId, null);
+    assert.throws(() => removeResource(g, 'r1'), /No resource/);
   });
 });

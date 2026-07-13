@@ -18,7 +18,7 @@ import type { ProjectGraph } from './types.ts';
 // e1 (2d/3pt) done but ran 3 working days; e2 (2d/5pt) not started.
 function fixture(): ProjectGraph {
   let g = emptyGraph();
-  g = updateSettings(g, { startDate: '2024-01-01', parallelTracks: 1, targetDate: '2024-01-04' });
+  g = updateSettings(g, { startDate: '2024-01-01', targetDate: '2024-01-04' });
   g = createGroup(g, { id: 'e1', title: 'Epic 1' });
   g = createGroup(g, { id: 'e2', title: 'Epic 2' });
   g = setEstimate(g, 'e1', { durationEstimate: 2, effort: 3 });

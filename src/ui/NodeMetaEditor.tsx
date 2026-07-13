@@ -7,7 +7,7 @@
  * `KeyEditor` (key-only, defaulting to Jira).
  */
 
-import { setActualDates, setEstimate, updateNode } from '../model/graph.ts';
+import { assignResource, setActualDates, setEstimate, updateNode } from '../model/graph.ts';
 import type { Priority, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { KeyEditor } from './KeyEditor.tsx';
@@ -78,6 +78,26 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="meta-row">
+        <label className="meta-field">
+          <span className="meta-label">Resource</span>
+          <select
+            className="meta-select"
+            value={node.resourceId ?? ''}
+            onChange={(e) =>
+              store.commit((g) => assignResource(g, id, e.target.value || null))
+            }
+          >
+            <option value="">Unassigned</option>
+            {graph.settings.resources.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name.trim() || 'Unnamed'}
               </option>
             ))}
           </select>
