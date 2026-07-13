@@ -1117,6 +1117,13 @@ body {
   right: 0;
   z-index: 30;
   width: 300px;
+  /* Cap to the viewport and scroll when the content (a large team, all the
+     sections) would otherwise run off the bottom of the screen. The panel is
+     anchored just below the ~50px header, so leave a header-plus-margin
+     allowance. */
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
