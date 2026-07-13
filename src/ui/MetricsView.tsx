@@ -17,6 +17,39 @@ const CHART_W = 620;
 const CHART_H = 200;
 const PAD = 28;
 
+/**
+ * How each metric is calculated, in one place so the hover copy can't
+ * drift from the pure `metrics.ts`/`schedule.ts` logic it describes.
+ */
+const HELP = {
+  projectFinish:
+    'The latest finish across all scheduling units, from the forward scheduler: each unit is placed on the earliest-free of the resource/track capacity, its duration is the estimate ÷ speed on a weekdays-only calendar. Actuals (done / in-progress units) override the projection.',
+  target:
+    'The target date you set in ⚙ Settings — a reference line only. It never changes the projection; it just gives the variance something to measure against.',
+  variance:
+    'Calendar days between the target date and the projected finish. Positive = late (finish lands after the target), negative = early. “On track” means ≤ 0.',
+  progress:
+    'Summed unit duration estimates in working days: done units vs the whole plan. Remaining = total − done. Points are the summed effort of the not-done units.',
+  criticalPath:
+    'The chain that sets the finish: starting from the last-finishing unit, walk back through each binding prerequisite (the one whose finish set the next unit’s start), stopping at a real start or a capacity/“today” limit. Independent work off this chain doesn’t move the date.',
+  burnUp:
+    'Cumulative completed scope (working days) stepping up at each unit’s actual finish, against the constant total scope. The ideal line runs from the start to the projected finish; 🎯 marks the target date.',
+  estimateVsActual:
+    'For each completed unit: estimate is its duration estimate; actual is the working days between its actual start and finish, inclusive of both. Variance = actual − estimate (+ over, − under).',
+} as const;
+
+/** A small ⓘ glyph that reveals an explanation of a metric on hover/focus. */
+function InfoDot({ text }: { text: string }) {
+  return (
+    <span className="info-dot" tabIndex={0} role="note" aria-label={text}>
+      <span aria-hidden="true">ⓘ</span>
+      <span className="info-tip" role="tooltip">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 interface MetricsViewProps {
   /** Jump to a unit's group definition in the plan outline. */
   onReveal?: (id: string) => void;
@@ -47,12 +80,13 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
   return (
     <div className="metrics-wrap">
       <section className="metric-cards">
-        <Card label="Projected finish" value={summary.projectFinish ?? '—'} />
-        <Card label="Target" value={summary.targetDate ?? 'none set'} />
+        <Card label="Projected finish" value={summary.projectFinish ?? '—'} help={HELP.projectFinish} />
+        <Card label="Target" value={summary.targetDate ?? 'none set'} help={HELP.target} />
         <Card
           label="Variance"
           value={varianceText}
           tone={summary.onTrack === null ? undefined : summary.onTrack ? 'good' : 'bad'}
+          help={HELP.variance}
         />
         <Card
           label="Progress"
@@ -60,12 +94,15 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
           sub={`${summary.remainingDays}d remaining${
             summary.remainingPoints > 0 ? ` · ${summary.remainingPoints}pt` : ''
           }`}
+          help={HELP.progress}
         />
       </section>
 
       {summary.criticalPath.length > 0 && (
         <section className="metric-panel">
-          <h3>Critical path — what sets the projected finish</h3>
+          <h3>
+            Critical path — what sets the projected finish <InfoDot text={HELP.criticalPath} />
+          </h3>
           <div className="crit-path">
             {summary.criticalPath.map((u, i) => (
               <span key={u.id} className="crit-step">
@@ -90,12 +127,16 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
       )}
 
       <section className="metric-panel">
-        <h3>Burn-up — completed vs total scope (days)</h3>
+        <h3>
+          Burn-up — completed vs total scope (days) <InfoDot text={HELP.burnUp} />
+        </h3>
         <BurnUpChart graph={graph} summary={summary} burn={burn} />
       </section>
 
       <section className="metric-panel">
-        <h3>Estimate vs actual (completed units)</h3>
+        <h3>
+          Estimate vs actual (completed units) <InfoDot text={HELP.estimateVsActual} />
+        </h3>
         {variance.rows.length === 0 ? (
           <p className="metric-hint">No completed units yet — finish some to compare.</p>
         ) : (
@@ -111,15 +152,20 @@ function Card({
   value,
   sub,
   tone,
+  help,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: 'good' | 'bad';
+  help?: string;
 }) {
   return (
     <div className={`metric-card${tone ? ` metric-card-${tone}` : ''}`}>
-      <div className="metric-card-label">{label}</div>
+      <div className="metric-card-label">
+        {label}
+        {help && <InfoDot text={help} />}
+      </div>
       <div className="metric-card-value">{value}</div>
       {sub && <div className="metric-card-sub">{sub}</div>}
     </div>

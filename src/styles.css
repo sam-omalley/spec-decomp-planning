@@ -1329,6 +1329,52 @@ body {
   color: var(--muted);
   font-size: 13px;
 }
+
+/* ⓘ info affordance: a muted glyph that reveals a calculation note on
+   hover/focus. Read-mostly, hand-rolled — no JS positioning. */
+.info-dot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: help;
+  vertical-align: middle;
+}
+.info-dot:hover,
+.info-dot:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+.info-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  z-index: 20;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.info-dot:hover .info-tip,
+.info-dot:focus-visible .info-tip {
+  opacity: 1;
+  visibility: visible;
+}
 .crit-path {
   display: flex;
   flex-wrap: wrap;

@@ -447,6 +447,22 @@ items. Its scheduler/views are still to build.
     table. The `ExternalRef` model (system/key/url) is untouched — the UI
     just narrows to key-only, leaving room to grow.
 
+    SCRUM-monitoring pass (slices 25–27, from open feature requests #22/#24/#25).
+    25 is UI-only; 26 is a model change (resourcing); 27 is a new pure
+    analysis + view that benefits from 26. Each keeps the
+    pure-helpers-in-`model`/`ui`, tested-domain rule.
+
+25. ✅ Metric hover explanations (#22) — every metric now carries a small
+    `ⓘ` affordance describing *how it is calculated*, so the numbers are
+    self-documenting. A reusable `InfoDot` (muted glyph + pure-CSS
+    hover/focus tooltip, `.info-dot`/`.info-tip` in `styles.css`) and a
+    single `HELP` copy map in `MetricsView.tsx` (one place, so wording
+    can't drift from the `metrics.ts`/`schedule.ts` logic it describes)
+    sit on each summary card (projected finish, target, variance,
+    progress) and each panel heading (critical path, burn-up, estimate vs
+    actual). Presentational only — no model or domain-logic change, so no
+    new unit tests. Verified in preview.
+
 ## Conventions & environment
 
 - Tests: Node built-in runner, no deps — `npm test`
