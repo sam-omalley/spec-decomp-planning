@@ -793,21 +793,6 @@ body {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.gnode-draggable {
-  cursor: grab;
-}
-
-.gnode-draggable:active {
-  cursor: grabbing;
-}
-
-/* A group node while a spec node is dragged over it. */
-.gnode-drop {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
 .gnode {
   display: flex;
   align-items: center;
