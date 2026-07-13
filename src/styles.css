@@ -1553,6 +1553,12 @@ body {
   transition: opacity 0.12s ease;
   pointer-events: none;
 }
+/* Open below the glyph instead of above — for dots near the top of the
+   view (summary cards) where an upward tip would clip off the viewport. */
+.info-tip-down {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
 .info-dot:hover .info-tip,
 .info-dot:focus-visible .info-tip {
   opacity: 1;
