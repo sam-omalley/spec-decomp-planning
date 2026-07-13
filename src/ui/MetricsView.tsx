@@ -38,7 +38,12 @@ const HELP = {
     'For each completed unit: estimate is its duration estimate; actual is the working days between its actual start and finish, inclusive of both. Variance = actual − estimate (+ over, − under).',
 } as const;
 
-/** A small ⓘ glyph that reveals an explanation of a metric on hover/focus. */
+/**
+ * A small ⓘ glyph that reveals an explanation of a metric on hover/focus.
+ * The tip opens *below* the glyph: every dot here sits on a card label or a
+ * panel heading with content beneath it, so downward never clips — whereas an
+ * upward tip clips off the top whenever its row scrolls near the viewport top.
+ */
 function InfoDot({ text }: { text: string }) {
   return (
     <span className="info-dot" tabIndex={0} role="note" aria-label={text}>
