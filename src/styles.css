@@ -1383,6 +1383,129 @@ body {
   font-size: 13px;
 }
 
+/* ------------------------------ concerns view ------------------------------ */
+.concerns-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.concerns-empty {
+  padding: 24px;
+  text-align: center;
+}
+.concerns-clear {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2f9e57;
+  margin: 0 0 6px;
+}
+.concerns-summary {
+  display: flex;
+  gap: 12px;
+}
+.concerns-tally {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.concerns-tally-count {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.concerns-tally-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.concerns-tally-high .concerns-tally-count {
+  color: #d1495b;
+}
+.concerns-tally-medium .concerns-tally-count {
+  color: #c67c1e;
+}
+.concerns-tally-low .concerns-tally-count {
+  color: var(--muted);
+}
+.concerns-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.concern-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(120px, 1fr) minmax(0, 2fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--panel);
+}
+.concern-row.concern-high {
+  border-left-color: #d1495b;
+}
+.concern-row.concern-medium {
+  border-left-color: #c67c1e;
+}
+.concern-row.concern-low {
+  border-left-color: var(--muted);
+}
+.concern-row-link {
+  cursor: pointer;
+}
+.concern-row-link:hover {
+  border-color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 6%, var(--panel));
+}
+.concern-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.concern-dot-high {
+  background: #d1495b;
+}
+.concern-dot-medium {
+  background: #c67c1e;
+}
+.concern-dot-low {
+  background: var(--muted);
+}
+.concern-kind {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.concern-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.concern-detail {
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 720px) {
+  .concern-row {
+    grid-template-columns: auto auto 1fr;
+  }
+  .concern-detail {
+    grid-column: 1 / -1;
+  }
+}
+
 /* ⓘ info affordance: a muted glyph that reveals a calculation note on
    hover/focus. Read-mostly, hand-rolled — no JS positioning. */
 .info-dot {
