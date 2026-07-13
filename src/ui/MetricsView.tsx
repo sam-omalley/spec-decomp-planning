@@ -5,6 +5,7 @@
  */
 
 import { useProjectGraph } from '../store/appStore.ts';
+import { todayIso } from '../model/graph.ts';
 import {
   burnUp,
   calendarDaysBetween,
@@ -23,9 +24,10 @@ interface MetricsViewProps {
 
 export function MetricsView({ onReveal }: MetricsViewProps = {}) {
   const graph = useProjectGraph();
-  const summary = projectionSummary(graph);
+  const now = todayIso();
+  const summary = projectionSummary(graph, now);
   const variance = estimateVsActual(graph);
-  const burn = burnUp(graph);
+  const burn = burnUp(graph, now);
 
   if (summary.totalDays === 0 && summary.totalPoints === 0) {
     return (

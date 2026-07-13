@@ -153,3 +153,35 @@ describe('scheduleProject — actuals blend over projection', () => {
     assert.equal(a.finish, '2024-01-04'); // Tue + 3 working days span → Thu
   });
 });
+
+describe('scheduleProject — projections never date work in the past (#19)', () => {
+  it('starts not-started work at `now`, not the (past) startDate', () => {
+    // startDate is Jan 1 but today is Jan 15 — the project is already
+    // running. A not-started unit must project from today, not from the
+    // stale start (which understated the finish).
+    let g = base();
+    g = group(g, 'a', 5);
+    const s = scheduleProject(g, '2024-01-15'); // Mon Jan 15
+    assert.equal(s.groups.get('a')!.start, '2024-01-15');
+    assert.equal(s.groups.get('a')!.finish, '2024-01-19'); // Mon..Fri
+  });
+
+  it('still starts after a prerequisite that finishes past `now`', () => {
+    // a is done, finishing Fri Jan 5 — later than now (Jan 3). b (not
+    // started) must wait on a's finish, not jump to now.
+    let g = base();
+    g = group(g, 'a', 5);
+    g = group(g, 'b', 2);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a' });
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01', actualFinish: '2024-01-05' });
+    const s = scheduleProject(g, '2024-01-03');
+    assert.equal(s.groups.get('b')!.start, '2024-01-08'); // Mon after a's finish
+  });
+
+  it('defaults `now` to startDate — no clamp, backward compatible', () => {
+    let g = base();
+    g = group(g, 'a', 5);
+    const s = scheduleProject(g); // no `now` → anchored at startDate
+    assert.equal(s.groups.get('a')!.start, '2024-01-01');
+  });
+});

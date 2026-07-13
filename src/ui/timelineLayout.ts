@@ -65,8 +65,13 @@ const EMPTY: TimelineModel = {
   empty: true,
 };
 
-export function buildTimeline(graph: ProjectGraph): TimelineModel {
-  const schedule = scheduleProject(graph);
+export function buildTimeline(
+  graph: ProjectGraph,
+  /** "Today" — forwarded to the scheduler so projected bars don't start in
+   *  the past. Defaults to `startDate` (no-op) for deterministic tests. */
+  now: string = graph.settings.startDate,
+): TimelineModel {
+  const schedule = scheduleProject(graph, now);
 
   // Groups in pre-order, with depth, that actually got scheduled.
   const ordered: { id: string; depth: number }[] = [];
