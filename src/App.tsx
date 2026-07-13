@@ -329,7 +329,8 @@ export function App() {
           <>The delivery plan as Markdown · toggle sections · Copy to export</>
         )}
         {section === 'graph' && graphMode === 'map' && (
-          <>Click to select · scroll to zoom · drag a spec node onto a group to assign</>
+          <>Click to select · scroll to zoom · drag a spec item's right handle onto a group's left to
+            assign · grab an assignment arrow to move or remove it</>
         )}
         {section === 'graph' && graphMode === 'dep' && (
           <>Drag between two stories' side handles to link them — the arrow shows work flowing

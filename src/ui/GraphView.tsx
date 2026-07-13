@@ -8,31 +8,47 @@
  * Interactions: pan, zoom, click to select (synced with the other
  * views). Filters (Unassigned work / Empty groups, toggled together)
  * either spotlight matches by dimming the rest or hide the rest
- * outright. Assignment is possible here too: drag a spec node onto a
- * group node (single membership, so it moves an existing assignment) —
- * handy for dropping loose work onto an empty group without leaving the
- * canvas.
+ * outright.
+ *
+ * Assignment is authored here with the same handle-drag UX as the
+ * Dependency view (issue #31): drag a spec node's **right** handle onto a
+ * group node's **left** handle to create an `assigned_to` edge (single
+ * membership, so it moves an existing assignment). Loose connection mode
+ * lets either end start; `isValidConnection` accepts only a work-right ↔
+ * group-left pair (`mapAuthoring.ts`). During a drag each card reveals only
+ * its valid handle. An existing assignment edge is grabbable near an end:
+ * drop it on another group to re-home the assignment, or on empty space to
+ * unassign.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
+  ConnectionMode,
   Controls,
   Handle,
   MarkerType,
   Position,
   ReactFlow,
+  useConnection,
   useReactFlow,
 } from '@xyflow/react';
-import type { Edge as FlowEdge, Node as FlowNode, NodeProps } from '@xyflow/react';
+import type {
+  Connection,
+  ConnectionLineComponentProps,
+  Edge as FlowEdge,
+  Node as FlowNode,
+  NodeProps,
+} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
-import { assignToGroup } from '../model/graph.ts';
+import { assignToGroup, removeEdge } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
 import { DependencyGraph } from './DependencyGraph.tsx';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { layoutGraph } from './graphLayout.ts';
+import { assignmentHandleVisibility, resolveAssignmentEnds } from './mapAuthoring.ts';
 import { isEmptyLeafGroup, uncoveredWorkIds } from './planning.ts';
 
 type FilterKey = 'unassigned' | 'empty';
@@ -40,8 +56,6 @@ type FilterKey = 'unassigned' | 'empty';
 type FilterMode = 'spotlight' | 'hide';
 /** Map = the spec↔plan mirror; Dependency = the leaf-group dep DAG. */
 export type GraphMode = 'map' | 'dep';
-
-const DND_TYPE = 'text/plain';
 
 interface GNodeData extends Record<string, unknown> {
   title: string;
@@ -53,17 +67,34 @@ interface GNodeData extends Record<string, unknown> {
   dimmed: boolean;
   matched: boolean;
   color?: string;
-  /** Group nodes only: assign the dragged work node to this group. */
-  onAssign?: (workId: string) => void;
 }
 
 type GNode = FlowNode<GNodeData>;
+/** graphEdgeId is set only on real, grabbable `assigned_to` edges. */
+interface GEdgeData extends Record<string, unknown> {
+  graphEdgeId?: string;
+}
+
+/** Signature of the in-progress connection (empty when idle) — a primitive so
+ *  the `useConnection` selector stays referentially stable across renders. */
+function useConnSignature(): string {
+  return useConnection((c) =>
+    c.inProgress ? `${c.fromNode?.id ?? ''}:${c.fromHandle?.id ?? ''}` : '',
+  );
+}
+
+/** The show/hide drag class for a card's assignment handle, or ''. */
+function dragClass(conn: string, nodeId: string, nodeIsGroup: boolean): string {
+  if (!conn) return '';
+  const sep = conn.indexOf(':');
+  const vis = assignmentHandleVisibility(nodeId, nodeIsGroup, conn.slice(0, sep), conn.slice(sep + 1));
+  return vis === 'show' ? 'dephandle-drag-show' : vis === 'hide' ? 'dephandle-drag-hide' : '';
+}
 
 function WorkGraphNode({ id, data }: NodeProps<GNode>) {
   const classes = [
     'gnode',
     'gnode-work',
-    'gnode-draggable',
     data.isSelected ? 'gnode-selected' : '',
     data.isDone ? 'gnode-done' : '',
     data.inCycle ? 'gnode-cycle' : data.isWaiting ? 'gnode-waiting' : '',
@@ -72,63 +103,89 @@ function WorkGraphNode({ id, data }: NodeProps<GNode>) {
   ]
     .filter(Boolean)
     .join(' ');
+  // The right handle authors assignments (spec → plan); the left handle only
+  // renders incoming contains edges, so it is not connectable.
+  const rightDrag = dragClass(useConnSignature(), id, false);
   return (
-    <div
-      className={classes}
-      draggable
-      title="Drag onto a group to assign"
-      onDragStart={(e) => {
-        e.dataTransfer.setData(DND_TYPE, id);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-    >
-      <Handle type="target" position={Position.Left} id="lt" className="ghandle" />
+    <div className={classes}>
+      <Handle type="target" position={Position.Left} id="lt" className="ghandle" isConnectable={false} />
       <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
-      <Handle type="source" position={Position.Right} id="rs" className="ghandle" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="rs"
+        className={`ghandle dephandle ${rightDrag}`}
+      />
     </div>
   );
 }
 
-function GroupGraphNode({ data }: NodeProps<GNode>) {
-  const [over, setOver] = useState(false);
+function GroupGraphNode({ id, data }: NodeProps<GNode>) {
   const classes = [
     'gnode',
     'gnode-group',
     data.isSelected ? 'gnode-selected' : '',
     data.dimmed ? 'gnode-dim' : '',
     data.matched ? 'gnode-match' : '',
-    over ? 'gnode-drop' : '',
   ]
     .filter(Boolean)
     .join(' ');
+  // The left target handle receives assignments (spec → plan); the left source
+  // (contains, group tree) and right target (contains, from parent) only render
+  // existing edges, so they are not connectable.
+  const leftDrag = dragClass(useConnSignature(), id, true);
   return (
-    <div
-      className={classes}
-      style={{ ['--group-color' as string]: data.color }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        const workId = e.dataTransfer.getData(DND_TYPE);
-        if (workId) data.onAssign?.(workId);
-      }}
-    >
-      <Handle type="source" position={Position.Left} id="ls" className="ghandle" />
-      <Handle type="target" position={Position.Left} id="lt" className="ghandle" />
+    <div className={classes} style={{ ['--group-color' as string]: data.color }}>
+      <Handle type="source" position={Position.Left} id="ls" className="ghandle" isConnectable={false} />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="lt"
+        className={`ghandle dephandle ${leftDrag}`}
+      />
       <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
-      <Handle type="target" position={Position.Right} id="rt" className="ghandle" />
+      <Handle type="target" position={Position.Right} id="rt" className="ghandle" isConnectable={false} />
     </div>
   );
 }
 
 const nodeTypes = { work: WorkGraphNode, group: GroupGraphNode };
+
+/** In-progress assignment line: a dashed link whose arrow points at the group
+ *  (the plan side the work flows into), previewing the `assigned_to` edge. */
+function MapConnectionLine({ fromX, fromY, toX, toY, fromHandle }: ConnectionLineComponentProps) {
+  // Dragging from a group's left handle → the group is the fixed `from` end;
+  // otherwise the group is the moving `to` end the drag lands on.
+  const arrowAtFrom = fromHandle?.id === 'lt';
+  const tipX = arrowAtFrom ? fromX : toX;
+  const tipY = arrowAtFrom ? fromY : toY;
+  const baseX = arrowAtFrom ? toX : fromX;
+  const baseY = arrowAtFrom ? toY : fromY;
+  const dx = tipX - baseX;
+  const dy = tipY - baseY;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const size = 9;
+  const half = 5.5;
+  const backX = tipX - ux * size;
+  const backY = tipY - uy * size;
+  const arrow = `M ${tipX} ${tipY} L ${backX - uy * half} ${backY + ux * half} L ${backX + uy * half} ${backY - ux * half} Z`;
+  return (
+    <g>
+      <path
+        d={`M ${fromX} ${fromY} L ${toX} ${toY}`}
+        fill="none"
+        stroke="#9aa0a6"
+        strokeWidth={1.5}
+        strokeDasharray="6 4"
+      />
+      <path d={arrow} fill="#9aa0a6" />
+    </g>
+  );
+}
 
 /** Re-fits the viewport whenever `signature` changes — i.e. when the
  *  filter/mode toggles reflow the graph. Lives inside <ReactFlow> so it
@@ -186,17 +243,59 @@ export function GraphView({
     [active, highlight],
   );
 
-  const assign = useCallback(
-    (workId: string, groupId: string) => {
+  const isGroup = useCallback(
+    (id: string): boolean => graph.nodes[id]?.type === 'group',
+    [graph],
+  );
+
+  // Author an assignment by dragging a spec node's right handle onto a group's
+  // left handle (single membership, so it moves any existing assignment).
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      const ends = resolveAssignmentEnds(connection, isGroup);
+      if (!ends) return;
+      const { workId, groupId } = ends;
       store.commit((g) => {
-        const node = g.nodes[workId];
-        if (!node || node.type === 'group' || !g.nodes[groupId]) return g;
+        if (!g.nodes[workId] || g.nodes[workId]!.type === 'group') return g;
+        if (g.nodes[groupId]?.type !== 'group') return g;
         return assignToGroup(g, workId, groupId);
       });
       onSelect(workId);
     },
-    [onSelect],
+    [isGroup, onSelect],
   );
+
+  // Grabbing an assignment arrow near an end reconnects it: dropping on a valid
+  // handle re-homes the assignment; dropping on empty space unassigns. Only a
+  // real backing edge (graphEdgeId) is grabbable. `reconnected` distinguishes a
+  // valid re-home from a drop into space (delete).
+  const reconnected = useRef(false);
+  const onReconnectStart = useCallback(() => {
+    reconnected.current = false;
+  }, []);
+  const onReconnect = useCallback(
+    (oldEdge: FlowEdge<GEdgeData>, connection: Connection) => {
+      const ends = resolveAssignmentEnds(connection, isGroup);
+      const graphEdgeId = oldEdge.data?.graphEdgeId;
+      if (!ends || !graphEdgeId) return; // invalid drop → onReconnectEnd deletes
+      reconnected.current = true;
+      const { workId, groupId } = ends;
+      store.commit((g) => {
+        const next = g.edges[graphEdgeId] ? removeEdge(g, graphEdgeId) : g;
+        if (!next.nodes[workId] || next.nodes[workId]!.type === 'group') return next;
+        if (next.nodes[groupId]?.type !== 'group') return next;
+        return assignToGroup(next, workId, groupId);
+      });
+      onSelect(workId);
+    },
+    [isGroup, onSelect],
+  );
+  const onReconnectEnd = useCallback((_: unknown, edge: FlowEdge<GEdgeData>) => {
+    if (reconnected.current) return; // already re-homed in onReconnect
+    const graphEdgeId = edge.data?.graphEdgeId;
+    if (!graphEdgeId) return;
+    store.commit((g) => (g.edges[graphEdgeId] ? removeEdge(g, graphEdgeId) : g));
+  }, []);
 
   // The global text filter always dims non-matches in place (never hides),
   // so the graph's structure stays legible; it composes with the local
@@ -241,15 +340,10 @@ export function GraphView({
             (textActive && !textMatch(placed.id)) ||
             (anyFilter && mode === 'spotlight' && !matched),
           matched: (textActive && textMatch(placed.id)) || (anyFilter && matched),
-          ...(placed.side === 'group'
-            ? {
-                color: rootGroupColor(graph, placed.id),
-                onAssign: (workId: string) => assign(workId, placed.id),
-              }
-            : {}),
+          ...(placed.side === 'group' ? { color: rootGroupColor(graph, placed.id) } : {}),
         },
         draggable: false,
-        connectable: false,
+        connectable: true,
       });
     }
     return result;
@@ -260,7 +354,6 @@ export function GraphView({
     anyFilter,
     mode,
     matches,
-    assign,
     visibleSet,
     textActive,
     textMatch,
@@ -270,8 +363,8 @@ export function GraphView({
   // whose endpoints are both on the canvas.
   const visibleIds = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
 
-  const edges = useMemo<FlowEdge[]>(() => {
-    const result: FlowEdge[] = [];
+  const edges = useMemo<FlowEdge<GEdgeData>[]>(() => {
+    const result: FlowEdge<GEdgeData>[] = [];
     for (const edge of Object.values(graph.edges)) {
       if (!visibleIds.has(edge.from) || !visibleIds.has(edge.to)) continue;
       if (edge.type === 'depends_on' || edge.type === 'blocks') {
@@ -314,8 +407,12 @@ export function GraphView({
           target: edge.to,
           sourceHandle: 'rs',
           targetHandle: 'lt',
-          className: 'gedge-assigned',
+          className: 'gedge-assigned gedge-deletable',
           style: { stroke: rootGroupColor(graph, edge.to) },
+          // Grabbable near an end to re-home (drop on another group) or delete
+          // (drop on empty space); the backing edge id drives both.
+          reconnectable: true,
+          data: { graphEdgeId: edge.id },
         });
       }
     }
@@ -382,8 +479,18 @@ export function GraphView({
           fitView
           minZoom={0.2}
           nodesDraggable={false}
-          nodesConnectable={false}
+          nodesConnectable
           elementsSelectable={false}
+          connectionMode={ConnectionMode.Loose}
+          connectionLineComponent={MapConnectionLine}
+          // Only assignment edges opt in (reconnectable: true); this stops the
+          // dependency/contains edges from being grabbable and detached.
+          edgesReconnectable={false}
+          isValidConnection={(c) => resolveAssignmentEnds(c, isGroup) !== null}
+          onConnect={onConnect}
+          onReconnectStart={onReconnectStart}
+          onReconnect={onReconnect}
+          onReconnectEnd={onReconnectEnd}
           onNodeClick={(_, node) => onSelect(node.id)}
           onPaneClick={() => onSelect(null)}
         >
