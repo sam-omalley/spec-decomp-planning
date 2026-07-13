@@ -12,13 +12,7 @@ import { ConcernsView } from './ui/ConcernsView.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TimelineView } from './ui/TimelineView.tsx';
 import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
-
-// Top-level sections; each groups one or more sub-views (see the sub-tab
-// bars below). Markdown lives under Planning; Timeline/Metrics/Concerns
-// under Reporting.
-type Section = 'spec' | 'planning' | 'graph' | 'reporting';
-type PlanMode = 'outline' | 'table' | 'markdown';
-type ReportMode = 'timeline' | 'metrics' | 'assignees' | 'concerns';
+import { hashFor, parseHash, type PlanMode, type ReportMode, type Section } from './ui/route.ts';
 
 const SECTION_LABELS: Record<Section, string> = {
   spec: 'Spec',
@@ -29,13 +23,16 @@ const SECTION_LABELS: Record<Section, string> = {
 
 export function App() {
   const graph = useProjectGraph();
-  const [section, setSection] = useState<Section>('spec');
+  // Navigation state is mirrored to the location hash (see the sync effect
+  // below) so back/forward/refresh work; seed it from the hash on load.
+  const initialRoute = parseHash(window.location.hash);
+  const [section, setSection] = useState<Section>(initialRoute?.section ?? 'spec');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Sub-view within each section; lifted so the sub-tab bar and footer hint
   // can follow it. Markdown is a Planning sub-view now.
-  const [planMode, setPlanMode] = useState<PlanMode>('outline');
-  const [graphMode, setGraphMode] = useState<GraphMode>('map');
-  const [reportMode, setReportMode] = useState<ReportMode>('timeline');
+  const [planMode, setPlanMode] = useState<PlanMode>(initialRoute?.planMode ?? 'outline');
+  const [graphMode, setGraphMode] = useState<GraphMode>(initialRoute?.graphMode ?? 'map');
+  const [reportMode, setReportMode] = useState<ReportMode>(initialRoute?.reportMode ?? 'timeline');
   // Global filter/search — view state only; never enters the graph, undo,
   // or autosave. Shared across the Spec / Planning / Graph tabs.
   const [filterText, setFilterText] = useState('');
@@ -121,6 +118,36 @@ export function App() {
   useEffect(() => {
     if (selectedId !== null && !graph.nodes[selectedId]) setSelectedId(null);
   }, [graph, selectedId]);
+
+  // Mirror the navigation state into the location hash. The first run
+  // normalises the URL without adding history (replaceState); later changes
+  // (tab clicks, reveal) push an entry so Back returns to the prior view.
+  // A back/forward navigation updates the hash *before* firing popstate, so
+  // by the time state catches up the hash already matches — no extra push.
+  const firstSync = useRef(true);
+  useEffect(() => {
+    const hash = hashFor({ section, planMode, graphMode, reportMode });
+    if (window.location.hash !== hash) {
+      if (firstSync.current) window.history.replaceState(null, '', hash);
+      else window.history.pushState(null, '', hash);
+    }
+    firstSync.current = false;
+  }, [section, planMode, graphMode, reportMode]);
+
+  // Back/forward: re-derive the view from the hash. Only the active section's
+  // sub-view is encoded, so the others keep their last value.
+  useEffect(() => {
+    function onPopState() {
+      const route = parseHash(window.location.hash);
+      if (!route) return;
+      setSection(route.section);
+      if (route.planMode) setPlanMode(route.planMode);
+      if (route.graphMode) setGraphMode(route.graphMode);
+      if (route.reportMode) setReportMode(route.reportMode);
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
