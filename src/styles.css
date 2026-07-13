@@ -41,6 +41,13 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
+  /* Toolbar chrome: never leave a text selection/caret behind on clicks.
+     The search input re-enables selection below. */
+  user-select: none;
+}
+
+.app-header input {
+  user-select: text;
 }
 
 .app-header h1 {
