@@ -6,6 +6,7 @@
  */
 
 import { useProjectGraph } from '../store/appStore.ts';
+import { todayIso } from '../model/graph.ts';
 import { buildTimeline } from './timelineLayout.ts';
 
 interface TimelineViewProps {
@@ -23,7 +24,7 @@ const PAD = 12;
 
 export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewProps) {
   const graph = useProjectGraph();
-  const model = buildTimeline(graph);
+  const model = buildTimeline(graph, todayIso());
 
   if (model.empty) {
     return (

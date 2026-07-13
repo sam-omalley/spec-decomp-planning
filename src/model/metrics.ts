@@ -49,7 +49,12 @@ export interface ProjectionSummary {
   onTrack: boolean | null;
 }
 
-export function projectionSummary(graph: ProjectGraph): ProjectionSummary {
+export function projectionSummary(
+  graph: ProjectGraph,
+  /** "Today" — forwarded to the scheduler so projections don't date work
+   *  in the past. Defaults to `startDate` (no-op) for deterministic tests. */
+  now: string = graph.settings.startDate,
+): ProjectionSummary {
   const units = schedulingUnits(graph);
   let totalDays = 0;
   let doneDays = 0;
@@ -70,7 +75,7 @@ export function projectionSummary(graph: ProjectGraph): ProjectionSummary {
     }
   }
 
-  const schedule = scheduleProject(graph);
+  const schedule = scheduleProject(graph, now);
   const targetDate = graph.settings.targetDate;
   const varianceDays =
     targetDate && schedule.projectFinish
@@ -140,7 +145,7 @@ export interface BurnPoint {
  * Starts at 0 on the project start, stepping up at each unit's actual
  * finish. `total` is the constant full scope.
  */
-export function burnUp(graph: ProjectGraph): BurnPoint[] {
+export function burnUp(graph: ProjectGraph, now: string = graph.settings.startDate): BurnPoint[] {
   const units = schedulingUnits(graph);
   let total = 0;
   const finishes: { date: string; days: number }[] = [];
@@ -155,7 +160,7 @@ export function burnUp(graph: ProjectGraph): BurnPoint[] {
   if (units.length === 0) return [];
   finishes.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-  const start = scheduleProject(graph).projectStart ?? graph.settings.startDate;
+  const start = scheduleProject(graph, now).projectStart ?? graph.settings.startDate;
   const points: BurnPoint[] = [{ date: start, done: 0, total }];
   let done = 0;
   for (const f of finishes) {
