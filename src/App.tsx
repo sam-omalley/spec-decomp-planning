@@ -7,6 +7,7 @@ import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
 import { PlanningView } from './ui/PlanningView.tsx';
 import { MetricsView } from './ui/MetricsView.tsx';
+import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
 import { ConcernsView } from './ui/ConcernsView.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TimelineView } from './ui/TimelineView.tsx';
@@ -17,7 +18,7 @@ import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts'
 // under Reporting.
 type Section = 'spec' | 'planning' | 'graph' | 'reporting';
 type PlanMode = 'outline' | 'table' | 'markdown';
-type ReportMode = 'timeline' | 'metrics' | 'concerns';
+type ReportMode = 'timeline' | 'metrics' | 'assignees' | 'concerns';
 
 const SECTION_LABELS: Record<Section, string> = {
   spec: 'Spec',
@@ -182,6 +183,7 @@ export function App() {
             options={[
               ['timeline', 'Timeline'],
               ['metrics', 'Metrics'],
+              ['assignees', 'Assignees'],
               ['concerns', 'Concerns'],
             ]}
             active={reportMode}
@@ -276,6 +278,7 @@ export function App() {
           <TimelineView selectedId={selectedId} onSelect={setSelectedId} onReveal={reveal} />
         )}
         {section === 'reporting' && reportMode === 'metrics' && <MetricsView onReveal={reveal} />}
+        {section === 'reporting' && reportMode === 'assignees' && <AssigneeMetricsView />}
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}
       </main>
       <footer className="app-hints">
@@ -312,6 +315,10 @@ export function App() {
         {section === 'reporting' && reportMode === 'metrics' && (
           <>Projection, burn-up &amp; estimate-vs-actual · click a unit to open its group · set a
             target date in ⚙ Settings for variance</>
+        )}
+        {section === 'reporting' && reportMode === 'assignees' && (
+          <>Per-assignee estimate-vs-actual, throughput &amp; weekly completions · assign a team in ⚙
+            Settings · reflects completed stories only</>
         )}
         {section === 'reporting' && reportMode === 'concerns' && (
           <>Monitoring signals for the plan · overdue, blocked, cycles, gaps &amp; behind-target ·

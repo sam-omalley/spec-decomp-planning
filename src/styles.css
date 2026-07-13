@@ -1733,6 +1733,116 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ------------------------- per-assignee metrics ------------------------- */
+
+.asg-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.asg-head,
+.asg-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) 44px minmax(180px, 2fr) 64px;
+  align-items: center;
+  gap: 10px;
+}
+.asg-head {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.asg-row {
+  padding: 4px 0;
+  font-size: 13px;
+}
+.asg-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+}
+.asg-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+.asg-fte {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.asg-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.asg-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.asg-empty {
+  color: var(--muted);
+}
+/* one estimate/actual line reuses the .eva-bar visuals from Metrics */
+.asg-bars .eva-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.asg-var {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.asg-var.eva-var-over {
+  color: #b42318;
+}
+
+.asg-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.asg-panel-head h3 {
+  margin: 0;
+}
+.asg-toggle {
+  flex: none;
+}
+.hist-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.hist-bar {
+  transition: opacity 0.1s ease;
+}
+.hist-bar:hover {
+  opacity: 0.8;
+}
+.asg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.asg-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* graph view dependency styling */
 
 .gedge-dep .react-flow__edge-path {
