@@ -38,8 +38,16 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
   const height = HEAD_H + model.rows.length * ROW_H + PAD * 2;
   const x = (frac: number) => LABEL_W + PAD + frac * CHART_W;
 
+  const hasCritical = model.rows.some((r) => r.critical);
+
   return (
     <div className="timeline-wrap">
+      {hasCritical && (
+        <div className="tl-legend">
+          <span className="tl-legend-swatch tl-legend-critical" />
+          Critical path — the dependency chain that sets the projected finish
+        </div>
+      )}
       <svg width={width} height={height} className="timeline-svg" role="img">
         {/* week gridlines */}
         {model.ticks.map((tick, i) => (
@@ -68,6 +76,7 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
           const barClass =
             (row.isUnit ? 'tl-bar' : 'tl-bar tl-bar-container') +
             (row.source === 'actual' ? ' tl-bar-actual' : '') +
+            (row.critical ? ' tl-bar-critical' : '') +
             (selected ? ' tl-bar-selected' : '');
           return (
             <g
@@ -96,6 +105,7 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
                 <title>
                   {row.title}: {row.start} → {row.finish}
                   {row.source === 'actual' ? ' (actual)' : ' (planned)'}
+                  {row.critical ? ' · on critical path' : ''}
                 </title>
               </rect>
             </g>

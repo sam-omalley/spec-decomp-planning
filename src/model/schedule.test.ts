@@ -185,3 +185,35 @@ describe('scheduleProject — projections never date work in the past (#19)', ()
     assert.equal(s.groups.get('a')!.start, '2024-01-01');
   });
 });
+
+describe('scheduleProject — critical path', () => {
+  it('is the chain of binding prerequisites to the last finish', () => {
+    let g = base(); // 1 track
+    g = group(g, 'a', 5);
+    g = group(g, 'b', 2);
+    g = group(g, 'c', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a' });
+    g = addEdge(g, { type: 'depends_on', from: 'c', to: 'b' });
+    assert.deepEqual(scheduleProject(g).criticalPath, ['a', 'b', 'c']);
+  });
+
+  it('follows the longer of two parallel dependency chains', () => {
+    let g = base({ parallelTracks: 2 });
+    g = group(g, 'a', 2);
+    g = group(g, 'b', 2); // short chain a→b
+    g = group(g, 'c', 3);
+    g = group(g, 'd', 3); // long chain c→d
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a' });
+    g = addEdge(g, { type: 'depends_on', from: 'd', to: 'c' });
+    // d finishes last; its chain c→d is critical, a/b are not.
+    assert.deepEqual(scheduleProject(g).criticalPath, ['c', 'd']);
+  });
+
+  it('is just the final unit when nothing gates it (capacity-bound)', () => {
+    let g = base({ parallelTracks: 3 });
+    g = group(g, 'a', 4);
+    g = group(g, 'b', 2);
+    // No dependencies: a finishes last, gated by nothing.
+    assert.deepEqual(scheduleProject(g).criticalPath, ['a']);
+  });
+});

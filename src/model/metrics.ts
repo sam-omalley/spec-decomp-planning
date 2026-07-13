@@ -47,6 +47,9 @@ export interface ProjectionSummary {
   /** Calendar days the projection lands past the target (+late / −early). */
   varianceDays: number | null;
   onTrack: boolean | null;
+  /** Units on the dependency critical path to the finish: `{ id, title }`
+   *  earliest → last. Explains what drives the projected finish. */
+  criticalPath: { id: string; title: string }[];
 }
 
 export function projectionSummary(
@@ -93,6 +96,10 @@ export function projectionSummary(
     remainingPoints,
     varianceDays,
     onTrack: varianceDays === null ? null : varianceDays <= 0,
+    criticalPath: schedule.criticalPath.map((id) => ({
+      id,
+      title: graph.nodes[id]?.title.trim() || 'Untitled',
+    })),
   };
 }
 

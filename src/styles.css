@@ -1210,9 +1210,33 @@ body {
 .tl-bar-container {
   opacity: 0.22;
 }
+.tl-bar-critical {
+  stroke: #d1495b;
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
 .tl-bar-selected {
   stroke: var(--text);
   stroke-width: 1.5;
+}
+.tl-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.tl-legend-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border-radius: 2px;
+}
+.tl-legend-critical {
+  background: var(--accent);
+  opacity: 0.85;
+  border: 1.5px solid #d1495b;
 }
 .tl-marker {
   stroke: var(--accent);
@@ -1304,6 +1328,36 @@ body {
 .metric-hint {
   color: var(--muted);
   font-size: 13px;
+}
+.crit-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.crit-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.crit-arrow {
+  color: var(--muted);
+}
+.crit-node {
+  padding: 3px 8px;
+  border: 1px solid #d1495b;
+  border-radius: 6px;
+  background: color-mix(in srgb, #d1495b 12%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+.crit-node-link {
+  cursor: pointer;
+}
+.crit-node-link:hover {
+  background: color-mix(in srgb, #d1495b 22%, transparent);
 }
 
 .axis {

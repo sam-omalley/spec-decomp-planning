@@ -18,6 +18,8 @@ export interface TimelineRow {
   color: string;
   isUnit: boolean;
   source: 'planned' | 'actual';
+  /** On the dependency critical path to the projected finish. */
+  critical: boolean;
   start: string;
   finish: string;
   startFrac: number;
@@ -103,6 +105,7 @@ export function buildTimeline(
     return f < 0 ? 0 : f > 1 ? 1 : f;
   };
 
+  const criticalSet = new Set(schedule.criticalPath);
   const rows: TimelineRow[] = scheduled.map(({ id, depth }) => {
     const g = schedule.groups.get(id)!;
     return {
@@ -112,6 +115,7 @@ export function buildTimeline(
       color: rootGroupColor(graph, id),
       isUnit: g.isUnit,
       source: g.source,
+      critical: criticalSet.has(id),
       start: g.start,
       finish: g.finish,
       startFrac: frac(g.start),

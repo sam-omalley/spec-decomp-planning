@@ -41,6 +41,15 @@ export interface Schedule {
   groups: Map<string, ScheduledGroup>;
   projectStart: string | null;
   projectFinish: string | null;
+  /**
+   * The dependency critical path to `projectFinish`: the chain of units,
+   * earliest → last-finishing, where each is gated by the previous one's
+   * finish (a binding prerequisite). It explains *why* the project lands
+   * when it does. Anchored where the chain stops depending — a done /
+   * in-progress unit's real start, or a unit limited by capacity/`now`
+   * rather than a dependency (then the chain is just that final unit).
+   */
+  criticalPath: string[];
 }
 
 /* --------------------------- working calendar --------------------------- */
@@ -193,7 +202,8 @@ export function scheduleProject(
   const speed = settings.speedMultiplier > 0 ? settings.speedMultiplier : 1;
   const trackCount = Math.max(1, Math.floor(settings.parallelTracks));
   const tracks = new Array<number>(trackCount).fill(0); // free working-day offset
-  const finishOffset = new Map<string, number>();
+  const finishOffset = new Map<string, number>(); // exclusive: next free day
+  const startOffset = new Map<string, number>(); // where each unit begins
   const groups = new Map<string, ScheduledGroup>();
 
   const remaining = new Set(units);
@@ -225,6 +235,7 @@ export function scheduleProject(
       // starts the working day *after* the actual finish.
       const start = node.actualStart ?? node.actualFinish;
       groups.set(u, { start, finish: node.actualFinish, source: 'actual', isUnit: true });
+      startOffset.set(u, cal.offsetOf(start));
       finishOffset.set(u, cal.offsetOf(node.actualFinish) + 1);
     } else if (node.actualStart !== null) {
       // In progress: real start, projected remainder.
@@ -236,6 +247,7 @@ export function scheduleProject(
         source: 'planned',
         isUnit: true,
       });
+      startOffset.set(u, startOff);
       finishOffset.set(u, finishOff);
       tracks[track] = finishOff;
     } else {
@@ -250,6 +262,7 @@ export function scheduleProject(
         source: 'planned',
         isUnit: true,
       });
+      startOffset.set(u, startOff);
       finishOffset.set(u, finishOff);
       tracks[track] = finishOff;
     }
@@ -274,11 +287,43 @@ export function scheduleProject(
 
   let projectStart: string | null = null;
   let projectFinish: string | null = null;
+  let last: string | null = null;
   for (const u of units) {
     const s = groups.get(u);
     if (!s) continue;
     if (projectStart === null || s.start < projectStart) projectStart = s.start;
-    if (projectFinish === null || s.finish > projectFinish) projectFinish = s.finish;
+    // Latest finish is the critical-path endpoint; ties keep the earlier
+    // pre-order unit (units is in pre-order) for determinism.
+    if (projectFinish === null || s.finish > projectFinish) {
+      projectFinish = s.finish;
+      last = u;
+    }
   }
-  return { groups, projectStart, projectFinish };
+
+  // Walk back from the last-finishing unit through binding prerequisites:
+  // the prereq whose finish set this unit's start. Stop when the unit is
+  // anchored on a real start (done / in progress) or was limited by
+  // capacity/`now` rather than a dependency.
+  const criticalPath: string[] = [];
+  const seen = new Set<string>();
+  let cur = last;
+  while (cur !== null && !seen.has(cur)) {
+    criticalPath.push(cur);
+    seen.add(cur);
+    if (graph.nodes[cur]!.actualStart !== null) break; // anchored on real start
+    const start = startOffset.get(cur);
+    let binding: string | null = null;
+    for (const p of unitPrereqs.get(cur)!) {
+      if (finishOffset.get(p) === start) {
+        // Prefer the highest-pre-order-stable prereq; any exact match is
+        // a genuine gater, so the first found is fine.
+        binding = p;
+        break;
+      }
+    }
+    cur = binding;
+  }
+  criticalPath.reverse();
+
+  return { groups, projectStart, projectFinish, criticalPath };
 }
