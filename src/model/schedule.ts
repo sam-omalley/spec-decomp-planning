@@ -13,7 +13,9 @@
  * Actuals blend over the projection: a done group (has `actualFinish`)
  * uses its real dates; an in-progress group (has `actualStart`) starts on
  * its real start and projects the remainder; everything else is fully
- * projected. Dependency cycles are tolerated — when nothing is
+ * projected — and never dated before `now` (today), so remaining work is
+ * not scheduled in the past when `startDate` is already behind us.
+ * Dependency cycles are tolerated — when nothing is
  * dependency-ready the lowest sibling-order unit is scheduled anyway, so
  * an SCC drains as a batch and the loop never hangs.
  *
@@ -157,11 +159,18 @@ function unitsFor(
 
 /* ------------------------------ the schedule ---------------------------- */
 
-export function scheduleProject(graph: ProjectGraph): Schedule {
+export function scheduleProject(
+  graph: ProjectGraph,
+  /** "Today" — projected (not-started) work is never dated before this.
+   *  Defaults to `startDate` (a no-op clamp) so pure callers stay
+   *  deterministic; the app passes the real current date. */
+  now: string = graph.settings.startDate,
+): Schedule {
   const { settings } = graph;
   const units = schedulingUnits(graph);
   const unitSet = new Set(units);
   const cal = makeCalendar(settings.startDate);
+  const nowOffset = cal.offsetOf(now);
   const pre = groupPreOrder(graph);
 
   // Unit-level prerequisites, expanded from the raw group dependency graph.
@@ -230,7 +239,10 @@ export function scheduleProject(graph: ProjectGraph): Schedule {
       finishOffset.set(u, finishOff);
       tracks[track] = finishOff;
     } else {
-      const startOff = Math.max(tracks[track]!, prereqFinish);
+      // Not started: earliest of a free track and its prerequisites, but
+      // never before today — future work cannot be dated in the past
+      // (which understated the projection when startDate is behind us).
+      const startOff = Math.max(tracks[track]!, prereqFinish, nowOffset);
       const finishOff = startOff + duration;
       groups.set(u, {
         start: cal.isoAt(Math.floor(startOff)),
