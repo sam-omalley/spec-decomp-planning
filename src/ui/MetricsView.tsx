@@ -12,6 +12,7 @@ import {
   estimateVsActual,
   projectionSummary,
 } from '../model/metrics.ts';
+import { InfoDot } from './InfoDot.tsx';
 
 const CHART_W = 620;
 const CHART_H = 200;
@@ -37,23 +38,6 @@ const HELP = {
   estimateVsActual:
     'For each completed unit: estimate is its duration estimate; actual is the working days between its actual start and finish, inclusive of both. Variance = actual − estimate (+ over, − under).',
 } as const;
-
-/**
- * A small ⓘ glyph that reveals an explanation of a metric on hover/focus.
- * The tip opens *below* the glyph: every dot here sits on a card label or a
- * panel heading with content beneath it, so downward never clips — whereas an
- * upward tip clips off the top whenever its row scrolls near the viewport top.
- */
-function InfoDot({ text }: { text: string }) {
-  return (
-    <span className="info-dot" tabIndex={0} role="note" aria-label={text}>
-      <span aria-hidden="true">ⓘ</span>
-      <span className="info-tip" role="tooltip">
-        {text}
-      </span>
-    </span>
-  );
-}
 
 interface MetricsViewProps {
   /** Jump to a unit's group definition in the plan outline. */
@@ -85,7 +69,12 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
   return (
     <div className="metrics-wrap">
       <section className="metric-cards">
-        <Card label="Projected finish" value={summary.projectFinish ?? '—'} help={HELP.projectFinish} />
+        <Card
+          label="Projected finish"
+          value={summary.projectFinish ?? '—'}
+          help={HELP.projectFinish}
+          helpAlign="start"
+        />
         <Card label="Target" value={summary.targetDate ?? 'none set'} help={HELP.target} />
         <Card
           label="Variance"
@@ -100,6 +89,7 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
             summary.remainingPoints > 0 ? ` · ${summary.remainingPoints}pt` : ''
           }`}
           help={HELP.progress}
+          helpAlign="end"
         />
       </section>
 
@@ -158,18 +148,20 @@ function Card({
   sub,
   tone,
   help,
+  helpAlign,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: 'good' | 'bad';
   help?: string;
+  helpAlign?: 'start' | 'end';
 }) {
   return (
     <div className={`metric-card${tone ? ` metric-card-${tone}` : ''}`}>
       <div className="metric-card-label">
         {label}
-        {help && <InfoDot text={help} />}
+        {help && <InfoDot text={help} align={helpAlign} />}
       </div>
       <div className="metric-card-value">{value}</div>
       {sub && <div className="metric-card-sub">{sub}</div>}
