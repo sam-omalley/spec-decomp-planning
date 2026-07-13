@@ -41,13 +41,16 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  /* Toolbar chrome: never leave a text selection/caret behind on clicks.
-     The search input re-enables selection below. */
+  /* Toolbar chrome: never leave a text selection or blinking caret behind on
+     clicks (Firefox will place a caret in non-editable text where Chromium
+     won't). The search input re-enables both below. */
   user-select: none;
+  caret-color: transparent;
 }
 
 .app-header input {
   user-select: text;
+  caret-color: auto;
 }
 
 .app-header h1 {
@@ -117,6 +120,12 @@ body {
   cursor: default;
 }
 
+/* No lingering focus ring after a mouse click (Firefox draws one); keyboard
+   focus still gets the browser ring via :focus-visible for accessibility. */
+.app-header button:not(.view-tab):focus:not(:focus-visible) {
+  outline: none;
+}
+
 .app-main {
   flex: 1;
   min-height: 0;
@@ -177,6 +186,19 @@ body {
   color: var(--accent);
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* The active pill already marks the current section/sub-view, so the browser
+   focus ring (Firefox draws it on click/tab; Chromium only on :focus-visible)
+   just reads as a stray cursor lingering on a non-active pill. Drop the ring;
+   keyboard focus still tracks via the pill's text colour turning solid. */
+.view-tab:focus,
+.view-tab:focus-visible {
+  outline: none;
+}
+
+.view-tab:focus-visible:not(.view-tab-active) {
+  color: var(--text);
 }
 
 /* Secondary pill nav for the active section's sub-views. Subordinate to the
