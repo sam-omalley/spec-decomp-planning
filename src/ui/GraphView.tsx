@@ -146,9 +146,8 @@ interface GraphViewProps {
   onSelect: (id: string | null) => void;
   /** Global filter, shared across tabs; dims non-matches in place. */
   filter?: FilterState;
-  /** Map vs Dependency mode; lifted so the footer hint can follow it. */
+  /** Map vs Dependency mode; selected by the header sub-tab bar. */
   mode: GraphMode;
-  onModeChange: (mode: GraphMode) => void;
 }
 
 export function GraphView({
@@ -156,7 +155,6 @@ export function GraphView({
   onSelect,
   filter = EMPTY_FILTER,
   mode: graphMode,
-  onModeChange: setGraphMode,
 }: GraphViewProps) {
   const graph = useProjectGraph();
   const [inferChains, setInferChains] = useState(false);
@@ -340,17 +338,6 @@ export function GraphView({
   return (
     <div className="graph-wrap">
       <div className="graph-filter">
-        {(['map', 'dep'] as GraphMode[]).map((m) => (
-          <button
-            key={m}
-            className={`graph-filter-btn${graphMode === m ? ' graph-filter-btn-active' : ''}`}
-            aria-pressed={graphMode === m}
-            onClick={() => setGraphMode(m)}
-          >
-            {m === 'map' ? 'Map' : 'Dependency'}
-          </button>
-        ))}
-        <span className="graph-filter-sep" />
         {graphMode === 'map' ? (
           <>
             {toggles.map((t) => (
