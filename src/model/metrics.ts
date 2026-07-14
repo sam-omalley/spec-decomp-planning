@@ -10,6 +10,7 @@
  */
 
 import type { ProjectGraph } from './types.ts';
+import type { Schedule } from './schedule.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
 import { elapsedWorkingDays, toDateOnly } from './time.ts';
 
@@ -60,6 +61,10 @@ export function projectionSummary(
   /** "Today" — forwarded to the scheduler so projections don't date work
    *  in the past. Defaults to `startDate` (no-op) for deterministic tests. */
   now: string = graph.settings.startDate,
+  /** A precomputed schedule, to avoid re-running the scheduler when the
+   *  caller already has one (e.g. alongside `burnUp`). Defaults to running
+   *  it here. */
+  schedule: Schedule = scheduleProject(graph, now),
 ): ProjectionSummary {
   const units = schedulingUnits(graph);
   let totalDays = 0;
@@ -81,7 +86,6 @@ export function projectionSummary(
     }
   }
 
-  const schedule = scheduleProject(graph, now);
   const targetDate = graph.settings.targetDate;
   const varianceDays =
     targetDate && schedule.projectFinish
@@ -186,7 +190,13 @@ export interface BurnPoint {
  * Starts at 0 on the project start, stepping up at each unit's actual
  * finish. `total` is the constant full scope.
  */
-export function burnUp(graph: ProjectGraph, now: string = graph.settings.startDate): BurnPoint[] {
+export function burnUp(
+  graph: ProjectGraph,
+  now: string = graph.settings.startDate,
+  /** A precomputed schedule; only `projectStart` is used. Defaults to
+   *  running the scheduler here. */
+  schedule: Pick<Schedule, 'projectStart'> = scheduleProject(graph, now),
+): BurnPoint[] {
   const units = schedulingUnits(graph);
   let total = 0;
   const finishes: { date: string; days: number }[] = [];
@@ -201,7 +211,7 @@ export function burnUp(graph: ProjectGraph, now: string = graph.settings.startDa
   if (units.length === 0) return [];
   finishes.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-  const start = scheduleProject(graph, now).projectStart ?? graph.settings.startDate;
+  const start = schedule.projectStart ?? graph.settings.startDate;
   const points: BurnPoint[] = [{ date: start, done: 0, total }];
   let done = 0;
   for (const f of finishes) {
