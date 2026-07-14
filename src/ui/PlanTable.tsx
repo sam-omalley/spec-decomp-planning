@@ -204,9 +204,9 @@ export function PlanTable({
             return (
               <tr
                 key={row.id}
-                className={`plan-table-row${isAnchor ? ' row-selected' : ''}${
-                  isMulti ? ' row-multiselected' : ''
-                }${node.status === 'done' ? ' row-done' : ''}${
+                className={`plan-table-row row-status-${node.status}${
+                  isAnchor ? ' row-selected' : ''
+                }${isMulti ? ' row-multiselected' : ''}${
                   row.matched === false ? ' row-context' : row.matched ? ' row-match' : ''
                 }`}
                 onMouseDown={(e) => onRowMouseDown(row.id, e)}

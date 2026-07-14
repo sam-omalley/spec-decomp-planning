@@ -2102,14 +2102,30 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   color: var(--muted);
 }
 
-/* Done rows are de-emphasised (#45): a muted shade + muted text so completed
-   work recedes. Declared before hover/selection so those stronger backgrounds
-   still read on top of a done row (equal specificity → later rule wins). */
-.plan-table-row.row-done {
+/* Per-status row highlighting (#45). Status is shown by a coloured left-edge
+   stripe on the first cell — kept off the row background so it never collides
+   with the blue-family selection / multi-select / hover shades. Done rows
+   additionally get a muted grey shade + muted text so completed work recedes.
+   The stripe is an inset shadow on the first <td> (border-collapse makes a
+   real border-left unreliable) and sits at the cell's left edge regardless of
+   the depth indent. */
+.plan-table-row.row-status-in_progress td.col-title {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.plan-table-row.row-status-blocked td.col-title {
+  box-shadow: inset 4px 0 0 #c23b3b;
+}
+.plan-table-row.row-status-done td.col-title {
+  box-shadow: inset 4px 0 0 #0e9f6e;
+}
+
+/* Done rows recede. Declared before hover/selection so those stronger
+   backgrounds still read on top (equal specificity → later rule wins). */
+.plan-table-row.row-status-done {
   background: #eceef0;
 }
-.plan-table-row.row-done .cell-input,
-.plan-table-row.row-done .cell-select {
+.plan-table-row.row-status-done .cell-input,
+.plan-table-row.row-status-done .cell-select {
   color: var(--muted);
 }
 
