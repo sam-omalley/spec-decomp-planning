@@ -13,6 +13,18 @@
  * instead of leaving gaps. Children are filtered to visible nodes, and
  * a visible node whose parent is hidden is promoted to a root, keeping
  * both forests well-formed.
+ *
+ * Sort modes (issue #42): by default (`'locked'`) each side keeps its own
+ * native `contains`/root order — sibling order never depends on the other
+ * side, so editing one side never reshuffles the other (the same reasoning
+ * that kept `depLayout.ts`'s ordering stable, see its header comment).
+ * `'lockSpec'`/`'lockPlan'` are opt-in: one side stays locked to its native
+ * order and the *other* side's siblings are re-sorted at every level by a
+ * barycenter — the average row of every `assigned_to` connection touching
+ * that node's subtree — so the free side visually aligns with what it's
+ * assigned to. A node (or subtree) with no assignment at all has no
+ * preference and sorts after its assigned siblings, keeping its relative
+ * order among other unassigned siblings.
  */
 
 import { childrenOf, groupRootsOf, rootsOf } from '../model/graph.ts';
@@ -21,6 +33,11 @@ import type { ProjectGraph } from '../model/types.ts';
 export const COLUMN_WIDTH = 230;
 export const ROW_HEIGHT = 58;
 export const BRIDGE_GAP = 280;
+
+/** 'locked' = today's default, each side keeps its own native order.
+ *  'lockSpec' = spec order fixed, the plan re-flows to align with it.
+ *  'lockPlan' = plan order fixed, the spec re-flows to align with it. */
+export type MapSort = 'locked' | 'lockSpec' | 'lockPlan';
 
 export interface PlacedNode {
   id: string;
@@ -91,12 +108,110 @@ function forestFor(
   return layoutForest(visibleRoots(graph, topRoots, visible), children);
 }
 
+/** `id -> row` from an already-laid-out (locked) forest. */
+function rowsOf(forest: ForestLayout): Map<string, number> {
+  const rows = new Map<string, number>();
+  for (const [id, pos] of forest.positions) rows.set(id, pos.row);
+  return rows;
+}
+
+/**
+ * For every node on `freeSide`, the average locked-side row of every
+ * `assigned_to` connection touching that node's own subtree (null if none).
+ * Aggregated bottom-up in one pass so a container's target reflects every
+ * assignment anywhere beneath it, not just its own direct members.
+ */
+function barycenterTargets(
+  graph: ProjectGraph,
+  freeSide: 'work' | 'group',
+  lockedRow: ReadonlyMap<string, number>,
+): Map<string, number | null> {
+  const direct = new Map<string, number[]>();
+  for (const edge of Object.values(graph.edges)) {
+    if (edge.type !== 'assigned_to') continue;
+    const freeId = freeSide === 'work' ? edge.from : edge.to;
+    const lockedId = freeSide === 'work' ? edge.to : edge.from;
+    const row = lockedRow.get(lockedId);
+    if (row === undefined) continue;
+    const rows = direct.get(freeId);
+    if (rows) rows.push(row);
+    else direct.set(freeId, [row]);
+  }
+
+  const targets = new Map<string, number | null>();
+  const visit = (id: string): { sum: number; count: number } => {
+    let sum = 0;
+    let count = 0;
+    for (const row of direct.get(id) ?? []) {
+      sum += row;
+      count++;
+    }
+    for (const child of childrenOf(graph, id)) {
+      const r = visit(child);
+      sum += r.sum;
+      count += r.count;
+    }
+    targets.set(id, count > 0 ? sum / count : null);
+    return { sum, count };
+  };
+  const roots = freeSide === 'work' ? rootsOf(graph) : groupRootsOf(graph);
+  for (const root of roots) visit(root);
+  return targets;
+}
+
+/** Stable-sorts ids by barycenter target; a null target (no assignment
+ *  anywhere in the subtree) sorts after every targeted sibling, keeping its
+ *  relative order among the other unassigned ones. */
+function byTarget(ids: string[], targets: ReadonlyMap<string, number | null>): string[] {
+  return ids
+    .map((id, i) => ({ id, i, key: targets.get(id) ?? Number.POSITIVE_INFINITY }))
+    .sort((a, b) => a.key - b.key || a.i - b.i)
+    .map((x) => x.id);
+}
+
+/** Like `forestFor`, but re-sorts every level's siblings (roots included)
+ *  by `targets` instead of using the tree's native order. */
+function reflowForestFor(
+  graph: ProjectGraph,
+  topRoots: string[],
+  visible: ReadonlySet<string> | undefined,
+  targets: ReadonlyMap<string, number | null>,
+): ForestLayout {
+  const rawRoots = visible ? visibleRoots(graph, topRoots, visible) : topRoots;
+  const children = (id: string): string[] => {
+    const kids = visible ? childrenOf(graph, id).filter((c) => visible.has(c)) : childrenOf(graph, id);
+    return byTarget(kids, targets);
+  };
+  return layoutForest(byTarget(rawRoots, targets), children);
+}
+
 export function layoutGraph(
   graph: ProjectGraph,
   visible?: ReadonlySet<string>,
+  sort: MapSort = 'locked',
 ): PlacedNode[] {
-  const work = forestFor(graph, rootsOf(graph), visible);
-  const groups = forestFor(graph, groupRootsOf(graph), visible);
+  let work: ForestLayout;
+  let groups: ForestLayout;
+  if (sort === 'lockSpec') {
+    work = forestFor(graph, rootsOf(graph), visible);
+    groups = reflowForestFor(
+      graph,
+      groupRootsOf(graph),
+      visible,
+      barycenterTargets(graph, 'group', rowsOf(work)),
+    );
+  } else if (sort === 'lockPlan') {
+    groups = forestFor(graph, groupRootsOf(graph), visible);
+    work = reflowForestFor(
+      graph,
+      rootsOf(graph),
+      visible,
+      barycenterTargets(graph, 'work', rowsOf(groups)),
+    );
+  } else {
+    work = forestFor(graph, rootsOf(graph), visible);
+    groups = forestFor(graph, groupRootsOf(graph), visible);
+  }
 
   // Vertical centering of the shorter forest against the taller one.
   const workOffset = Math.max(0, (groups.rowCount - work.rowCount) / 2);

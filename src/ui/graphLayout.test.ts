@@ -110,4 +110,82 @@ describe('layoutGraph', () => {
     assert.equal(placed.length, 1);
     assert.deepEqual(placed[0], { id: 'solo', side: 'work', x: 0, y: 0 });
   });
+
+  describe('sort modes (issue #42)', () => {
+    /**
+     * Spec (native order): a, b — equal leaf count to the plan, so the
+     * forest-centering offset (a separate feature) never enters these
+     * assertions.
+     * Plan (native order): epicX, epicY
+     * Assignments cross the native order: a → epicY, b → epicX.
+     */
+    function crossedFixture(): ProjectGraph {
+      let g = emptyGraph();
+      g = createNode(g, { id: 'a', title: 'A' });
+      g = createNode(g, { id: 'b', title: 'B' });
+      g = createGroup(g, { id: 'epicX', title: 'Epic X' });
+      g = createGroup(g, { id: 'epicY', title: 'Epic Y' });
+      g = assignToGroup(g, 'a', 'epicY');
+      g = assignToGroup(g, 'b', 'epicX');
+      return g;
+    }
+
+    it("'locked' (default) keeps each side's own native order regardless of assignment", () => {
+      const placed = byId(layoutGraph(crossedFixture()));
+      assert.equal(placed.get('a')!.y, 0);
+      assert.equal(placed.get('b')!.y, ROW_HEIGHT);
+      assert.equal(placed.get('epicX')!.y, 0);
+      assert.equal(placed.get('epicY')!.y, ROW_HEIGHT);
+    });
+
+    it("'lockSpec' keeps spec order and re-flows the plan to align with it", () => {
+      const placed = byId(layoutGraph(crossedFixture(), undefined, 'lockSpec'));
+      // Spec unchanged: a, b in native order.
+      assert.equal(placed.get('a')!.y, 0);
+      assert.equal(placed.get('b')!.y, ROW_HEIGHT);
+      // Plan re-flows: epicY (assigned from a, row 0) sorts before
+      // epicX (assigned from b, row 1) — reversed from native creation order.
+      assert.equal(placed.get('epicY')!.y, 0);
+      assert.equal(placed.get('epicX')!.y, ROW_HEIGHT);
+    });
+
+    it("'lockPlan' keeps plan order and re-flows the spec to align with it", () => {
+      const placed = byId(layoutGraph(crossedFixture(), undefined, 'lockPlan'));
+      // Plan unchanged: epicX, epicY in native order.
+      assert.equal(placed.get('epicX')!.y, 0);
+      assert.equal(placed.get('epicY')!.y, ROW_HEIGHT);
+      // Spec re-flows: b (assigned to epicX, row 0) sorts before a (assigned
+      // to epicY, row 1).
+      assert.equal(placed.get('b')!.y, 0);
+      assert.equal(placed.get('a')!.y, ROW_HEIGHT);
+    });
+
+    it('an unassigned node has no target and sorts after its assigned siblings', () => {
+      // c is unassigned; the taller (work) side never gets a centering
+      // offset, so its own rows are asserted directly.
+      let g = crossedFixture();
+      g = createNode(g, { id: 'c', title: 'C' });
+      const placed = byId(layoutGraph(g, undefined, 'lockPlan'));
+      assert.equal(placed.get('b')!.y, 0);
+      assert.equal(placed.get('a')!.y, ROW_HEIGHT);
+      assert.equal(placed.get('c')!.y, 2 * ROW_HEIGHT);
+    });
+
+    it('re-flow aggregates a container target from every assignment in its subtree', () => {
+      // Nested under a single 'block' root: epicX (assigned from b, row 1)
+      // and epicY (assigned from a, row 0) still reorder to epicY, epicX —
+      // the container-nesting doesn't change the per-level reordering.
+      let g = emptyGraph();
+      g = createNode(g, { id: 'a', title: 'A' });
+      g = createNode(g, { id: 'b', title: 'B' });
+      g = createGroup(g, { id: 'block', title: 'Block' });
+      g = createGroup(g, { id: 'epicX', title: 'Epic X' }, 'block');
+      g = createGroup(g, { id: 'epicY', title: 'Epic Y' }, 'block');
+      g = assignToGroup(g, 'a', 'epicY');
+      g = assignToGroup(g, 'b', 'epicX');
+      const placed = byId(layoutGraph(g, undefined, 'lockSpec'));
+      assert.equal(placed.get('epicY')!.y, 0);
+      assert.equal(placed.get('epicX')!.y, ROW_HEIGHT);
+    });
+  });
 });

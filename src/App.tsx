@@ -342,7 +342,8 @@ export function App() {
         )}
         {section === 'graph' && graphMode === 'map' && (
           <>Click to select · scroll to zoom · drag a spec item's right handle onto a group's left to
-            assign · grab an assignment arrow to move or remove it</>
+            assign · grab an assignment arrow to move or remove it · Lock Spec/Plan re-flows the
+            other side to align with assignments</>
         )}
         {section === 'graph' && graphMode === 'dep' && (
           <>Drag between two stories' side handles to link them — the arrow shows work flowing
