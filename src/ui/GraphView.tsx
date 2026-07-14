@@ -523,6 +523,10 @@ export function GraphView({
           // Only assignment edges opt in (reconnectable: true); this stops the
           // dependency/contains edges from being grabbable and detached.
           edgesReconnectable={false}
+          // Wider than the 10px default (issue #62): with nodes close
+          // together a short edge's grabbable end sits right at a node's
+          // boundary, and the default radius is too tight to land on.
+          reconnectRadius={20}
           isValidConnection={(c) => resolveAssignmentEnds(c, isGroup) !== null}
           onConnect={onConnect}
           onReconnectStart={onReconnectStart}
