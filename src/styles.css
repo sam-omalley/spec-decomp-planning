@@ -1409,9 +1409,13 @@ body {
 
 /* ------------------------------ concerns view ------------------------------ */
 .concerns-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 4px;
 }
 .concerns-empty {
   padding: 24px;
