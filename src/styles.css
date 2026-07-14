@@ -2116,6 +2116,18 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   background: #dfe4f6;
 }
 
+/* Done rows are de-emphasised (#45): muted text + a struck-through title, so
+   completed work recedes without hurting readability. No row background, so
+   selection/multi-select/hover shading still reads on top. */
+.plan-table-row.row-done .cell-input,
+.plan-table-row.row-done .cell-select {
+  color: var(--muted);
+}
+.plan-table-row.row-done .cell-title {
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+
 .cell-input,
 .cell-select {
   font: inherit;
