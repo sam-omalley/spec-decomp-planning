@@ -66,17 +66,17 @@ describe('assigneeMetrics — rows', () => {
   it('aggregates estimate vs actual and points/day per assignee', () => {
     let g = base();
     g = addResource(g, { id: 'r1', name: 'Ana', fte: 1 });
-    // Two completed units for Ana: estimate 2+2 = 4d, actual Mon..Tue (2) and
-    // Mon..Thu (4) = 6d; 3+5 = 8 points.
+    // Two completed units for Ana: estimate 2+2 = 4d, actual Mon..Tue (1
+    // elapsed day) and Mon..Thu (3 elapsed days) = 4d; 3+5 = 8 points.
     g = done(g, 'a', { days: 2, points: 3, start: '2024-01-01', finish: '2024-01-02', resource: 'r1' });
     g = done(g, 'b', { days: 2, points: 5, start: '2024-01-01', finish: '2024-01-04', resource: 'r1' });
     const ana = row(g, 'Ana')!;
     assert.equal(ana.completedCount, 2);
     assert.equal(ana.estimateDays, 4);
-    assert.equal(ana.actualDays, 6);
-    assert.equal(ana.varianceDays, 2); // 6 actual − 4 estimate
+    assert.equal(ana.actualDays, 4);
+    assert.equal(ana.varianceDays, 0); // 4 actual − 4 estimate
     assert.equal(ana.points, 8);
-    assert.equal(ana.pointsPerDay, 8 / 6);
+    assert.equal(ana.pointsPerDay, 2);
     assert.equal(ana.fte, 1);
   });
 

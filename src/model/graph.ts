@@ -552,7 +552,8 @@ export function setEstimate(
 }
 
 export interface ActualsPatch {
-  /** ISO date, or null to clear. Omit to leave as-is. */
+  /** ISO date or ISO datetime-local (`YYYY-MM-DDTHH:MM`), or null to clear.
+   *  Omit to leave as-is. */
   actualStart?: string | null;
   actualFinish?: string | null;
 }
