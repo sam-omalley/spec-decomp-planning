@@ -91,6 +91,25 @@ export function PlanTable({
   }
 
   function onRowMouseDown(id: string, event: MouseEvent) {
+    // A plain click on a form control inside a row that is already part of a
+    // multi-selection must NOT collapse the selection: the edit that follows
+    // (dropdown change, typing) is meant to fan out across the whole
+    // selection, and collapsing first would strand it on this single row
+    // (#48 — bulk-setting Assignee cleared the selection). Modifier clicks
+    // still extend/toggle; plain clicks on an unselected row still collapse.
+    const onControl = (event.target as HTMLElement).closest(
+      'input, select, textarea, button',
+    );
+    if (
+      onControl &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      multi.size > 1 &&
+      multi.isSelected(id)
+    ) {
+      return;
+    }
     // Always route through the hook: ⇧/⌘ extend or toggle (and preventDefault
     // to preserve focus), while a plain click collapses the selection back to
     // this row — otherwise a shift-selected range stays highlighted even after
