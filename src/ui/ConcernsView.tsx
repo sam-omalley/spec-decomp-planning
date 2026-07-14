@@ -6,9 +6,17 @@
  * with a jump-to-definition (`onReveal`) affordance per node-level concern.
  */
 
+import { useMemo, useState } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
-import { analyzeConcerns, type ConcernKind, type Severity } from '../model/concerns.ts';
+import {
+  analyzeConcerns,
+  filterConcernsBySeverity,
+  type ConcernKind,
+  type Severity,
+} from '../model/concerns.ts';
+
+const SEVERITIES: readonly Severity[] = ['high', 'medium', 'low'];
 
 const KIND_LABEL: Record<ConcernKind, string> = {
   overdue: 'Overdue',
@@ -33,7 +41,19 @@ interface ConcernsViewProps {
 
 export function ConcernsView({ onReveal }: ConcernsViewProps = {}) {
   const graph = useProjectGraph();
-  const concerns = analyzeConcerns(graph, todayIso());
+  const concerns = useMemo(() => analyzeConcerns(graph, todayIso()), [graph]);
+
+  // Which severities are shown; all on by default. A pure projection over the
+  // analysis (never mutates the graph), like the global search/depth view state.
+  const [active, setActive] = useState<ReadonlySet<Severity>>(
+    () => new Set<Severity>(SEVERITIES),
+  );
+  const toggle = (sev: Severity) =>
+    setActive((prev) => {
+      const next = new Set(prev);
+      next.has(sev) ? next.delete(sev) : next.add(sev);
+      return next;
+    });
 
   if (concerns.length === 0) {
     return (
@@ -51,19 +71,36 @@ export function ConcernsView({ onReveal }: ConcernsViewProps = {}) {
   const counts: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
   for (const c of concerns) counts[c.severity]++;
 
+  const visible = filterConcernsBySeverity(concerns, active);
+
   return (
     <div className="concerns-wrap">
       <section className="concerns-summary">
-        {(['high', 'medium', 'low'] as Severity[]).map((sev) => (
-          <div key={sev} className={`concerns-tally concerns-tally-${sev}`}>
-            <span className="concerns-tally-count">{counts[sev]}</span>
-            <span className="concerns-tally-label">{SEVERITY_LABEL[sev]}</span>
-          </div>
-        ))}
+        {SEVERITIES.map((sev) => {
+          const on = active.has(sev);
+          return (
+            <button
+              key={sev}
+              type="button"
+              className={`concerns-tally concerns-tally-${sev}${on ? '' : ' concerns-tally-off'}`}
+              aria-pressed={on}
+              onClick={() => toggle(sev)}
+              title={`${on ? 'Hide' : 'Show'} ${SEVERITY_LABEL[sev]} concerns`}
+            >
+              <span className="concerns-tally-count">{counts[sev]}</span>
+              <span className="concerns-tally-label">{SEVERITY_LABEL[sev]}</span>
+            </button>
+          );
+        })}
       </section>
 
+      {visible.length === 0 ? (
+        <p className="metric-hint concerns-none-shown">
+          No concerns match the selected severities.
+        </p>
+      ) : (
       <ul className="concerns-list">
-        {concerns.map((c, i) => {
+        {visible.map((c, i) => {
           const clickable = c.id !== null && onReveal;
           return (
             <li
@@ -80,6 +117,7 @@ export function ConcernsView({ onReveal }: ConcernsViewProps = {}) {
           );
         })}
       </ul>
+      )}
     </div>
   );
 }
