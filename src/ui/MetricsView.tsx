@@ -7,6 +7,7 @@
 import { useMemo, useState } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
+import { scheduleProject } from '../model/schedule.ts';
 import {
   burnUp,
   calendarDaysBetween,
@@ -53,9 +54,13 @@ interface MetricsViewProps {
 export function MetricsView({ onReveal }: MetricsViewProps = {}) {
   const graph = useProjectGraph();
   const now = todayIso();
-  const summary = projectionSummary(graph, now);
-  const variance = estimateVsActual(graph);
-  const burn = burnUp(graph, now);
+  const schedule = useMemo(() => scheduleProject(graph, now), [graph, now]);
+  const summary = useMemo(
+    () => projectionSummary(graph, now, schedule),
+    [graph, now, schedule],
+  );
+  const variance = useMemo(() => estimateVsActual(graph), [graph]);
+  const burn = useMemo(() => burnUp(graph, now, schedule), [graph, now, schedule]);
 
   // Assignee filter for the estimate-vs-actual panel (#50). Options are the
   // assignees that actually have completed units, in team order + Unassigned.
