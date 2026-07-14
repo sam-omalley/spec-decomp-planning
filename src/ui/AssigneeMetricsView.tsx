@@ -38,6 +38,12 @@ export function AssigneeMetricsView() {
   const graph = useProjectGraph();
   const m = assigneeMetrics(graph);
   const [mode, setMode] = useState<'points' | 'issues'>('points');
+  // Which assignee the histogram is filtered to (#49); null = all. The id may
+  // itself be null (the Unassigned bucket), so the "all" state is the outer
+  // null, and a selection is a wrapper object.
+  const [selected, setSelected] = useState<{ id: string | null } | null>(null);
+  const toggle = (id: string | null) =>
+    setSelected((cur) => (cur && cur.id === id ? null : { id }));
 
   const anyCompleted = m.rows.some((r) => r.completedCount > 0);
   if (!anyCompleted) {
@@ -56,6 +62,13 @@ export function AssigneeMetricsView() {
   const colors = colorMap(m);
   const estActMax = Math.max(1, ...m.rows.flatMap((r) => [r.estimateDays, r.actualDays]));
 
+  // Only assignees with completed work can be filtered on; guard against a
+  // selection going stale if the underlying data changes.
+  const filterable = new Set(m.rows.filter((r) => r.completedCount > 0).map((r) => r.id));
+  const active = selected && filterable.has(selected.id) ? selected : null;
+  const isSelected = (id: string | null) => active !== null && active.id === id;
+  const filtering = active !== null;
+
   return (
     <div className="metrics-wrap">
       <section className="metric-panel">
@@ -73,8 +86,22 @@ export function AssigneeMetricsView() {
           </div>
           {m.rows.map((r) => {
             const over = r.varianceDays > 0;
+            const canFilter = r.completedCount > 0;
+            const cls = isSelected(r.id)
+              ? ' asg-row-active'
+              : filtering
+                ? ' asg-row-dim'
+                : '';
             return (
-              <div key={r.id ?? '∅'} className="asg-row">
+              <button
+                type="button"
+                key={r.id ?? '∅'}
+                className={`asg-row${cls}`}
+                disabled={!canFilter}
+                aria-pressed={isSelected(r.id)}
+                title={canFilter ? `Filter the histogram to ${r.name}` : undefined}
+                onClick={() => canFilter && toggle(r.id)}
+              >
                 <span className="asg-name">
                   <span className="asg-swatch" style={{ background: colors.get(r.id) }} />
                   {r.name}
@@ -115,7 +142,7 @@ export function AssigneeMetricsView() {
                 <span className="asg-num">
                   {r.pointsPerDay === null ? '—' : r.pointsPerDay.toFixed(1)}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -141,16 +168,34 @@ export function AssigneeMetricsView() {
             </button>
           </div>
         </div>
-        <Histogram m={m} mode={mode} colors={colors} />
+        <Histogram m={m} mode={mode} colors={colors} selectedId={active?.id} />
         <div className="asg-legend">
           {m.rows
             .filter((r) => r.completedCount > 0)
             .map((r) => (
-              <span key={r.id ?? '∅'} className="asg-legend-item">
+              <button
+                type="button"
+                key={r.id ?? '∅'}
+                className={`asg-legend-item${
+                  isSelected(r.id)
+                    ? ' asg-legend-item-active'
+                    : filtering
+                      ? ' asg-legend-item-dim'
+                      : ''
+                }`}
+                aria-pressed={isSelected(r.id)}
+                title={`Filter the histogram to ${r.name}`}
+                onClick={() => toggle(r.id)}
+              >
                 <span className="asg-swatch" style={{ background: colors.get(r.id) }} />
                 {r.name}
-              </span>
+              </button>
             ))}
+          {filtering && (
+            <button type="button" className="asg-legend-clear" onClick={() => setSelected(null)}>
+              Show all
+            </button>
+          )}
         </div>
       </section>
     </div>
@@ -165,16 +210,24 @@ function Histogram({
   m,
   mode,
   colors,
+  selectedId,
 }: {
   m: AssigneeMetrics;
   mode: 'points' | 'issues';
   colors: Map<string | null, string>;
+  /** When set (including null = Unassigned), show only that assignee's series.
+   *  `undefined` = all assignees. */
+  selectedId?: string | null;
 }) {
   const value = (w: { points: number; count: number }) => (mode === 'points' ? w.points : w.count);
-  // Max stacked total across weeks for the y-scale.
+  // Show one assignee's series when filtered, else all (#49).
+  const series =
+    selectedId === undefined ? m.series : m.series.filter((ser) => ser.id === selectedId);
+  // Max stacked total across weeks for the y-scale — recomputed over the shown
+  // series so a single filtered assignee fills the chart.
   const max = Math.max(
     1,
-    ...m.weekStarts.map((_, wi) => m.series.reduce((s, ser) => s + value(ser.weeks[wi]!), 0)),
+    ...m.weekStarts.map((_, wi) => series.reduce((s, ser) => s + value(ser.weeks[wi]!), 0)),
   );
 
   const plotW = CHART_W - PAD * 2;
@@ -196,7 +249,7 @@ function Histogram({
         let yTop = CHART_H - PAD;
         return (
           <g key={week}>
-            {m.series.map((ser) => {
+            {series.map((ser) => {
               const v = value(ser.weeks[wi]!);
               if (v === 0) return null;
               const h = (v / max) * plotH;

@@ -4,15 +4,21 @@
  * `metrics.ts`; charts are hand-rolled SVG (no chart dep).
  */
 
+import { useMemo, useState } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
 import {
   burnUp,
   calendarDaysBetween,
   estimateVsActual,
+  filterVarianceByAssignee,
   projectionSummary,
 } from '../model/metrics.ts';
 import { InfoDot } from './InfoDot.tsx';
+
+/** Sentinel <select> values for the two non-resource assignee options. */
+const EVA_ALL = 'all';
+const EVA_UNASSIGNED = '∅';
 
 const CHART_W = 620;
 const CHART_H = 200;
@@ -50,6 +56,29 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
   const summary = projectionSummary(graph, now);
   const variance = estimateVsActual(graph);
   const burn = burnUp(graph, now);
+
+  // Assignee filter for the estimate-vs-actual panel (#50). Options are the
+  // assignees that actually have completed units, in team order + Unassigned.
+  const [evaKey, setEvaKey] = useState<string>(EVA_ALL);
+  const evaAssignees = useMemo(() => {
+    const present = new Map<string | null, string>();
+    for (const r of variance.rows) if (!present.has(r.resourceId)) present.set(r.resourceId, r.resourceName);
+    const ordered: { id: string | null; name: string }[] = [];
+    for (const res of graph.settings.resources) {
+      if (present.has(res.id)) ordered.push({ id: res.id, name: present.get(res.id)! });
+    }
+    if (present.has(null)) ordered.push({ id: null, name: 'Unassigned' });
+    return ordered;
+  }, [variance, graph.settings.resources]);
+  // Selected assignee still present? (roster/data can change under a stale key.)
+  const evaValid =
+    evaKey === EVA_ALL ||
+    (evaKey === EVA_UNASSIGNED
+      ? evaAssignees.some((a) => a.id === null)
+      : evaAssignees.some((a) => a.id === evaKey));
+  const evaSelected = evaValid ? evaKey : EVA_ALL;
+  const evaId = evaSelected === EVA_ALL ? undefined : evaSelected === EVA_UNASSIGNED ? null : evaSelected;
+  const filteredVariance = filterVarianceByAssignee(variance, evaId);
 
   if (summary.totalDays === 0 && summary.totalPoints === 0) {
     return (
@@ -129,13 +158,34 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
       </section>
 
       <section className="metric-panel">
-        <h3>
-          Estimate vs actual (completed units) <InfoDot text={HELP.estimateVsActual} />
-        </h3>
+        <div className="asg-panel-head">
+          <h3>
+            Estimate vs actual (completed units) <InfoDot text={HELP.estimateVsActual} />
+          </h3>
+          {evaAssignees.length > 1 && (
+            <label className="eva-filter">
+              Assignee
+              <select
+                className="cell-select"
+                value={evaSelected}
+                onChange={(e) => setEvaKey(e.target.value)}
+              >
+                <option value={EVA_ALL}>All</option>
+                {evaAssignees.map((a) => (
+                  <option key={a.id ?? EVA_UNASSIGNED} value={a.id ?? EVA_UNASSIGNED}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
         {variance.rows.length === 0 ? (
           <p className="metric-hint">No completed units yet — finish some to compare.</p>
+        ) : filteredVariance.rows.length === 0 ? (
+          <p className="metric-hint">No completed units for this assignee.</p>
         ) : (
-          <EstimateVsActual variance={variance} onReveal={onReveal} />
+          <EstimateVsActual variance={filteredVariance} onReveal={onReveal} />
         )}
       </section>
     </div>
