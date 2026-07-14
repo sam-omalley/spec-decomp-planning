@@ -185,3 +185,15 @@ export function analyzeConcerns(
   );
   return concerns;
 }
+
+/**
+ * Narrow a concern list to the active severities. Pure so the Concerns view's
+ * severity toggle stays a projection (like search/depth view state elsewhere):
+ * an empty `active` set means "show none". Preserves input order.
+ */
+export function filterConcernsBySeverity(
+  concerns: readonly Concern[],
+  active: ReadonlySet<Severity>,
+): Concern[] {
+  return concerns.filter((c) => active.has(c.severity));
+}
