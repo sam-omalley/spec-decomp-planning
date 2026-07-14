@@ -347,6 +347,11 @@ export function DependencyGraph({
       connectionLineComponent={DepConnectionLine}
       isValidConnection={isValidConnection}
       onConnect={onConnect}
+      // Wider than the 10px default (issue #62): with nodes close together
+      // the grabbable end of a short edge sits right at a node's boundary,
+      // and the default radius is too tight to reliably land on — the drag
+      // falls through to the pane and just pans instead.
+      reconnectRadius={20}
       onReconnectStart={onReconnectStart}
       onReconnect={onReconnect}
       onReconnectEnd={onReconnectEnd}
