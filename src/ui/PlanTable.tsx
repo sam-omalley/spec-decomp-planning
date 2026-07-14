@@ -118,12 +118,44 @@ export function PlanTable({
     multi.onRowPointerDown(id, event);
   }
 
-  function onTitleKeyDown(event: KeyboardEvent) {
-    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-      if (event.shiftKey) {
-        event.preventDefault();
-        multi.extendBy(event.key === 'ArrowUp' ? -1 : 1);
-      }
+  /**
+   * Grid-style keyboard nav across the row's cells (#44). Plain ArrowUp /
+   * ArrowDown move focus to the same column in the adjacent row, so you can
+   * run straight down a column — e.g. entering Jira keys — without reaching
+   * for the mouse; ⇧+Arrow still extends the multi-selection. Left/Right stay
+   * as the text caret and Tab / ⇧Tab move horizontally (native). The handler
+   * sits on the <tr> and reads the bubbled keydown, so it covers every cell
+   * — including the KeyEditor's input — with no prop threading.
+   */
+  function onCellKeyDown(event: KeyboardEvent) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    const delta = event.key === 'ArrowUp' ? -1 : 1;
+    if (event.shiftKey) {
+      event.preventDefault();
+      multi.extendBy(delta);
+      return;
+    }
+    const target = event.target as HTMLElement;
+    const td = target.closest('td');
+    const tr = target.closest('tr');
+    if (!td || !tr) return;
+    const colIdx = (td as HTMLTableCellElement).cellIndex;
+    const nextTr = (delta < 0 ? tr.previousElementSibling : tr.nextElementSibling) as
+      | HTMLElement
+      | null;
+    const nextTd = nextTr?.querySelectorAll('td')[colIdx];
+    const focusable = nextTd?.querySelector<HTMLElement>('input, select, textarea');
+    if (!focusable) return;
+    event.preventDefault();
+    focusable.focus();
+    // Land the caret at the end of a text field so typing continues cleanly
+    // (setSelectionRange only applies to text-like inputs, not number/date).
+    if (
+      focusable instanceof HTMLInputElement &&
+      (focusable.type === 'text' || focusable.type === 'search')
+    ) {
+      const end = focusable.value.length;
+      focusable.setSelectionRange(end, end);
     }
   }
 
@@ -176,6 +208,7 @@ export function PlanTable({
                   isMulti ? ' row-multiselected' : ''
                 }${row.matched === false ? ' row-context' : row.matched ? ' row-match' : ''}`}
                 onMouseDown={(e) => onRowMouseDown(row.id, e)}
+                onKeyDown={onCellKeyDown}
               >
                 <td
                   className={`col-title${locked ? ' cell-locked' : ''}`}
@@ -198,7 +231,6 @@ export function PlanTable({
                       })
                     }
                     onFocus={() => onSelect(row.id)}
-                    onKeyDown={onTitleKeyDown}
                     onBlur={() => store.breakCoalescing()}
                   />
                   {onReveal && (
