@@ -109,7 +109,9 @@ function WorkGraphNode({ id, data }: NodeProps<GNode>) {
   return (
     <div className={classes}>
       <Handle type="target" position={Position.Left} id="lt" className="ghandle" isConnectable={false} />
-      <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
+      <span className="gnode-title" title={data.title.trim() || 'Untitled'}>
+        {data.title.trim() || 'Untitled'}
+      </span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
       <Handle
         type="source"
@@ -144,7 +146,9 @@ function GroupGraphNode({ id, data }: NodeProps<GNode>) {
         id="lt"
         className={`ghandle dephandle ${leftDrag}`}
       />
-      <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
+      <span className="gnode-title" title={data.title.trim() || 'Untitled'}>
+        {data.title.trim() || 'Untitled'}
+      </span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
       <Handle type="target" position={Position.Right} id="rt" className="ghandle" isConnectable={false} />
     </div>

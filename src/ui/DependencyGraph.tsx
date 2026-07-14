@@ -117,7 +117,9 @@ function DepGraphNode({ id, data }: NodeProps<DepFlowNode>) {
         id="l"
         className={`ghandle dephandle ${leftDrag}`}
       />
-      <span className="gnode-title">{data.title.trim() || 'Untitled'}</span>
+      <span className="gnode-title" title={data.title.trim() || 'Untitled'}>
+        {data.title.trim() || 'Untitled'}
+      </span>
       <Handle
         type="source"
         position={Position.Right}

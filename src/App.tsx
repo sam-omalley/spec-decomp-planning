@@ -9,7 +9,7 @@ import { PlanningView } from './ui/PlanningView.tsx';
 import { MetricsView } from './ui/MetricsView.tsx';
 import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
 import { ConcernsView } from './ui/ConcernsView.tsx';
-import { SettingsPanel } from './ui/SettingsPanel.tsx';
+import { SettingsView } from './ui/SettingsView.tsx';
 import { TimelineView } from './ui/TimelineView.tsx';
 import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
 import { hashFor, parseHash, type PlanMode, type ReportMode, type Section } from './ui/route.ts';
@@ -19,7 +19,11 @@ const SECTION_LABELS: Record<Section, string> = {
   planning: 'Planning',
   graph: 'Graph',
   reporting: 'Reporting',
+  settings: 'Settings',
 };
+
+/** Project repository — the ⧉ header link back to GitHub (issue #56). */
+const GITHUB_URL = 'https://github.com/sam-omalley/spec-decomp-planning';
 
 export function App() {
   const graph = useProjectGraph();
@@ -261,8 +265,15 @@ export function App() {
         <button onClick={exportProject} title="Download the project as .json">
           Save…
         </button>
-        <span className="header-divider" />
-        <SettingsPanel />
+        <a
+          className="header-link"
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noreferrer noopener"
+          title="Open the project on GitHub (raise an issue, browse the code)"
+        >
+          GitHub ↗
+        </a>
         <span className="header-divider" />
         <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
           ↩ Undo
@@ -307,6 +318,7 @@ export function App() {
         {section === 'reporting' && reportMode === 'metrics' && <MetricsView onReveal={reveal} />}
         {section === 'reporting' && reportMode === 'assignees' && <AssigneeMetricsView />}
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}
+        {section === 'settings' && <SettingsView />}
       </main>
       <footer className="app-hints">
         {section === 'spec' && (
@@ -338,19 +350,23 @@ export function App() {
         )}
         {section === 'reporting' && reportMode === 'timeline' && (
           <>Plan schedule as a Gantt · click a bar to open its group · ▸ projected finish · 🎯
-            target date · dates &amp; capacity in ⚙ Settings</>
+            target date · dates &amp; capacity in the Settings tab</>
         )}
         {section === 'reporting' && reportMode === 'metrics' && (
           <>Projection, burn-up &amp; estimate-vs-actual · click a unit to open its group · set a
-            target date in ⚙ Settings for variance</>
+            target date in the Settings tab for variance</>
         )}
         {section === 'reporting' && reportMode === 'assignees' && (
-          <>Per-assignee estimate-vs-actual, throughput &amp; weekly completions · assign a team in ⚙
-            Settings · reflects completed stories only</>
+          <>Per-assignee estimate-vs-actual, throughput &amp; weekly completions · assign a team in
+            the Settings tab · reflects completed stories only</>
         )}
         {section === 'reporting' && reportMode === 'concerns' && (
           <>Monitoring signals for the plan · overdue, blocked, cycles, gaps &amp; behind-target ·
             click a concern to open its group</>
+        )}
+        {section === 'settings' && (
+          <>Project &amp; scheduling settings · dates, team, capacity, conversion &amp; locks · every
+            change is undoable and autosaved</>
         )}
       </footer>
     </div>

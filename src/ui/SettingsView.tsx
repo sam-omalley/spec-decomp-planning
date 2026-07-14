@@ -1,14 +1,16 @@
 /**
- * Project settings popover (header ⚙): the scheduling knobs — start /
- * target dates, points↔days conversion, hours per week, the delivery team
- * (resources with FTE, which set capacity + stretch durations), and the
- * speed multiplier. Every edit goes through `updateSettings` / the resource
- * mutations, so it is undoable and autosaved with the graph. Inputs are
- * pre-validated here because those throw on an invalid value and a throwing
- * commit would propagate.
+ * Project settings view (top-level Settings tab): the scheduling knobs —
+ * start / target dates, points↔days conversion, hours per week, the delivery
+ * team (resources with FTE, which set capacity + stretch durations), the
+ * speed multiplier, and the structural locks. Every edit goes through
+ * `updateSettings` / the resource mutations, so it is undoable and autosaved
+ * with the graph. Inputs are pre-validated here because those throw on an
+ * invalid value and a throwing commit would propagate.
+ *
+ * Promoted from a header ⚙ popover to a full view (issue #51): the sections
+ * had outgrown the cramped popover, so they now lay out as cards.
  */
 
-import { useEffect, useRef, useState } from 'react';
 import {
   addResource,
   createId,
@@ -19,27 +21,9 @@ import {
 import type { ProjectSettings } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 
-export function SettingsPanel() {
+export function SettingsView() {
   const graph = useProjectGraph();
   const s = graph.settings;
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   function commit(patch: Partial<ProjectSettings>, field: string) {
     store.commit((g) => updateSettings(g, patch), { coalesce: `settings:${field}` });
@@ -83,17 +67,10 @@ export function SettingsPanel() {
   }
 
   return (
-    <div className="settings-wrap" ref={ref}>
-      <button
-        className={`settings-trigger${open ? ' settings-trigger-open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-        title="Project & scheduling settings"
-      >
-        ⚙ Settings
-      </button>
-      {open && (
-        <div className="settings-panel">
-          <div className="settings-section-label">Schedule</div>
+    <div className="settings-view">
+      <div className="settings-grid">
+        <section className="settings-card">
+          <h2 className="settings-card-title">Schedule</h2>
           <div className="meta-row">
             <label className="meta-field">
               <span className="meta-label">Start date</span>
@@ -116,8 +93,10 @@ export function SettingsPanel() {
               />
             </label>
           </div>
+        </section>
 
-          <div className="settings-section-label">Team</div>
+        <section className="settings-card">
+          <h2 className="settings-card-title">Team</h2>
           {s.resources.length === 0 ? (
             <p className="settings-note">
               No resources yet — the plan schedules on a single full-time
@@ -161,8 +140,10 @@ export function SettingsPanel() {
           <button className="resource-add" onClick={addTeamResource}>
             + Add resource
           </button>
+        </section>
 
-          <div className="settings-section-label">Scheduling</div>
+        <section className="settings-card">
+          <h2 className="settings-card-title">Scheduling</h2>
           <div className="meta-row">
             <label className="meta-field">
               <span className="meta-label">Speed ×</span>
@@ -189,8 +170,10 @@ export function SettingsPanel() {
               />
             </label>
           </div>
+        </section>
 
-          <div className="settings-section-label">Conversion</div>
+        <section className="settings-card">
+          <h2 className="settings-card-title">Conversion</h2>
           <div className="meta-row">
             <label className="meta-field">
               <span className="meta-label">Points / day</span>
@@ -213,8 +196,10 @@ export function SettingsPanel() {
             · durations ÷ speed, then ÷ each resource's FTE. Weekends are
             skipped.
           </p>
+        </section>
 
-          <div className="settings-section-label">Locks</div>
+        <section className="settings-card">
+          <h2 className="settings-card-title">Locks</h2>
           <div className="meta-row">
             <label className="meta-field">
               <span className="meta-label">Spec levels</span>
@@ -246,8 +231,8 @@ export function SettingsPanel() {
             rows keep their shape and name; you can still add children below,
             assign work, and edit plan fields. 🔒
           </p>
-        </div>
-      )}
+        </section>
+      </div>
     </div>
   );
 }
