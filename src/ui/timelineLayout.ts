@@ -37,10 +37,17 @@ export interface TimelineTick {
   label: string;
 }
 
+/** A contiguous non-working (weekend) band across the date range. */
+export interface TimelineWeekendBand {
+  startFrac: number;
+  endFrac: number;
+}
+
 export interface TimelineModel {
   rows: TimelineRow[];
   markers: TimelineMarker[];
   ticks: TimelineTick[];
+  weekends: TimelineWeekendBand[];
   rangeStart: string;
   rangeEnd: string;
   empty: boolean;
@@ -62,6 +69,7 @@ const EMPTY: TimelineModel = {
   rows: [],
   markers: [],
   ticks: [],
+  weekends: [],
   rangeStart: '',
   rangeEnd: '',
   empty: true,
@@ -139,5 +147,20 @@ export function buildTimeline(
     ticks.push({ frac: d / span, label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}` });
   }
 
-  return { rows, markers, ticks, rangeStart, rangeEnd, empty: false };
+  // Non-working (weekend) bands across the range, merged into contiguous
+  // runs so a Sat+Sun pair paints as one band, not two.
+  const weekends: TimelineWeekendBand[] = [];
+  let bandStart: number | null = null;
+  for (let d = 0; d <= span; d++) {
+    const dow = new Date(utc(addDaysIso(rangeStart, d))).getUTCDay();
+    const isWeekend = dow === 0 || dow === 6;
+    if (isWeekend && bandStart === null) bandStart = d;
+    if (!isWeekend && bandStart !== null) {
+      weekends.push({ startFrac: bandStart / span, endFrac: d / span });
+      bandStart = null;
+    }
+  }
+  if (bandStart !== null) weekends.push({ startFrac: bandStart / span, endFrac: 1 });
+
+  return { rows, markers, ticks, weekends, rangeStart, rangeEnd, empty: false };
 }

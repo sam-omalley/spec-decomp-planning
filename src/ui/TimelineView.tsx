@@ -8,6 +8,10 @@
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
 import { buildTimeline } from './timelineLayout.ts';
+import { InfoDot } from './InfoDot.tsx';
+
+const SCHEDULING_HELP =
+  'Done units use their real actual dates; an in-progress unit uses its real start and projects the remainder; not-started work is fully projected and is never dated before today — so as today advances, un-started bars shift right to stay realistic.';
 
 interface TimelineViewProps {
   selectedId: string | null;
@@ -42,6 +46,9 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
 
   return (
     <div className="timeline-wrap">
+      <div className="tl-legend">
+        How dates are calculated <InfoDot text={SCHEDULING_HELP} align="start" />
+      </div>
       {hasCritical && (
         <div className="tl-legend">
           <span className="tl-legend-swatch tl-legend-critical" />
@@ -49,6 +56,18 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
         </div>
       )}
       <svg width={width} height={height} className="timeline-svg" role="img">
+        {/* non-working (weekend) bands */}
+        {model.weekends.map((band, i) => (
+          <rect
+            key={`w${i}`}
+            x={x(band.startFrac)}
+            y={HEAD_H}
+            width={Math.max(0, x(band.endFrac) - x(band.startFrac))}
+            height={height - HEAD_H - PAD}
+            className="tl-weekend"
+          />
+        ))}
+
         {/* week gridlines */}
         {model.ticks.map((tick, i) => (
           <g key={`t${i}`}>

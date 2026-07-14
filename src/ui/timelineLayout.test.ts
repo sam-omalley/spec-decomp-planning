@@ -60,4 +60,20 @@ describe('buildTimeline', () => {
     const t = buildTimeline(fixture());
     assert.equal(t.ticks[0]!.label, '1/1'); // 2024-01-01 is a Monday
   });
+
+  it('has no weekend bands when the range has no weekend', () => {
+    const t = buildTimeline(fixture()); // Jan1 (Mon) .. Jan5 (Fri)
+    assert.deepEqual(t.weekends, []);
+  });
+
+  it('merges a Sat+Sun into one weekend band', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, { startDate: '2024-01-01', targetDate: '2024-01-08' });
+    g = createGroup(g, { id: 'u1', title: 'U1' });
+    g = setEstimate(g, 'u1', { durationEstimate: 2 });
+    const t = buildTimeline(g); // range extends to Jan8 (Mon) via the target
+    assert.equal(t.weekends.length, 1);
+    assert.equal(t.weekends[0]!.startFrac, 5 / 7); // Jan6 (Sat)
+    assert.equal(t.weekends[0]!.endFrac, 1); // through Jan8 (exclusive)
+  });
 });
