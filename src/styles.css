@@ -120,6 +120,24 @@ body {
   cursor: default;
 }
 
+/* Link back to the project on GitHub (issue #56); styled like a header
+   button so it sits naturally beside Open… / Save…. */
+.header-link {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.header-link:hover {
+  background: var(--accent-soft);
+}
+
 .app-main {
   flex: 1;
   min-height: 0;
@@ -1118,57 +1136,53 @@ body {
 
 /* settings popover */
 
-.settings-wrap {
-  position: relative;
-  display: inline-flex;
-}
-
-.settings-trigger-open {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
-
-.settings-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 30;
-  width: 300px;
-  /* Cap to the viewport and scroll when the content (a large team, all the
-     sections) would otherwise run off the bottom of the screen. The panel is
-     anchored just below the ~50px header, so leave a header-plus-margin
-     allowance. */
-  max-height: calc(100vh - 72px);
+/* Settings top-level view (issue #51): the sections that used to live in the
+   header ⚙ popover, promoted to a full page and laid out as cards. */
+.settings-view {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  padding: 20px 24px 32px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+.settings-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
-  padding: 12px 14px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.settings-section-label {
-  font-size: 11px;
+.settings-card-title {
+  margin: 0;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  margin-top: 2px;
 }
 
-.settings-panel .meta-input {
+.settings-card .meta-input {
   width: 100%;
 }
 
-.settings-panel .meta-field {
+.settings-card .meta-field {
   flex: 1;
 }
 
-.settings-panel .meta-row {
+.settings-card .meta-row {
   gap: 12px;
 }
 
