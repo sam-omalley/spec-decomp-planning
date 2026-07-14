@@ -2112,8 +2112,10 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 .plan-table-row.row-status-in_progress td.col-title {
   box-shadow: inset 4px 0 0 var(--accent);
 }
+/* Blocked gets a thicker stripe so it is distinguishable by width, not colour
+   alone (colour-blind-friendly). */
 .plan-table-row.row-status-blocked td.col-title {
-  box-shadow: inset 4px 0 0 #c23b3b;
+  box-shadow: inset 8px 0 0 #c23b3b;
 }
 .plan-table-row.row-status-done td.col-title {
   box-shadow: inset 4px 0 0 #0e9f6e;
