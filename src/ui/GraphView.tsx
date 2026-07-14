@@ -19,6 +19,11 @@
  * its valid handle. An existing assignment edge is grabbable near an end:
  * drop it on another group to re-home the assignment, or on empty space to
  * unassign.
+ *
+ * Sort mode (issue #42): a 3-way toggle — Both locked (default, each side
+ * keeps its own native order) / Lock Spec / Lock Plan — passed straight
+ * through to `layoutGraph`'s `sort` param (`graphLayout.ts` does the actual
+ * re-flow). Ephemeral view state, like `inferChains`; never serialized.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -47,7 +52,7 @@ import { store, useProjectGraph } from '../store/appStore.ts';
 import { rootGroupColor } from './colors.ts';
 import { DependencyGraph } from './DependencyGraph.tsx';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
-import { layoutGraph } from './graphLayout.ts';
+import { layoutGraph, type MapSort } from './graphLayout.ts';
 import { assignmentHandleVisibility, resolveAssignmentEnds } from './mapAuthoring.ts';
 import { isEmptyLeafGroup, uncoveredWorkIds } from './planning.ts';
 
@@ -219,6 +224,9 @@ export function GraphView({
 }: GraphViewProps) {
   const graph = useProjectGraph();
   const [inferChains, setInferChains] = useState(false);
+  // Sort mode for the Map view (issue #42): ephemeral view state, like
+  // inferChains — never serialized, resets to the default on reload.
+  const [mapSort, setMapSort] = useState<MapSort>('locked');
   const [active, setActive] = useState<Record<FilterKey, boolean>>({
     unassigned: false,
     empty: false,
@@ -326,7 +334,7 @@ export function GraphView({
 
   const nodes = useMemo<GNode[]>(() => {
     const result: GNode[] = [];
-    for (const placed of layoutGraph(graph, visibleSet)) {
+    for (const placed of layoutGraph(graph, visibleSet, mapSort)) {
       const node = graph.nodes[placed.id]!;
       const matched = matches(placed.id);
       result.push({
@@ -357,6 +365,7 @@ export function GraphView({
     analysis,
     anyFilter,
     mode,
+    mapSort,
     matches,
     visibleSet,
     textActive,
@@ -463,6 +472,30 @@ export function GraphView({
                 {m === 'spotlight' ? 'Spotlight' : 'Hide'}
               </button>
             ))}
+            <span className="graph-filter-sep" />
+            {(
+              [
+                ['locked', 'Both locked'],
+                ['lockSpec', 'Lock Spec'],
+                ['lockPlan', 'Lock Plan'],
+              ] as [MapSort, string][]
+            ).map(([s, label]) => (
+              <button
+                key={s}
+                className={`graph-filter-btn${mapSort === s ? ' graph-filter-btn-active' : ''}`}
+                aria-pressed={mapSort === s}
+                onClick={() => setMapSort(s)}
+                title={
+                  s === 'locked'
+                    ? 'Each side keeps its own order'
+                    : s === 'lockSpec'
+                      ? 'Spec order fixed; the plan re-flows to align with it'
+                      : 'Plan order fixed; the spec re-flows to align with it'
+                }
+              >
+                {label}
+              </button>
+            ))}
           </>
         ) : (
           <button
@@ -500,7 +533,7 @@ export function GraphView({
         >
           <Background gap={24} />
           <Controls showInteractive={false} />
-          <FitOnReflow signature={`${mode}:${active.unassigned}:${active.empty}`} />
+          <FitOnReflow signature={`${mode}:${active.unassigned}:${active.empty}:${mapSort}`} />
         </ReactFlow>
       ) : (
         <DependencyGraph
