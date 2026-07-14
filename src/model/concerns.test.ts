@@ -11,7 +11,13 @@ import {
   updateNode,
   updateSettings,
 } from './graph.ts';
-import { analyzeConcerns, type ConcernKind } from './concerns.ts';
+import {
+  analyzeConcerns,
+  filterConcernsBySeverity,
+  type Concern,
+  type ConcernKind,
+  type Severity,
+} from './concerns.ts';
 import type { ProjectGraph } from './types.ts';
 
 function base(overrides: Partial<Parameters<typeof updateSettings>[1]> = {}): ProjectGraph {
@@ -142,5 +148,30 @@ describe('analyzeConcerns — project-level signals', () => {
     g = updateNode(g, 'a', { status: 'blocked' }); // medium
     const list = analyzeConcerns(g, '2024-01-01');
     assert.equal(list[0]!.severity, 'high'); // past_target sorts above blocked
+  });
+});
+
+describe('filterConcernsBySeverity', () => {
+  const mk = (severity: Severity): Concern => ({
+    kind: 'blocked',
+    severity,
+    id: severity,
+    title: severity,
+    detail: '',
+  });
+  const list: Concern[] = [mk('high'), mk('medium'), mk('low'), mk('high')];
+
+  it('keeps only active severities, preserving order', () => {
+    const out = filterConcernsBySeverity(list, new Set<Severity>(['high', 'medium']));
+    assert.deepEqual(out.map((c) => c.severity), ['high', 'medium', 'high']);
+  });
+
+  it('returns nothing for an empty active set', () => {
+    assert.deepEqual(filterConcernsBySeverity(list, new Set()), []);
+  });
+
+  it('returns everything when all severities are active', () => {
+    const all = new Set<Severity>(['high', 'medium', 'low']);
+    assert.equal(filterConcernsBySeverity(list, all).length, list.length);
   });
 });
