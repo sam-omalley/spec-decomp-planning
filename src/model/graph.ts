@@ -107,15 +107,76 @@ function setRootIndex(graph: ProjectGraph, id: string, index: number): ProjectGr
 }
 
 /* ------------------------------------------------------------------ */
+/* Edge index (cached per graph reference)                             */
+/*                                                                      */
+/* The graph is immutable with structural sharing, so a given          */
+/* ProjectGraph reference never changes underneath us — a WeakMap      */
+/* keyed on that reference is a safe, self-invalidating cache. This    */
+/* turns the selectors below from O(E) edge scans into O(1)/O(children)*/
+/* lookups without changing their signatures or semantics.             */
+/* ------------------------------------------------------------------ */
+
+interface GraphIndex {
+  parentByChild: Map<string, Edge>;
+  childrenByParent: Map<string, string[]>;
+  assignmentByFrom: Map<string, Edge>;
+  membersByGroup: Map<string, string[]>;
+  edgeByKey: Map<string, Edge>;
+}
+
+const indexCache = new WeakMap<ProjectGraph, GraphIndex>();
+
+function edgeKey(type: EdgeType, from: string, to: string): string {
+  return `${type}|${from}|${to}`;
+}
+
+function buildIndex(graph: ProjectGraph): GraphIndex {
+  const parentByChild = new Map<string, Edge>();
+  const childrenEdgesByParent = new Map<string, Edge[]>();
+  const assignmentByFrom = new Map<string, Edge>();
+  const membersByGroup = new Map<string, string[]>();
+  const edgeByKey = new Map<string, Edge>();
+
+  for (const edge of Object.values(graph.edges)) {
+    edgeByKey.set(edgeKey(edge.type, edge.from, edge.to), edge);
+    if (edge.type === 'contains') {
+      parentByChild.set(edge.to, edge);
+      const siblings = childrenEdgesByParent.get(edge.from);
+      if (siblings) siblings.push(edge);
+      else childrenEdgesByParent.set(edge.from, [edge]);
+    } else if (edge.type === 'assigned_to') {
+      assignmentByFrom.set(edge.from, edge);
+      const members = membersByGroup.get(edge.to);
+      if (members) members.push(edge.from);
+      else membersByGroup.set(edge.to, [edge.from]);
+    }
+  }
+
+  const childrenByParent = new Map<string, string[]>();
+  for (const [parentId, edges] of childrenEdgesByParent) {
+    edges.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    childrenByParent.set(parentId, edges.map((e) => e.to));
+  }
+
+  return { parentByChild, childrenByParent, assignmentByFrom, membersByGroup, edgeByKey };
+}
+
+function getIndex(graph: ProjectGraph): GraphIndex {
+  let index = indexCache.get(graph);
+  if (!index) {
+    index = buildIndex(graph);
+    indexCache.set(graph, index);
+  }
+  return index;
+}
+
+/* ------------------------------------------------------------------ */
 /* Selectors                                                           */
 /* ------------------------------------------------------------------ */
 
 /** The 'contains' edge whose child is `id`, if any. */
 export function parentEdgeOf(graph: ProjectGraph, id: string): Edge | undefined {
-  for (const edge of Object.values(graph.edges)) {
-    if (edge.type === 'contains' && edge.to === id) return edge;
-  }
-  return undefined;
+  return getIndex(graph).parentByChild.get(id);
 }
 
 export function parentOf(graph: ProjectGraph, id: string): string | null {
@@ -124,10 +185,7 @@ export function parentOf(graph: ProjectGraph, id: string): string | null {
 
 /** Child ids of `id`, in sibling order. */
 export function childrenOf(graph: ProjectGraph, id: string): string[] {
-  return Object.values(graph.edges)
-    .filter((e) => e.type === 'contains' && e.from === id)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((e) => e.to);
+  return getIndex(graph).childrenByParent.get(id) ?? [];
 }
 
 /** The spec-tree roots (parentless work nodes), in display order. */
@@ -170,9 +228,7 @@ export function isInSubtreeOf(
 
 /** The 'assigned_to' edge of a work node, if any (at most one exists). */
 export function assignmentEdgeOf(graph: ProjectGraph, nodeId: string): Edge | undefined {
-  return Object.values(graph.edges).find(
-    (e) => e.type === 'assigned_to' && e.from === nodeId,
-  );
+  return getIndex(graph).assignmentByFrom.get(nodeId);
 }
 
 /** The group a work node is directly assigned to, if any. */
@@ -182,9 +238,7 @@ export function groupOf(graph: ProjectGraph, nodeId: string): string | null {
 
 /** Ids of work nodes directly assigned to the given group. */
 export function membersOfGroup(graph: ProjectGraph, groupId: string): string[] {
-  return Object.values(graph.edges)
-    .filter((e) => e.type === 'assigned_to' && e.to === groupId)
-    .map((e) => e.from);
+  return getIndex(graph).membersByGroup.get(groupId) ?? [];
 }
 
 export function edgeBetween(
@@ -193,9 +247,7 @@ export function edgeBetween(
   from: string,
   to: string,
 ): Edge | undefined {
-  return Object.values(graph.edges).find(
-    (e) => e.type === type && e.from === from && e.to === to,
-  );
+  return getIndex(graph).edgeByKey.get(edgeKey(type, from, to));
 }
 
 /* ------------------------------------------------------------------ */
