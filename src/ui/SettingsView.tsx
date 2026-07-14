@@ -9,6 +9,12 @@
  *
  * Promoted from a header ⚙ popover to a full view (issue #51): the sections
  * had outgrown the cramped popover, so they now lay out as cards.
+ *
+ * Two columns (issue #61): Team is variable-height (grows with the roster),
+ * which broke a uniform card grid — a tall Team card left ragged gaps under
+ * its row-mates. Team now sits alone in its own column; the fixed-height
+ * sections stack in the other, so neither column's sizing depends on the
+ * other's content.
  */
 
 import {
@@ -68,170 +74,174 @@ export function SettingsView() {
 
   return (
     <div className="settings-view">
-      <div className="settings-grid">
-        <section className="settings-card">
-          <h2 className="settings-card-title">Schedule</h2>
-          <div className="meta-row">
-            <label className="meta-field">
-              <span className="meta-label">Start date</span>
-              <input
-                className="meta-input"
-                type="date"
-                value={s.startDate}
-                onChange={(e) => {
-                  if (e.target.value) commit({ startDate: e.target.value }, 'startDate');
-                }}
-              />
-            </label>
-            <label className="meta-field">
-              <span className="meta-label">Target date</span>
-              <input
-                className="meta-input"
-                type="date"
-                value={s.targetDate ?? ''}
-                onChange={(e) => commit({ targetDate: e.target.value || null }, 'targetDate')}
-              />
-            </label>
-          </div>
-        </section>
+      <div className="settings-columns">
+        <div className="settings-col">
+          <section className="settings-card">
+            <h2 className="settings-card-title">Schedule</h2>
+            <div className="meta-row">
+              <label className="meta-field">
+                <span className="meta-label">Start date</span>
+                <input
+                  className="meta-input"
+                  type="date"
+                  value={s.startDate}
+                  onChange={(e) => {
+                    if (e.target.value) commit({ startDate: e.target.value }, 'startDate');
+                  }}
+                />
+              </label>
+              <label className="meta-field">
+                <span className="meta-label">Target date</span>
+                <input
+                  className="meta-input"
+                  type="date"
+                  value={s.targetDate ?? ''}
+                  onChange={(e) => commit({ targetDate: e.target.value || null }, 'targetDate')}
+                />
+              </label>
+            </div>
+          </section>
 
-        <section className="settings-card">
-          <h2 className="settings-card-title">Team</h2>
-          {s.resources.length === 0 ? (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Scheduling</h2>
+            <div className="meta-row">
+              <label className="meta-field">
+                <span className="meta-label">Speed ×</span>
+                <input
+                  className="meta-input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={s.speedMultiplier}
+                  onChange={(e) => commitNumber('speedMultiplier', e.target.value)}
+                  onBlur={() => store.breakCoalescing()}
+                />
+              </label>
+              <label className="meta-field">
+                <span className="meta-label">Hours / week</span>
+                <input
+                  className="meta-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={s.hoursPerWeek}
+                  onChange={(e) => commitNumber('hoursPerWeek', e.target.value)}
+                  onBlur={() => store.breakCoalescing()}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-card-title">Conversion</h2>
+            <div className="meta-row">
+              <label className="meta-field">
+                <span className="meta-label">Points / day</span>
+                <input
+                  className="meta-input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={s.pointsPerDay}
+                  onChange={(e) => commitNumber('pointsPerDay', e.target.value)}
+                  onBlur={() => store.breakCoalescing()}
+                />
+              </label>
+            </div>
             <p className="settings-note">
-              No resources yet — the plan schedules on a single full-time
-              track. Add people to parallelise and to assign work.
+              Capacity:{' '}
+              {s.resources.length === 0
+                ? '1 full-time track'
+                : `${s.resources.length} resource${s.resources.length === 1 ? '' : 's'}`}{' '}
+              · durations ÷ speed, then ÷ each resource's FTE. Weekends are
+              skipped.
             </p>
-          ) : (
-            <div className="resource-list">
-              {s.resources.map((r) => (
-                <div className="resource-row" key={r.id}>
-                  <input
-                    className="meta-input resource-name"
-                    type="text"
-                    placeholder="Name"
-                    value={r.name}
-                    onChange={(e) => renameResource(r.id, e.target.value)}
-                    onBlur={() => store.breakCoalescing()}
-                  />
-                  <label className="resource-fte">
-                    <span className="meta-label">FTE</span>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-card-title">Locks</h2>
+            <div className="meta-row">
+              <label className="meta-field">
+                <span className="meta-label">Spec levels</span>
+                <input
+                  className="meta-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={s.specLockDepth}
+                  onChange={(e) => commitLock('specLockDepth', e.target.value)}
+                  onBlur={() => store.breakCoalescing()}
+                />
+              </label>
+              <label className="meta-field">
+                <span className="meta-label">Plan levels</span>
+                <input
+                  className="meta-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={s.planLockDepth}
+                  onChange={(e) => commitLock('planLockDepth', e.target.value)}
+                  onBlur={() => store.breakCoalescing()}
+                />
+              </label>
+            </div>
+            <p className="settings-note">
+              Freeze the top levels against accidental edits (0 = off). Locked
+              rows keep their shape and name; you can still add children below,
+              assign work, and edit plan fields. 🔒
+            </p>
+          </section>
+        </div>
+
+        <div className="settings-col">
+          <section className="settings-card">
+            <h2 className="settings-card-title">Team</h2>
+            {s.resources.length === 0 ? (
+              <p className="settings-note">
+                No resources yet — the plan schedules on a single full-time
+                track. Add people to parallelise and to assign work.
+              </p>
+            ) : (
+              <div className="resource-list">
+                {s.resources.map((r) => (
+                  <div className="resource-row" key={r.id}>
                     <input
-                      className="meta-input"
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={r.fte}
-                      onChange={(e) => setResourceFte(r.id, e.target.value)}
+                      className="meta-input resource-name"
+                      type="text"
+                      placeholder="Name"
+                      value={r.name}
+                      onChange={(e) => renameResource(r.id, e.target.value)}
                       onBlur={() => store.breakCoalescing()}
                     />
-                  </label>
-                  <button
-                    className="resource-remove"
-                    title="Remove this resource"
-                    onClick={() => dropResource(r.id)}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <button className="resource-add" onClick={addTeamResource}>
-            + Add resource
-          </button>
-        </section>
-
-        <section className="settings-card">
-          <h2 className="settings-card-title">Scheduling</h2>
-          <div className="meta-row">
-            <label className="meta-field">
-              <span className="meta-label">Speed ×</span>
-              <input
-                className="meta-input"
-                type="number"
-                min="0"
-                step="0.1"
-                value={s.speedMultiplier}
-                onChange={(e) => commitNumber('speedMultiplier', e.target.value)}
-                onBlur={() => store.breakCoalescing()}
-              />
-            </label>
-            <label className="meta-field">
-              <span className="meta-label">Hours / week</span>
-              <input
-                className="meta-input"
-                type="number"
-                min="0"
-                step="1"
-                value={s.hoursPerWeek}
-                onChange={(e) => commitNumber('hoursPerWeek', e.target.value)}
-                onBlur={() => store.breakCoalescing()}
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="settings-card">
-          <h2 className="settings-card-title">Conversion</h2>
-          <div className="meta-row">
-            <label className="meta-field">
-              <span className="meta-label">Points / day</span>
-              <input
-                className="meta-input"
-                type="number"
-                min="0"
-                step="0.1"
-                value={s.pointsPerDay}
-                onChange={(e) => commitNumber('pointsPerDay', e.target.value)}
-                onBlur={() => store.breakCoalescing()}
-              />
-            </label>
-          </div>
-          <p className="settings-note">
-            Capacity:{' '}
-            {s.resources.length === 0
-              ? '1 full-time track'
-              : `${s.resources.length} resource${s.resources.length === 1 ? '' : 's'}`}{' '}
-            · durations ÷ speed, then ÷ each resource's FTE. Weekends are
-            skipped.
-          </p>
-        </section>
-
-        <section className="settings-card">
-          <h2 className="settings-card-title">Locks</h2>
-          <div className="meta-row">
-            <label className="meta-field">
-              <span className="meta-label">Spec levels</span>
-              <input
-                className="meta-input"
-                type="number"
-                min="0"
-                step="1"
-                value={s.specLockDepth}
-                onChange={(e) => commitLock('specLockDepth', e.target.value)}
-                onBlur={() => store.breakCoalescing()}
-              />
-            </label>
-            <label className="meta-field">
-              <span className="meta-label">Plan levels</span>
-              <input
-                className="meta-input"
-                type="number"
-                min="0"
-                step="1"
-                value={s.planLockDepth}
-                onChange={(e) => commitLock('planLockDepth', e.target.value)}
-                onBlur={() => store.breakCoalescing()}
-              />
-            </label>
-          </div>
-          <p className="settings-note">
-            Freeze the top levels against accidental edits (0 = off). Locked
-            rows keep their shape and name; you can still add children below,
-            assign work, and edit plan fields. 🔒
-          </p>
-        </section>
+                    <label className="resource-fte">
+                      <span className="meta-label">FTE</span>
+                      <input
+                        className="meta-input"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={r.fte}
+                        onChange={(e) => setResourceFte(r.id, e.target.value)}
+                        onBlur={() => store.breakCoalescing()}
+                      />
+                    </label>
+                    <button
+                      className="resource-remove"
+                      title="Remove this resource"
+                      onClick={() => dropResource(r.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="resource-add" onClick={addTeamResource}>
+              + Add resource
+            </button>
+          </section>
+        </div>
       </div>
     </div>
   );
