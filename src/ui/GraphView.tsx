@@ -26,21 +26,10 @@
  * re-flow). Ephemeral view state, like `inferChains`; never serialized.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Background,
-  ConnectionMode,
-  Controls,
-  Handle,
-  MarkerType,
-  Position,
-  ReactFlow,
-  useConnection,
-  useReactFlow,
-} from '@xyflow/react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Handle, MarkerType, Position } from '@xyflow/react';
 import type {
   Connection,
-  ConnectionLineComponentProps,
   Edge as FlowEdge,
   Node as FlowNode,
   NodeProps,
@@ -49,6 +38,7 @@ import '@xyflow/react/dist/style.css';
 import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import { assignToGroup, removeEdge } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { AuthoringCanvas, makeArrowConnectionLine, useConnectionSignature } from './AuthoringCanvas.tsx';
 import { rootGroupColor } from './colors.ts';
 import { DependencyGraph } from './DependencyGraph.tsx';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
@@ -80,14 +70,6 @@ interface GEdgeData extends Record<string, unknown> {
   graphEdgeId?: string;
 }
 
-/** Signature of the in-progress connection (empty when idle) — a primitive so
- *  the `useConnection` selector stays referentially stable across renders. */
-function useConnSignature(): string {
-  return useConnection((c) =>
-    c.inProgress ? `${c.fromNode?.id ?? ''}:${c.fromHandle?.id ?? ''}` : '',
-  );
-}
-
 /** The show/hide drag class for a card's assignment handle, or ''. */
 function dragClass(conn: string, nodeId: string, nodeIsGroup: boolean): string {
   if (!conn) return '';
@@ -110,7 +92,7 @@ function WorkGraphNode({ id, data }: NodeProps<GNode>) {
     .join(' ');
   // The right handle authors assignments (spec → plan); the left handle only
   // renders incoming contains edges, so it is not connectable.
-  const rightDrag = dragClass(useConnSignature(), id, false);
+  const rightDrag = dragClass(useConnectionSignature(), id, false);
   return (
     <div className={classes}>
       <Handle type="target" position={Position.Left} id="lt" className="ghandle" isConnectable={false} />
@@ -141,7 +123,7 @@ function GroupGraphNode({ id, data }: NodeProps<GNode>) {
   // The left target handle receives assignments (spec → plan); the left source
   // (contains, group tree) and right target (contains, from parent) only render
   // existing edges, so they are not connectable.
-  const leftDrag = dragClass(useConnSignature(), id, true);
+  const leftDrag = dragClass(useConnectionSignature(), id, true);
   return (
     <div className={classes} style={{ ['--group-color' as string]: data.color }}>
       <Handle type="source" position={Position.Left} id="ls" className="ghandle" isConnectable={false} />
@@ -164,48 +146,7 @@ const nodeTypes = { work: WorkGraphNode, group: GroupGraphNode };
 
 /** In-progress assignment line: a dashed link whose arrow points at the group
  *  (the plan side the work flows into), previewing the `assigned_to` edge. */
-function MapConnectionLine({ fromX, fromY, toX, toY, fromHandle }: ConnectionLineComponentProps) {
-  // Dragging from a group's left handle → the group is the fixed `from` end;
-  // otherwise the group is the moving `to` end the drag lands on.
-  const arrowAtFrom = fromHandle?.id === 'lt';
-  const tipX = arrowAtFrom ? fromX : toX;
-  const tipY = arrowAtFrom ? fromY : toY;
-  const baseX = arrowAtFrom ? toX : fromX;
-  const baseY = arrowAtFrom ? toY : fromY;
-  const dx = tipX - baseX;
-  const dy = tipY - baseY;
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len;
-  const uy = dy / len;
-  const size = 9;
-  const half = 5.5;
-  const backX = tipX - ux * size;
-  const backY = tipY - uy * size;
-  const arrow = `M ${tipX} ${tipY} L ${backX - uy * half} ${backY + ux * half} L ${backX + uy * half} ${backY - ux * half} Z`;
-  return (
-    <g>
-      <path
-        d={`M ${fromX} ${fromY} L ${toX} ${toY}`}
-        fill="none"
-        stroke="#9aa0a6"
-        strokeWidth={1.5}
-        strokeDasharray="6 4"
-      />
-      <path d={arrow} fill="#9aa0a6" />
-    </g>
-  );
-}
-
-/** Re-fits the viewport whenever `signature` changes — i.e. when the
- *  filter/mode toggles reflow the graph. Lives inside <ReactFlow> so it
- *  can reach the instance via context. */
-function FitOnReflow({ signature }: { signature: string }) {
-  const { fitView } = useReactFlow();
-  useEffect(() => {
-    void fitView({ duration: 200 });
-  }, [signature, fitView]);
-  return null;
-}
+const MapConnectionLine = makeArrowConnectionLine({ color: '#9aa0a6', arrowAtFromHandleId: 'lt' });
 
 interface GraphViewProps {
   selectedId: string | null;
@@ -509,36 +450,20 @@ export function GraphView({
         )}
       </div>
       {graphMode === 'map' ? (
-        <ReactFlow
+        <AuthoringCanvas
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          fitView
-          minZoom={0.2}
-          nodesDraggable={false}
-          nodesConnectable
-          elementsSelectable={false}
-          connectionMode={ConnectionMode.Loose}
           connectionLineComponent={MapConnectionLine}
-          // Only assignment edges opt in (reconnectable: true); this stops the
-          // dependency/contains edges from being grabbable and detached.
-          edgesReconnectable={false}
-          // Wider than the 10px default (issue #62): with nodes close
-          // together a short edge's grabbable end sits right at a node's
-          // boundary, and the default radius is too tight to land on.
-          reconnectRadius={20}
           isValidConnection={(c) => resolveAssignmentEnds(c, isGroup) !== null}
           onConnect={onConnect}
           onReconnectStart={onReconnectStart}
           onReconnect={onReconnect}
           onReconnectEnd={onReconnectEnd}
-          onNodeClick={(_, node) => onSelect(node.id)}
+          onNodeClick={onSelect}
           onPaneClick={() => onSelect(null)}
-        >
-          <Background gap={24} />
-          <Controls showInteractive={false} />
-          <FitOnReflow signature={`${mode}:${active.unassigned}:${active.empty}:${mapSort}`} />
-        </ReactFlow>
+          reflowSignature={`${mode}:${active.unassigned}:${active.empty}:${mapSort}`}
+        />
       ) : (
         <DependencyGraph
           selectedId={selectedId}
