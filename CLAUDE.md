@@ -28,8 +28,8 @@ groups.
 
 ## Data model
 
-Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
-(see `src/model/types.ts`). Nodes have two sides:
+Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays + project
+`settings` (see `src/model/types.ts`). Nodes have two sides:
 
 - **Work nodes** — requirement, feature, capability, component,
   user_story, task, research, bug. The spec tree. Structural data only
@@ -43,40 +43,44 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
   effort points, `durationEstimate` (working days), `actualStart` /
   `actualFinish` (ISO date, or ISO datetime-local when a time is set — a
   bare date reads as 00:00; the scheduler stays day-granular and drops any
-  time, elapsed-duration metrics use it), and `externalRefs` (Jira etc.).
-  `effort` (size) and
-  `durationEstimate` (time) are distinct axes, convertible via
-  `settings.pointsPerDay`. Groups are the nodes that get scheduled,
-  tracked, and sequenced by dependencies.
+  time, elapsed-duration metrics use it), `resourceId` (pins the group to a
+  team member — see Project settings), and `externalRefs` (Jira etc.).
+  `effort` (size) and `durationEstimate` (time) are distinct axes,
+  convertible via `settings.pointsPerDay`. Groups are the nodes that get
+  scheduled, tracked, and sequenced by dependencies. **Rollup /
+  scheduling-unit rule:** the topmost node in a subtree with its own
+  estimate is the atomic unit for both rollup display and scheduling — own
+  value wins over summing children (no double counting), and an
+  unestimated leaf is a gap. One implementation (`src/model/rollup.ts`)
+  backs both the row estimate chip and the scheduler's unit selection, so
+  the two can't disagree.
 - **Edges**: typed — `contains`, `depends_on`, `implements`,
   `assigned_to`, `blocks`, `duplicates`, `related_to`. `contains` edges
   carry `order` for sibling ordering; root order lives in
   `ProjectGraph.rootOrder` (work side) and `groupRootOrder` (group
   side), maintained by every mutation, reconciled on file load.
-  File version 5; v1/v2 migrate (plans → root groups, epics → child
-  groups, `belongs_to_epic` → `assigned_to`, first membership wins),
-  v3 → v4 backfills the estimate/actual/`externalRefs` node fields and
-  `settings` with defaults, v4 → v5 backfills the lock depths
-  (`specLockDepth` / `planLockDepth`, both 0 = unlocked). On load,
-  `depends_on`/`blocks` edges that
-  touch a work node are dropped — dependencies are group-only now, so
-  any legacy spec-level deps are discarded (the only lossy migration).
+  File version 6 (`src/model/serialize.ts` has the full per-version
+  migration history in comments); every version migrates forward with no
+  data loss except one case: on load, `depends_on`/`blocks` edges that
+  touch a work node are dropped, since dependencies are group-only now
+  and any legacy spec-level deps are meaningless.
 - **Project settings** (`ProjectGraph.settings: ProjectSettings`) —
   project-level config, carried inside the graph so it rides the
-  store/undo/serialize/autosave path unchanged. Scheduling:
-  `startDate`, `targetDate`, `pointsPerDay`, `hoursPerDay`,
-  `parallelTracks`, `speedMultiplier`. Editing locks (slice 17):
-  `specLockDepth` / `planLockDepth` — how many top levels of each side
-  are frozen against accidental edits (0 = unlocked). Locks are a *config
-  value*, not a graph invariant: they gate the editing UI, not the core
-  mutations. In contrast, ephemeral view narrowing — search/filter (slice
-  15) and depth caps (slice 16) — is *not* stored here; it lives in React
-  view state and never touches the graph, store, or undo history.
+  store/undo/serialize/autosave path unchanged. Scheduling: `startDate`,
+  `targetDate`, `pointsPerDay`, `hoursPerWeek`, `speedMultiplier`, and
+  `resources` — the delivery **team** (`{ id, name, fte }`). Capacity is
+  one scheduling track per resource (an empty team is a single implicit
+  full-time track); a group's `resourceId` pins its scheduling unit to
+  that resource's track, and FTE stretches duration
+  (`durationEstimate / (speedMultiplier × fte)` — a 0.8-FTE resource's
+  work takes `1 / 0.8` longer). Editing locks: `specLockDepth` /
+  `planLockDepth` — how many top levels of each side are frozen against
+  accidental edits (0 = unlocked; see the Locks bullet below). Locks are a
+  *config value*, not a graph invariant: they gate the editing UI, not the
+  core mutations.
 
-The project-management extension (slices 9–13 below) schedules and
-tracks the **plan** (group tree). Rollup runs along group `contains`
-(own estimate wins over child sum); nothing rolls up from assigned spec
-items. Its scheduler/views are still to build.
+Rollup runs along group `contains` (own estimate wins over child sum);
+nothing rolls up from assigned spec items.
 
 ### Invariants (enforced in `src/model/graph.ts`, tested)
 
@@ -102,15 +106,30 @@ items. Its scheduler/views are still to build.
 
 ## Architecture decisions
 
-- Views are pure projections of the graph: spec view reads the work
-  side of `contains`, planning view reads the group side plus
-  `assigned_to`, graph view reads everything. Never store view-specific
-  copies of data.
+- **Views are pure projections of the graph and its settings.** Spec view
+  reads the work side of `contains`; Planning reads the group side plus
+  `assigned_to`; Graph reads everything; the Reporting sub-views (Timeline,
+  Metrics, Assignees, Concerns) derive from the scheduler / rollup /
+  concerns analysis. None store view-specific copies of data. Ephemeral
+  view-narrowing state — global search/filter, per-side depth caps, the
+  Graph view's sort mode and infer-chains toggle, and the current
+  section/sub-view (mirrored to the URL hash for navigation, see below) —
+  never touches the graph, store, or undo history; it lives in React state
+  and is applied as a pure projection in the view layer.
 - **Dependency-free core.** No zustand, no immer (also: sandbox npm was
-  blocked when built). Mutations are immutable with structural sharing;
-  undo/redo is a snapshot stack in `src/store/projectStore.ts`. One
-  `store.commit(fn)` = one atomic undo step; throwing mutations leave state
-  and history untouched. React binds via `useSyncExternalStore`.
+  blocked when built). Mutations in `src/model/graph.ts` are immutable
+  with structural sharing; undo/redo is a snapshot stack in
+  `src/store/projectStore.ts`, a framework-free class kept separate from
+  its React binding (`src/store/appStore.ts`, `useSyncExternalStore`) so
+  the store itself is testable under the Node runner without React. One
+  `store.commit(fn)` = one atomic undo step; throwing mutations leave
+  state and history untouched. Because the graph is immutable with a
+  stable reference between mutations, `graph.ts`'s edge-scanning selectors
+  (`parentEdgeOf`, `childrenOf`, `assignmentEdgeOf`, `membersOfGroup`,
+  `edgeBetween`) are backed by a `WeakMap<ProjectGraph, GraphIndex>` cache
+  keyed on that reference — a cache miss rebuilds the index once per new
+  graph, turning what would be O(N·E) traversals (rollup, scheduling,
+  outline flattening) into O(1)/O(children) lookups.
 - Ids: `crypto.randomUUID()` generated by callers (`createId()`), passed
   into mutations — keeps mutations deterministic and testable.
 - Persistence: versioned JSON envelope (`src/model/serialize.ts`) used
@@ -121,383 +140,110 @@ items. Its scheduler/views are still to build.
   visibilitychange; `main.tsx` loads before first render. Import
   confirms before replacing a non-empty project; `store.reset` clears
   undo history by design.
+- Navigation is hash-routed (`src/ui/route.ts`, pure + tested): the active
+  top-level section (Spec / Planning / Graph / Reporting / Settings) and
+  its sub-view are mirrored into the location hash (`#/reporting/metrics`)
+  so browser back/forward/refresh and the cross-view "reveal" jump behave
+  like a real app. Hash-based rather than path-based so it works on static
+  hosting (GitHub Pages) with no server rewrites. Read-only surfaces
+  (`PlanTable`, Metrics, Timeline, Concerns) route back into the editable
+  outliner via an app-level `reveal(id)`, which jumps to a group's
+  Planning/Outline row or a work node's Spec row and selects it.
 - Primary editing surface is the **outliner** (Enter = sibling, Tab =
   indent). One generic `Outliner` component drives both sides via a
   `side` prop (`outline.ts` helpers are side-aware); the planning view
   augments group rows with member chips + drop targets via `rowExtras`
-  / `rowDropProps`. Graph view is for understanding/navigation,
-  read-mostly in v1. Selection is lifted to `App`, syncs between views,
-  healed there when the node disappears.
-- Assignment UX: drag spec row onto a group row (native HTML5 DnD);
-  drop moves (single membership), drag a chip to the spec pane or × to
-  unassign. Spec pane shows coverage tags (solid = direct, dashed =
-  inherited via ancestor), colored per root group.
+  / `rowDropProps`. `PlanTable` is a plan-side-only alternate surface (an
+  Outline/Table toggle inside Planning): one row per group in pre-order,
+  every plan field an inline column reusing the same mutations, with
+  container rollups shown as a muted placeholder. Bulk editing reuses the
+  same mutations rather than adding new ones: pasting multi-line text
+  creates rows with nesting inferred from indentation, and a lifted
+  multi-select (⇧/⌘-click, ⇧↑↓) fans structural ops (indent/outdent/
+  reorder/delete) out over a contiguous sibling run, or a field edit in
+  `PlanTable` across the whole selection, as one undo step. Selection is
+  lifted to `App`, syncs between views, healed there when the node
+  disappears.
+- **Assignment authoring has two surfaces**, both driving the same
+  `assignToGroup` mutation (single membership, moves an existing
+  assignment): the Planning view's Outline uses native HTML5
+  drag-and-drop (drag a spec row onto a group row, drag a chip to the spec
+  pane or × to unassign); the Graph tab's Map mode offers the same action
+  via React-Flow handle-drag (a work node's right handle onto a group's
+  left handle). The spec pane shows coverage tags (solid = direct, dashed
+  = inherited via ancestor), colored per root group.
+- **Handle-drag authoring** (Graph tab's Map mode, and the Dependency
+  mode's `depends_on` edges) is driven by *which side each card
+  contributes*, not which end starts the drag — so a drag either
+  direction authors the same edge, and `connectionMode="loose"` lets
+  either end start or receive. The pure resolvers (`mapAuthoring.ts` /
+  `depAuthoring.ts`, unit-tested) decide the edge's meaning and which
+  handle each card should reveal mid-drag. A shared `AuthoringCanvas`
+  (`src/ui/AuthoringCanvas.tsx`) factors out the React-Flow scaffolding
+  common to both views — loose connection mode, a wide reconnect radius
+  (close-together nodes need more than the 10px default to grab), a
+  `FitOnReflow` that re-fits the viewport when the layout changes, and
+  grab-near-an-end reconnection (drop on a valid handle to re-home an
+  edge, on empty space to delete it; only a real, directly-authored edge
+  is reconnectable — inferred and container-fan-out edges are not). Each
+  view still owns its node renderer/handle topology, connection
+  semantics, and layout source (`graphLayout.ts` vs `depLayout.ts`).
+- The Dependency graph view **ghosts an inferred sequential chain**
+  across sibling leaf groups with no explicit ordering between them
+  (dashed/muted, distinct from real edges), suppressed per-pair the
+  moment the *transitive* explicit dependency relation already orders
+  that pair — not just a direct edge, so the inference never contradicts
+  an order that only exists via a longer chain. Purely a display
+  computation in `depLayout.ts`: never written to the graph, never fed to
+  the scheduler, so it can't silently move dates.
+- The scheduler (`src/model/schedule.ts`) does forward, resource-
+  constrained placement of scheduling units on a skip-weekends calendar,
+  blending in actuals: a done unit uses its real dates (frees no future
+  capacity; dependents start the next working day); an in-progress unit
+  uses its real start plus a projected remainder; everything else is
+  fully projected. Dependency cycles are tolerated during scheduling too
+  — when nothing is dependency-ready, the lowest sibling-order unit is
+  placed anyway, so a cyclic SCC drains as a batch instead of hanging the
+  scheduler.
+- Structural locks (`specLockDepth` / `planLockDepth`) are **UI-level,
+  not a graph invariant** — they gate the editing affordances in
+  `Outliner`/`PlanTable` via a pure `isLocked` predicate
+  (`src/ui/locks.ts`), so import/undo/programmatic paths pass through
+  `graph.ts` unchanged. A lock freezes shape + naming only: children can
+  still be added below the deepest locked level, assignment stays
+  allowed, and a locked group's plan meta (status, estimate, dates, deps,
+  refs) remains editable. The effective lock depth **clamps to the
+  number of levels that currently exist** on that side, so configuring a
+  lock deeper than the tree never hides the "add the first item"
+  affordance.
 - Details, Things3-style: every node (both sides) has Title + optional
   Details (the `description` field). Titles only until expanded — ⌘↩
   or the ≡ indicator opens an inline card (one per outliner, closes on
   selection move / Esc / ⌘↩). Details edits coalesce per editor visit;
   opening/closing the card breaks coalescing explicitly because the
-  textarea's blur handler does not fire on unmount.
-
-## Slice plan
-
-1. ✅ Data model + store + undo/redo + tests
-2. ✅ Outliner spec view (`src/ui/`; pure row/keyboard-target helpers in
-   `outline.ts` are unit-tested; store commits gained an optional
-   `coalesce` key so typing a title is one undo step)
-3. ✅ Planning view — originally plans/epics, reworked 2026-07 into the
-   symmetric group forest (`PlanningView.tsx`, coverage/overlap helpers
-   in `planning.ts`, unit-tested)
-4. ✅ IndexedDB autosave + `.json` save/load (pulled forward 2026-07 —
-5. ✅ Graph view (`GraphView.tsx` + pure tidy layout in `graphLayout.ts`,
-   unit-tested: spec forest left-to-right, delivery forest mirrored
-   right-to-left, dashed `assigned_to` edges bridge the gap, colored
-   per root group via shared `colors.ts`. Read-mostly: pan/zoom/click
-   to select; no dragging — positions re-derive from the graph)
-6. ✅ Dependencies (`src/model/analysis.ts`, pure + unit-tested: the
-   relation combines `depends_on` with inverse `blocks`; Tarjan SCC
-   for cycles; `waitingMap` = unfinished direct prerequisites; the
-   analysis is node-type-agnostic). **Reworked 2026-07 (see slice 9a):
-   deps and status/tracking now live on the PLAN (group) side, not the
-   spec.** Deps connect group nodes only, enforced in `addEdge`. UX:
-   "Depends on" editor + status control in the group details card;
-   ⧗/⟳ badges on waiting/cycling group rows; graph view draws dep edges
-   dependent → prerequisite with arrowheads, cycles red + animated. The
-   spec side became purely structural.
-7. ✅ Markdown view (`MarkdownView.tsx` + pure `planMarkdown.ts`,
-   unit-tested: the delivery plan as Markdown — groups are depth
-   headings (clamped h6), assigned work items a bullet list with
-   spec sub-items nested, titles verbatim, optional Backlog of
-   uncovered work. Builds one block model → both a copyable source
-   string and the rendered preview so they can't drift. Per-section
-   toggles (details / sub-items / backlog); read-only, Copy to export.
-   Members ordered by spec pre-order.)
-
-    Project-management extension (planned, in dependency order — 8 unblocks
-    all; 9 and 10 are independent; 11–13 consume 10). Each slice is
-    shippable alone and keeps the dependency-free-core / tested-domain rules:
-
-8. ✅ Model foundation — `types.ts` (the fields in Data model above),
-   `serialize.ts` v4 + backfill migration (tested), and new `graph.ts`
-   mutations: `setEstimate` (non-negative, per-axis), `setActualDates`,
-   `addExternalRef` / `removeExternalRef` (dedup on system+key),
-   `updateSettings` (validates capacity/conversion). All invariant-tested
-   in `graph.test.ts`. **Status auto-derives from actuals:** `actualFinish`
-   set ⇒ `done`; `actualStart` set with no finish ⇒ `in_progress` unless
-   manually `blocked` (a started-then-blocked item stays blocked); neither
-   set ⇒ status untouched, so manual states survive.
-9. a) ✅ Entry UI — `NodeMetaEditor.tsx` (details-card fields: status,
-   priority, the two estimate axes points + duration/days, actual
-   start/finish dates, external-ref chips) + a compact rolled `Nd · Npt`
-   estimate chip on rows (⚠ when a subtree has unestimated leaves) +
-   pure `src/model/rollup.ts` (unit-tested): `rolledDuration` /
-   `rolledEffort` / `rolledActuals`. **Rollup rule (also the
-   scheduling-unit rule):** the topmost node with an own estimate is the
-   atomic unit and its subtree isn't descended into — own wins over child
-   sum, no double counting; unestimated leaves are gaps. (`rollup.ts` in
-   `model/` so the slice-10 scheduler imports it without a ui→model
-   back-dependency.) NOTE: first built on the spec/work side by mistake;
-   corrected by slice 9a.
-   b) ✅ Re-targeted to the plan. Estimation, actuals, keys, status and
-   dependencies live on the **group (plan)** side; the spec is purely
-   structural (title + details only). `Outliner` renders status bullets,
-   dep badges, estimate chip and the `NodeMetaEditor`/`DependencyEditor`
-   details editors on `side === 'group'`; `DependencyEditor` candidates
-   are groups; `addEdge` requires both dep endpoints be groups;
-   `serialize` drops `depends_on`/`blocks` edges touching a work node on
-   load. Shipped dep tests (`graph`/`analysis`/`projectStore`) flipped to
-   groups. Verified in preview: plan rows carry the editor + status; spec
-   view is structural-only.
-10. ✅ Scheduler — `src/model/schedule.ts`, pure + heavily tested
-    (`scheduleProject`, `schedulingUnits`). Schedules the **group tree**
-    (the plan). Scheduling units = topmost groups with an own estimate;
-    unit deps expand from the raw group dep graph (`analysis.ts`,
-    container endpoints fan out to their descendant units). Forward
-    resource-constrained placement: each unit to the earliest-free of
-    `parallelTracks` tracks → duration = `durationEstimate /
-    speedMultiplier` working days on a skip-weekends calendar from
-    `settings.startDate` (internal continuous working-day offsets ⇄ ISO
-    dates). Blends actuals: done = real dates (source `actual`, frees no
-    future capacity, dependents start the next working day); in-progress =
-    real `actualStart` + projected remainder; else fully projected. Cycles
-    tolerated — when nothing is dependency-ready the lowest sibling-order
-    unit goes anyway, so an SCC drains as a batch and the loop never
-    hangs. Output: `groups` map (units by own dates, containers by span) +
-    `projectStart` / `projectFinish`. (`assigned_to` unused.) Tests: unit
-    selection, weekend skipping, dep order, parallelism cap, speed
-    multiplier, cycle batch, container span, done/in-progress override.
-11. ✅ Settings UI — header ⚙ popover (`SettingsPanel.tsx`) with
-    Schedule / Capacity / Conversion sections: `startDate`, `targetDate`,
-    `parallelTracks`, `speedMultiplier`, `pointsPerDay`, `hoursPerDay`.
-    Edits go through `updateSettings` (undoable, autosaved with the
-    graph), coalesced per field; inputs are pre-validated so an invalid
-    value is ignored rather than thrown (a throwing commit would
-    propagate). Closes on outside-click / Esc. Verified in preview.
-12. ✅ Timeline / Gantt view — 5th tab `TimelineView.tsx` + pure
-    `timelineLayout.ts` (unit-tested). Bars per scheduled group in
-    pre-order (containers span their units), fraction-based geometry over
-    the date range, ▸ projected-finish and 🎯 target-date markers, weekly
-    gridline ticks, actual (done) bars styled distinctly from planned.
-    Hand-rolled SVG, no chart dep. Verified in preview.
-13. ✅ Metrics view — 6th tab `MetricsView.tsx` + pure `src/model/metrics.ts`
-    (unit-tested): `projectionSummary` (projected finish, done/remaining
-    days + points, calendar-day variance vs target, onTrack),
-    `estimateVsActual` (per done-unit + rolled, working-day durations),
-    `burnUp` (cumulative done vs constant total). Summary cards +
-    hand-rolled SVG burn-up (ideal / total / target lines) + est-vs-actual
-    bars. Verified in preview.
-
-14. ✅ Bulk editing — three surfaces over the existing graph, **no model
-    change** (all reuse existing mutations + pure helpers): (a) **paste
-    multi-line text → rows**, nesting inferred from indentation
-    (`parseOutlineText` in `ui/outline.ts`, tested; wired via
-    `Outliner`/`OutlinerRow` `onPaste` as one undo step, works both
-    sides; the first line fills an empty anchor row, else all insert
-    after). (b) **Multi-select** (⇧/⌘-click, ⇧↑↓) layered on App's single
-    selection anchor via `ui/useMultiSelect.ts`; structural ops fan out
-    over a clean contiguous sibling run — indent/outdent/reorder/delete —
-    gated by `contiguousSiblingRange` (`outline.ts`, tested), else fall
-    back to the single anchor row. (c) **Plan field table** as an
-    Outline/Table toggle inside Planning (`PlanTable.tsx`) — plan-side
-    only (the spec stays structural), one row per group in pre-order,
-    every plan field an inline column reusing
-    `updateNode`/`setEstimate`/`setActualDates`; container rollup shows as
-    a muted placeholder; editing a field with a multi-selection bulk-sets
-    it across the selection in one commit. Verified in preview.
-
-    View narrowing + locking + graph modes (planned, slices 15–18). All are
-    **view/config layers over the existing graph — no new node/edge types.**
-    15 and 16 are ephemeral view state (React-only, never serialized/undone);
-    17 is a persisted config value on `settings`; 18 is a new projection.
-    15 lays the toolbar + filtered-`visibleRows` path that 16 extends; 17 and
-    18 are independent. Each keeps the pure-helpers-in-`model`/`ui`,
-    tested-domain rule.
-
-15. ✅ Global filter/search — a header search box (lifted App state, shared
-    across tabs, cleared on Esc; **not** stored in the graph, undo, or
-    autosave; rendered only on the searchable tabs). Pure `ui/filter.ts`
-    (unit-tested): a `FilterState` (case-insensitive text over
-    title/description/tags, plus optional conjunctive facets —
-    priority, status, tags) with `isFilterActive` + `matchesFilter(node,
-    state)`. Views apply it as a projection, never a mutation:
-    **Outliner** is hierarchy-aware via a filtered variant of
-    `visibleRows` (new `match` arg; rows gain a `matched` flag) — it keeps
-    matches plus their ancestor path (ancestors dimmed `.row-context`,
-    matches marked `.row-match`), drops the rest, and ignores per-node
-    collapse so deep matches surface. **PlanningView** filters its spec
-    pane the same way and passes the filter to the group Outliner and the
-    Table sub-view (`PlanTable`, group rows narrowed the same way).
-    **GraphView** dims non-matches in place (never hides — structure must
-    stay legible), composing with its existing unassigned/empty spotlight.
-    A live match count sits by the box. Scope: Spec, Planning, Graph —
-    Timeline/Metrics/Markdown unchanged. Verified in preview.
-16. ✅ Depth filtering (Spec + Planning) — a compact depth stepper
-    (`1 2 3 … All`) in each outliner's toolbar capping visible rows to the
-    top N levels (roots = depth 0; "N levels" ⇒ depth < N). A node at the
-    cutoff with hidden descendants reuses the existing collapsed
-    child-count "+k" affordance. Pure: extend `visibleRows` with an
-    optional `maxDepth` (the recursion already tracks depth — a trivial
-    cutoff), unit-tested. Per-side view state in App (like `planMode`),
-    not serialized. Composes with 15: the cap and the filter are
-    independent narrowings, but an active search wins — matched rows and
-    their ancestors surface even past the depth cap, so search can always
-    reach deep matches.
-17. ✅ Structural lock (top-N levels) — freeze the top `specLockDepth` /
-    `planLockDepth` levels of a side against *accidental* edits (a node is
-    locked when its depth < the side's lock depth; roots = depth 0). New
-    integer fields on `ProjectSettings` (default 0), set via a **Locks**
-    section in the ⚙ Settings popover through `updateSettings` (validates
-    non-negative ints; undoable, autosaved, serialized — serialize bumps
-    to v5, backfilling 0). Enforcement is deliberately **UI-level, not a
-    graph invariant**: it gates the editing affordances, so import/undo/
-    programmatic paths still pass through `graph.ts` unchanged — a locked
-    row prevents fat-finger edits, it is not a data guarantee. A pure
-    `isLocked(depth, side, settings)` predicate (tested) drives guards in
-    `Outliner`/`OutlinerRow` and `PlanTable`. Locked rows render faded
-    (muted, reduced opacity) with a small 🔒, `readOnly` title/details,
-    and disabled reorder/indent/outdent/delete. Crucially, lock freezes
-    **shape + naming only**: you can still add *children* below the
-    deepest locked level (new descendants are unlocked — "brainstorm in
-    the leaves"), assignment (`assigned_to`) onto/off a locked group stays
-    allowed (traceability, not structure), and the plan meta fields
-    (status, estimate, dates, deps, refs) remain editable on a locked
-    group — you estimate and track against a fixed skeleton.
-18. ✅ Graph tab view modes + Dependency View — the Graph tab gets an
-    internal mode switch (segmented control): **Map** (today's spec↔plan
-    mirrored layout) and **Dependency**. The Dependency view is **plan
-    only, leaf groups only** (groups with no child group — the "stories"),
-    laid out by the `depends_on` relation. Nodes = leaf groups; edges =
-    the dependency relation from `analysis.ts` (`dependencyAdjacency`,
-    already `depends_on` + inverse `blocks`), restricted to leaves — a dep
-    on a container fans out to its descendant leaves (mirroring how
-    `schedule.ts` expands container endpoints to units). New pure
-    `ui/depLayout.ts` (unit-tested, sibling of `graphLayout.ts`): a
-    layered left→right DAG (prerequisites left, dependents right) by
-    longest-path from sources; cycles are collapsed per Tarjan SCC
-    (`dependencyCycles`) and drawn red + animated, reusing the Map view's
-    convention. Nodes coloured per root group via `colors.ts`.
-    Read-mostly first (pan/zoom/click-to-select), matching Graph's v1
-    stance; drag-node-onto-node to author a `depends_on` edge is the
-    natural follow-on (the current `DependencyEditor` is a text list).
-    **Implicit sequential chain (advice on the open question):** yes to a
-    default chain for siblings, but as a *display inference only* — for a
-    set of sibling leaf groups with **no** explicit dep among them, ghost
-    a sequential chain in sibling order (A→B→C), drawn dashed/muted to
-    distinguish it from real edges, and **suppress it the moment any
-    explicit dep exists among those siblings** ("unless otherwise
-    defined"). Derive it purely in `depLayout.ts`; **never write it to the
-    graph and never feed it to the scheduler** — the scheduler stays
-    explicit-deps-only, so inferred edges can't silently move dates and
-    the pure-projection rule holds. A toggle hides the inference; a later
-    "materialise chain → real `depends_on` edges" action can promote it
-    when you actually mean it.
-19. ✅ Author dependencies in the Dependency view (drag-to-connect) — the
-    read-mostly stance from slice 18 gains editing, but via **handle
-    drag**, not node-onto-node drag (node-body drag fought the pan gesture
-    and was unreliable). Each leaf-group node grows a handle on each side;
-    grabbing a **handle** draws an arrow (React Flow's native connection),
-    while grabbing the **body/pane** still pans — no gesture ambiguity.
-    **Arrows follow the flow of work left→right** — prerequisite's right
-    side into the dependent's left side, the arrowhead landing on the
-    dependent (not backwards at the prerequisite). Authoring semantics come
-    from **which side each card contributes, not which end starts the
-    drag**: the card giving its **right** handle is the prerequisite, the
-    card giving its **left** handle is the dependent, so left→right and
-    right→left author the same `addEdge depends_on from=dependent
-    to=prerequisite`. `connectionMode="loose"` lets either side start or
-    receive; `isValidConnection` accepts only a left↔right pair (rejecting
-    same-side l–l / r–r and self-links) and the `onConnect` commit no-ops a
-    duplicate (mirrors `DependencyEditor`). A custom connection-line
-    component previews the flow: a dashed line whose arrow always points at
-    the **left** handle. **While a connection is in progress (authoring or
-    reconnecting), each card reveals only its *valid* handle and hides the
-    other** — pure `dragHandleVisibility(nodeId, fromNodeId, fromHandle)`
-    in `depAuthoring.ts` (unit-tested) reads React Flow's live `useConnection`
-    state: the from-card keeps its anchored side, every other card shows
-    only the opposite side (the sole valid left↔right target). Cycles stay
-    allowed — a new edge that closes a loop just renders as one. **Removing
-    / moving a dependency is by *grabbing the arrow near one end*
-    (reconnection), not a click**: only a **real, directly authored** edge
-    (a single backing `depends_on`/inverse `blocks` edge between exactly
-    those two leaves — found via `edgeBetween`) is `reconnectable`; grabbing
-    an end detaches it and drags while the other stays anchored — drop it on
-    a valid handle to re-home the dep (`onReconnect` = `removeEdge` old +
-    `addEdge` new, atomic in one commit) or on empty space / an invalid
-    handle to delete it (`onReconnectEnd` with a `reconnected` ref
-    distinguishing the two; no confirm — the drag is the intent).
-    Container-fan-out and inferred (dashed) edges are neither reconnectable
-    nor deletable (no unambiguous single edge to remove). Still plan-only,
-    leaf-only; `depLayout.ts` is unchanged (authoring mutates the graph, the
-    layout re-projects). Only the Dependency view is connectable — the Map
-    view keeps its HTML5 assignment drag untouched.
-
-    UX + fixes pass (slices 20–24, from real-use feedback). All are
-    **view/UI-layer changes over the existing graph — no new node/edge types,
-    no model change** except slice 24, which only *simplifies the entry UI*
-    over the unchanged `ExternalRef` shape. Each keeps the
-    pure-helpers-in-`model`/`ui`, tested-domain rule.
-
-20. ✅ Dependency-view crossing reduction — the layered left→right DAG in
-    `depLayout.ts` ordered nodes within a layer by pre-order, so
-    fan-out/fan-in (parallelisation) edges crossed badly and read as a
-    dense grid. Add a Sugiyama-style **barycenter ordering** pass: after
-    longest-path layering, run a fixed number of down/up sweeps that sort
-    each layer by the mean order-index of its neighbours in the adjacent
-    layer (pure, deterministic, stable-tie-broken by initial pre-order),
-    then assign `y` from the resulting per-layer order. Pure + unit-tested
-    in `depLayout.ts`; no change to columns (`x`) or the edge set.
-21. ✅ Inferred chains coexist with explicit deps — `inferredChains` used to
-    drop a sibling group's *entire* ghost chain the moment any explicit dep
-    touched those siblings (all-or-nothing). Switch to **per-pair
-    suppression** keyed on the **transitive** explicit relation: ghost a
-    sequential edge between each consecutive sibling pair *unless the
-    explicit dependencies already order those two siblings in either
-    direction, directly or indirectly*. So the inference only fills in
-    sequencing the explicit graph leaves genuinely undecided; it never
-    contradicts an existing order (an early version keyed on *direct* edges
-    only, so a pair ordered purely transitively still got a ghost edge that
-    ran against the flow and closed a cycle — the tangle in the bug report).
-    Still display-only — never written to the graph, never fed to the
-    scheduler. Unit-tested (`transitiveNeeds` closure + contradiction case).
-22. ✅ Structural-lock "phantom level" fix — locking N levels of a side that
-    has fewer than N levels froze a level that doesn't exist yet, which
-    hid the add-root / "Add the first item" button so you could never
-    create the first node (and, more generally, the first child at a
-    not-yet-existing depth). Fix: **clamp the effective lock depth to the
-    number of levels that actually exist** on that side —
-    `effective = min(configured, treeDepth(side))`. `isLocked` gains an
-    optional `levelCount` arg (default ∞ = no clamp, so existing callers/
-    tests are unchanged); `Outliner`/`PlanTable` pass the side's real
-    `treeDepth`. An empty side clamps to 0 (nothing locked → create
-    allowed); a roots-only side with a deeper lock still freezes the roots
-    but lets you add children. UI-only, tested in `locks.test.ts`.
-23. ✅ Cross-view navigation + de-truncation — read-only views (Table,
-    Metrics, Timeline) truncate titles and offered no way back to a
-    group's definition. Add an App-level `reveal(id)` that jumps to the
-    node's home surface (group → Planning/outline, work → Spec) and
-    selects it, threaded down as `onReveal`. **PlanTable**: a per-row "open
-    in outline" (⤢) button + full-title `title` tooltip on the title
-    input. **MetricsView**: est-vs-actual rows become clickable → reveal.
-    **TimelineView**: row click reveals (was select-only). No model change.
-24. ✅ Key entry, simplified — the external-ref entry UI asked for
-    system + key + url; in practice everything is a Jira key. Extract a
-    shared **`KeyEditor`** component: existing refs render as chips
-    (keeping any `url` link + non-`jira` `system` label from imported
-    data), and the add form is a **single key input that defaults
-    `system: 'jira'`** (no url). Use it in `NodeMetaEditor` (replacing the
-    three-field block) and add it as an editable **Keys** cell in
-    `PlanTable` (was a read-only count) so keys are enterable from the
-    table. The `ExternalRef` model (system/key/url) is untouched — the UI
-    just narrows to key-only, leaving room to grow.
-
-    SCRUM-monitoring pass (slices 25–27, from open feature requests #22/#24/#25).
-    25 is UI-only; 26 is a model change (resourcing); 27 is a new pure
-    analysis + view that builds on 26 (unassigned/thin-WIP concerns read the
-    team). Each keeps the pure-helpers-in-`model`/`ui`, tested-domain rule.
-
-25. ✅ Metric hover explanations (#22) — every metric now carries a small
-    `ⓘ` affordance describing *how it is calculated*, so the numbers are
-    self-documenting. A reusable `InfoDot` (muted glyph + pure-CSS
-    hover/focus tooltip, `.info-dot`/`.info-tip` in `styles.css`) and a
-    single `HELP` copy map in `MetricsView.tsx` (one place, so wording
-    can't drift from the `metrics.ts`/`schedule.ts` logic it describes)
-    sit on each summary card (projected finish, target, variance,
-    progress) and each panel heading (critical path, burn-up, estimate vs
-    actual). Presentational only — no model or domain-logic change, so no
-    new unit tests. Verified in preview.
-26. ✅ Resourcing (#25) — the plan is scheduled against a **team** instead of
-    an anonymous track count. New `Resource` (`{ id, name, fte }`) lives in
-    `ProjectSettings.resources`, and a `resourceId` node field assigns a
-    group to a resource. **Capacity = one track per resource** (an empty
-    team falls back to a single full-time track), replacing `parallelTracks`;
-    `hoursPerDay` becomes `hoursPerWeek` (38 default). Scheduler
-    (`schedule.ts`): an assigned unit is **pinned** to its resource's track,
-    an unassigned unit takes the earliest-free track, and **FTE stretches
-    the duration** — `durationEstimate / (speedMultiplier × fte)`, so a
-    0.8-FTE resource's work takes `1/0.8` longer. New mutations
-    (`addResource`/`updateResource`/`removeResource`/`assignResource`;
-    removing a resource clears every assignment to it). `serialize` bumps to
-    **v6**: `hoursPerDay × 5 → hoursPerWeek`, `parallelTracks > 1 →` that
-    many generic full-time resources (a single track stays an empty team),
-    `resourceId` backfilled null. UI: a **Team** section in the ⚙ Settings
-    popover (name + FTE rows, add/remove) and a **Resource** picker in both
-    `NodeMetaEditor` and the `PlanTable` column. Tested (graph/serialize/
-    schedule); verified in preview (live migration + FTE moved the projected
-    finish).
-27. ✅ Concerns view (#24) — a 7th tab that surfaces the monitoring signals a
-    SCRUM lead watches, from a new pure `src/model/concerns.ts`
-    (`analyzeConcerns(graph, now)`, unit-tested). Per-unit concerns:
-    **overdue** (in-progress unit past its projected finish), **blocked**,
-    **cycle** (in a dependency cycle), **unestimated** (leaf group with no
-    duration → invisible to the schedule), **unassigned** (not-done unit
-    with no resource — only once a team exists, else it's noise).
-    Project-level (`id: null`): **thin WIP** (fewer units in progress than
-    capacity while work waits) and **behind target** (projection past the
-    target date). Each concern carries a severity (high/medium/low), sorted
-    high-first. `ConcernsView.tsx` renders a severity tally + a list with
-    coloured left-borders, `onReveal` jumping node-level concerns to the
-    plan outline. Read-only projection like Metrics — no model change.
-    Tested (12 cases); verified in preview.
+  textarea's blur handler does not fire on unmount. External-tracker
+  refs (Jira etc.) are entered through a shared `KeyEditor`: a single
+  key-only input that defaults `system: 'jira'`, though the underlying
+  `ExternalRef` model (system/key/url) stays general for imported data
+  with a URL or a non-Jira system.
+- The Markdown view builds **one block model** from the plan
+  (`src/ui/planMarkdown.ts`) that feeds both the copyable source string
+  and the rendered preview, so the two can't drift apart.
+- Charts (Timeline bars, the Metrics burn-up) are hand-rolled SVG with no
+  charting dependency, kept visually consistent with the rest of the app.
+  Reporting views that derive schedule-backed models memoize with
+  `useMemo` like the rest of the app; `MetricsView` in particular computes
+  `scheduleProject` once and threads the result into both
+  `projectionSummary` and `burnUp` rather than letting each call it
+  separately.
+- The Reporting section groups four read-only sub-views behind one tab:
+  Timeline (Gantt), Metrics (projection/burn-up/estimate-vs-actual),
+  Assignees (per-resource estimate-vs-actual, points/day, weekly
+  completions), and Concerns (`src/model/concerns.ts`'s
+  `analyzeConcerns`: per-unit overdue/blocked/cycle/unestimated/
+  unassigned flags, plus project-level thin-WIP and behind-target
+  signals, severity-sorted). Settings is a full-page tab (two-column card
+  layout), not a header popover — it outgrew that.
 
 ## Conventions & environment
 
@@ -512,8 +258,8 @@ items. Its scheduler/views are still to build.
 - Git: conventional-commit style messages (`feat:`, `chore:`…).
   Workflow: branch off `main` (`feat/…`, `chore/…`), commit, push, and
   open a PR with `gh` rather than committing to `main` directly. Merge
-  with **squash** to keep `main`'s history linear (one commit per slice /
-  change), and delete the branch. Wait for any CI checks before merging.
+  with **squash** to keep `main`'s history linear (one commit per change),
+  and delete the branch. Wait for any CI checks before merging.
 - Sandbox notes: npm registry access requires it to be enabled AND a fresh
   session; folder file deletion needs the allow-delete permission (git lock
   files trip this).
