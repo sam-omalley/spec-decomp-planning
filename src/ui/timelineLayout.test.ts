@@ -56,8 +56,39 @@ describe('buildTimeline', () => {
     assert.equal(target.frac, 1);
   });
 
-  it('places a weekly tick on the first Monday', () => {
-    const t = buildTimeline(fixture());
-    assert.equal(t.ticks[0]!.label, '1/1'); // 2024-01-01 is a Monday
+  it('ticks daily for a short range (≤14 days)', () => {
+    const t = buildTimeline(fixture()); // Jan1..Jan5, a 4-day span
+    assert.deepEqual(
+      t.ticks.map((tk) => tk.label),
+      ['1/1', '1/2', '1/3', '1/4', '1/5'],
+    );
+  });
+
+  it('falls back to weekly ticks from the first Monday for a long range', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, { startDate: '2024-01-01', targetDate: '2024-02-01' }); // 31-day span
+    g = createGroup(g, { id: 'u1', title: 'U1' });
+    g = setEstimate(g, 'u1', { durationEstimate: 2 });
+    const t = buildTimeline(g);
+    assert.deepEqual(
+      t.ticks.map((tk) => tk.label),
+      ['1/1', '1/8', '1/15', '1/22', '1/29'],
+    );
+  });
+
+  it('has no weekend bands when the range has no weekend', () => {
+    const t = buildTimeline(fixture()); // Jan1 (Mon) .. Jan5 (Fri)
+    assert.deepEqual(t.weekends, []);
+  });
+
+  it('merges a Sat+Sun into one weekend band', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, { startDate: '2024-01-01', targetDate: '2024-01-08' });
+    g = createGroup(g, { id: 'u1', title: 'U1' });
+    g = setEstimate(g, 'u1', { durationEstimate: 2 });
+    const t = buildTimeline(g); // range extends to Jan8 (Mon) via the target
+    assert.equal(t.weekends.length, 1);
+    assert.equal(t.weekends[0]!.startFrac, 5 / 7); // Jan6 (Sat)
+    assert.equal(t.weekends[0]!.endFrac, 1); // through Jan8 (exclusive)
   });
 });

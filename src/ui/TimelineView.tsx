@@ -8,6 +8,10 @@
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
 import { buildTimeline } from './timelineLayout.ts';
+import { InfoDot } from './InfoDot.tsx';
+
+const SCHEDULING_HELP =
+  'Done units use their real actual dates; an in-progress unit uses its real start and projects the remainder; not-started work is fully projected and is never dated before today — so as today advances, un-started bars shift right to stay realistic.';
 
 interface TimelineViewProps {
   selectedId: string | null;
@@ -42,6 +46,9 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
 
   return (
     <div className="timeline-wrap">
+      <div className="tl-legend">
+        How dates are calculated <InfoDot text={SCHEDULING_HELP} align="start" />
+      </div>
       {hasCritical && (
         <div className="tl-legend">
           <span className="tl-legend-swatch tl-legend-critical" />
@@ -49,6 +56,18 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
         </div>
       )}
       <svg width={width} height={height} className="timeline-svg" role="img">
+        {/* non-working (weekend) bands */}
+        {model.weekends.map((band, i) => (
+          <rect
+            key={`w${i}`}
+            x={x(band.startFrac)}
+            y={HEAD_H}
+            width={Math.max(0, x(band.endFrac) - x(band.startFrac))}
+            height={height - HEAD_H - PAD}
+            className="tl-weekend"
+          />
+        ))}
+
         {/* week gridlines */}
         {model.ticks.map((tick, i) => (
           <g key={`t${i}`}>
@@ -113,28 +132,34 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
         })}
 
         {/* markers */}
-        {model.markers.map((marker, i) => (
-          <g key={`m${i}`}>
-            <line
-              x1={x(marker.frac)}
-              x2={x(marker.frac)}
-              y1={HEAD_H - 4}
-              y2={height - PAD}
-              className={marker.kind === 'target' ? 'tl-marker tl-marker-target' : 'tl-marker'}
-            />
-            <text
-              x={x(marker.frac)}
-              y={height - 2}
-              className={`tl-marker-label${
-                marker.kind === 'target' ? ' tl-marker-label-target' : ''
-              }`}
-              textAnchor="middle"
-            >
-              {marker.kind === 'target' ? '🎯 ' : '▸ '}
-              {marker.date}
-            </text>
-          </g>
-        ))}
+        {model.markers.map((marker, i) => {
+          // A centred label at/near the chart edge spills past the SVG
+          // boundary and gets clipped — anchor to the near edge instead once
+          // there isn't room either side for half the label.
+          const anchor = marker.frac > 0.92 ? 'end' : marker.frac < 0.08 ? 'start' : 'middle';
+          return (
+            <g key={`m${i}`}>
+              <line
+                x1={x(marker.frac)}
+                x2={x(marker.frac)}
+                y1={HEAD_H - 4}
+                y2={height - PAD}
+                className={marker.kind === 'target' ? 'tl-marker tl-marker-target' : 'tl-marker'}
+              />
+              <text
+                x={x(marker.frac)}
+                y={height - 2}
+                className={`tl-marker-label${
+                  marker.kind === 'target' ? ' tl-marker-label-target' : ''
+                }`}
+                textAnchor={anchor}
+              >
+                {marker.kind === 'target' ? '🎯 ' : '▸ '}
+                {marker.date}
+              </text>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );

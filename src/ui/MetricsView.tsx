@@ -42,7 +42,7 @@ const HELP = {
   burnUp:
     'Cumulative completed scope (working days) stepping up at each unit’s actual finish, against the constant total scope. The ideal line runs from the start to the projected finish; 🎯 marks the target date.',
   estimateVsActual:
-    'For each completed unit: estimate is its duration estimate; actual is the working days between its actual start and finish, inclusive of both. Variance = actual − estimate (+ over, − under).',
+    'For each completed unit: estimate is its duration estimate; actual is the elapsed time between its actual start and finish, in 24h days with weekend time removed. Variance = actual − estimate (+ over, − under).',
 } as const;
 
 interface MetricsViewProps {
