@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assignResource,
   createGroup,
   emptyGraph,
   setActualDates,
@@ -10,6 +11,7 @@ import {
 import {
   burnUp,
   estimateVsActual,
+  filterVarianceByAssignee,
   projectionSummary,
   workingDaysInclusive,
 } from './metrics.ts';
@@ -67,9 +69,60 @@ describe('estimateVsActual', () => {
       estimateDays: 2,
       actualDays: 3,
       varianceDays: 1, // took a day longer than estimated
+      resourceId: null,
+      resourceName: 'Unassigned',
     });
     assert.equal(e.totalEstimate, 2);
     assert.equal(e.totalActual, 3);
+  });
+
+  it('tags each row with its assignee (dangling ids → Unassigned)', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, {
+      startDate: '2024-01-01',
+      resources: [{ id: 'r1', name: 'Ada', fte: 1 }],
+    });
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = createGroup(g, { id: 'b', title: 'B' });
+    g = setEstimate(g, 'a', { durationEstimate: 2 });
+    g = setEstimate(g, 'b', { durationEstimate: 1 });
+    g = assignResource(g, 'a', 'r1');
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01', actualFinish: '2024-01-02' });
+    g = setActualDates(g, 'b', { actualStart: '2024-01-01', actualFinish: '2024-01-01' });
+    const rows = estimateVsActual(g).rows;
+    assert.deepEqual(
+      rows.map((r) => [r.id, r.resourceId, r.resourceName]),
+      [
+        ['a', 'r1', 'Ada'],
+        ['b', null, 'Unassigned'],
+      ],
+    );
+  });
+
+  it('filterVarianceByAssignee narrows rows and recomputes totals', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, {
+      startDate: '2024-01-01',
+      resources: [{ id: 'r1', name: 'Ada', fte: 1 }],
+    });
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = createGroup(g, { id: 'b', title: 'B' });
+    g = setEstimate(g, 'a', { durationEstimate: 2 });
+    g = setEstimate(g, 'b', { durationEstimate: 5 });
+    g = assignResource(g, 'a', 'r1');
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01', actualFinish: '2024-01-02' });
+    g = setActualDates(g, 'b', { actualStart: '2024-01-01', actualFinish: '2024-01-03' });
+    const all = estimateVsActual(g);
+
+    assert.equal(filterVarianceByAssignee(all, undefined), all); // all = unchanged
+
+    const ada = filterVarianceByAssignee(all, 'r1');
+    assert.deepEqual(ada.rows.map((r) => r.id), ['a']);
+    assert.equal(ada.totalActual, 2);
+
+    const un = filterVarianceByAssignee(all, null);
+    assert.deepEqual(un.rows.map((r) => r.id), ['b']);
+    assert.equal(un.totalActual, 3);
   });
 });
 

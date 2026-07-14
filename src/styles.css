@@ -1778,6 +1778,32 @@ body {
   padding: 4px 0;
   font-size: 13px;
 }
+/* Clickable assignee rows filter the histogram (#49). Reset button styling but
+   keep the grid layout inherited from .asg-row. */
+button.asg-row {
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+button.asg-row:hover:not(:disabled) {
+  background: #f6f6f4;
+}
+button.asg-row:disabled {
+  cursor: default;
+}
+.asg-row-active {
+  background: var(--accent-soft);
+}
+.asg-row-active:hover {
+  background: var(--accent-soft);
+}
+.asg-row-dim {
+  opacity: 0.45;
+}
 .asg-name {
   display: flex;
   align-items: center;
@@ -1858,6 +1884,49 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+/* Legend entries are also filter toggles (#49). */
+button.asg-legend-item {
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+button.asg-legend-item:hover {
+  background: #f6f6f4;
+}
+.asg-legend-item-active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.asg-legend-item-dim {
+  opacity: 0.45;
+}
+.asg-legend-clear {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.eva-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+.eva-filter .cell-select {
+  width: auto;
+  min-width: 120px;
 }
 
 /* graph view dependency styling */
