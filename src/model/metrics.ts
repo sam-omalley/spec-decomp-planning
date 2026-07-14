@@ -110,6 +110,10 @@ export interface VarianceRow {
   actualDays: number | null;
   /** actual − estimate working days (+ over, − under). */
   varianceDays: number | null;
+  /** Assignee (resource) of the unit; null = Unassigned. A dangling
+   *  `resourceId` (not in the team) counts as Unassigned. */
+  resourceId: string | null;
+  resourceName: string;
 }
 
 export interface EstimateVsActual {
@@ -120,6 +124,9 @@ export interface EstimateVsActual {
 
 /** Per done-unit estimate vs actual duration, plus rolled totals. */
 export function estimateVsActual(graph: ProjectGraph): EstimateVsActual {
+  const nameById = new Map(
+    graph.settings.resources.map((r) => [r.id, r.name.trim() || 'Unnamed']),
+  );
   const rows: VarianceRow[] = [];
   let totalEstimate = 0;
   let totalActual = 0;
@@ -128,17 +135,41 @@ export function estimateVsActual(graph: ProjectGraph): EstimateVsActual {
     if (!isDone(graph, id) || node.actualStart === null || node.actualFinish === null) continue;
     const estimateDays = node.durationEstimate;
     const actualDays = workingDaysInclusive(node.actualStart, node.actualFinish);
+    const resourceId =
+      node.resourceId !== null && nameById.has(node.resourceId) ? node.resourceId : null;
     rows.push({
       id,
       title: node.title.trim() || 'Untitled',
       estimateDays,
       actualDays,
       varianceDays: estimateDays === null ? null : actualDays - estimateDays,
+      resourceId,
+      resourceName: resourceId === null ? 'Unassigned' : nameById.get(resourceId)!,
     });
     totalEstimate += estimateDays ?? 0;
     totalActual += actualDays;
   }
   return { rows, totalEstimate, totalActual };
+}
+
+/**
+ * Narrow an estimate-vs-actual result to one assignee's completed units, with
+ * totals recomputed over the kept rows. `id === undefined` means "all
+ * assignees" (returned unchanged); `id === null` is the Unassigned bucket; a
+ * string is a resource id. Pure, so the Metrics view's assignee filter stays a
+ * projection.
+ */
+export function filterVarianceByAssignee(
+  v: EstimateVsActual,
+  id: string | null | undefined,
+): EstimateVsActual {
+  if (id === undefined) return v;
+  const rows = v.rows.filter((r) => r.resourceId === id);
+  return {
+    rows,
+    totalEstimate: rows.reduce((s, r) => s + (r.estimateDays ?? 0), 0),
+    totalActual: rows.reduce((s, r) => s + (r.actualDays ?? 0), 0),
+  };
 }
 
 export interface BurnPoint {
