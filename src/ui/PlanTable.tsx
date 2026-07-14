@@ -216,34 +216,39 @@ export function PlanTable({
                   className={`col-title${locked ? ' cell-locked' : ''}`}
                   style={{ paddingLeft: `${row.depth * 16 + 8}px` }}
                 >
-                  {locked && (
-                    <span className="row-lock" title="Locked — this level is frozen against edits">
-                      🔒
-                    </span>
-                  )}
-                  <input
-                    className="cell-input cell-title"
-                    value={node.title}
-                    title={node.title || undefined}
-                    placeholder="Untitled"
-                    readOnly={locked}
-                    onChange={(e) =>
-                      store.commit((g) => updateNode(g, row.id, { title: e.target.value }), {
-                        coalesce: `title:${row.id}`,
-                      })
-                    }
-                    onFocus={() => onSelect(row.id)}
-                    onBlur={() => store.breakCoalescing()}
-                  />
-                  {onReveal && (
-                    <button
-                      className="cell-reveal"
-                      title="Open in the plan outline (details, dependencies)"
-                      onClick={() => onReveal(row.id)}
-                    >
-                      ⤢
-                    </button>
-                  )}
+                  <div className="col-title-inner">
+                    {locked && (
+                      <span
+                        className="row-lock"
+                        title="Locked — this level is frozen against edits"
+                      >
+                        🔒
+                      </span>
+                    )}
+                    <input
+                      className="cell-input cell-title"
+                      value={node.title}
+                      title={node.title || undefined}
+                      placeholder="Untitled"
+                      readOnly={locked}
+                      onChange={(e) =>
+                        store.commit((g) => updateNode(g, row.id, { title: e.target.value }), {
+                          coalesce: `title:${row.id}`,
+                        })
+                      }
+                      onFocus={() => onSelect(row.id)}
+                      onBlur={() => store.breakCoalescing()}
+                    />
+                    {onReveal && (
+                      <button
+                        className="cell-reveal"
+                        title="Open in the plan outline (details, dependencies)"
+                        onClick={() => onReveal(row.id)}
+                      >
+                        ⤢
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td>
                   <select

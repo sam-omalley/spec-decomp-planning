@@ -2102,6 +2102,17 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   color: var(--muted);
 }
 
+/* Done rows are de-emphasised (#45): a muted shade + muted text so completed
+   work recedes. Declared before hover/selection so those stronger backgrounds
+   still read on top of a done row (equal specificity → later rule wins). */
+.plan-table-row.row-done {
+  background: #eceef0;
+}
+.plan-table-row.row-done .cell-input,
+.plan-table-row.row-done .cell-select {
+  color: var(--muted);
+}
+
 .plan-table-row:hover {
   background: #f6f6f4;
 }
@@ -2114,18 +2125,6 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 .plan-table-row.row-multiselected,
 .plan-table-row.row-multiselected:hover {
   background: #dfe4f6;
-}
-
-/* Done rows are de-emphasised (#45): muted text + a struck-through title, so
-   completed work recedes without hurting readability. No row background, so
-   selection/multi-select/hover shading still reads on top. */
-.plan-table-row.row-done .cell-input,
-.plan-table-row.row-done .cell-select {
-  color: var(--muted);
-}
-.plan-table-row.row-done .cell-title {
-  text-decoration: line-through;
-  text-decoration-color: var(--border);
 }
 
 .cell-input,
@@ -2175,7 +2174,10 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   min-width: 220px;
 }
 
-.plan-table td.col-title {
+/* The flex layout lives on an inner wrapper, not the <td> itself: a flex
+   table-cell drops out of the row's equal-height sizing, so its bottom border
+   lands ~1px above the sibling cells' and the row line looks broken (#45). */
+.col-title-inner {
   display: flex;
   align-items: center;
   gap: 2px;
