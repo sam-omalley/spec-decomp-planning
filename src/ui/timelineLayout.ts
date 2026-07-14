@@ -137,14 +137,23 @@ export function buildTimeline(
   }
   if (target) markers.push({ frac: frac(target), date: target, kind: 'target' });
 
-  // Weekly gridlines from the first Monday on/after rangeStart.
+  // Gridlines: daily for a short range (enough width per label to stay
+  // readable), else weekly from the first Monday on/after rangeStart — a
+  // long project would otherwise get cluttered with too many labels.
   const ticks: TimelineTick[] = [];
-  const startDow = new Date(utc(rangeStart)).getUTCDay(); // 0=Sun
-  const toMonday = (8 - (startDow === 0 ? 7 : startDow)) % 7;
-  for (let d = toMonday; d <= span; d += 7) {
-    const iso = addDaysIso(rangeStart, d);
-    const date = new Date(utc(iso));
-    ticks.push({ frac: d / span, label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}` });
+  const DAILY_THRESHOLD = 14; // days
+  if (span <= DAILY_THRESHOLD) {
+    for (let d = 0; d <= span; d++) {
+      const date = new Date(utc(addDaysIso(rangeStart, d)));
+      ticks.push({ frac: d / span, label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}` });
+    }
+  } else {
+    const startDow = new Date(utc(rangeStart)).getUTCDay(); // 0=Sun
+    const toMonday = (8 - (startDow === 0 ? 7 : startDow)) % 7;
+    for (let d = toMonday; d <= span; d += 7) {
+      const date = new Date(utc(addDaysIso(rangeStart, d)));
+      ticks.push({ frac: d / span, label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}` });
+    }
   }
 
   // Non-working (weekend) bands across the range, merged into contiguous

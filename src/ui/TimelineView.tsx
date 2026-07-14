@@ -132,28 +132,34 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
         })}
 
         {/* markers */}
-        {model.markers.map((marker, i) => (
-          <g key={`m${i}`}>
-            <line
-              x1={x(marker.frac)}
-              x2={x(marker.frac)}
-              y1={HEAD_H - 4}
-              y2={height - PAD}
-              className={marker.kind === 'target' ? 'tl-marker tl-marker-target' : 'tl-marker'}
-            />
-            <text
-              x={x(marker.frac)}
-              y={height - 2}
-              className={`tl-marker-label${
-                marker.kind === 'target' ? ' tl-marker-label-target' : ''
-              }`}
-              textAnchor="middle"
-            >
-              {marker.kind === 'target' ? '🎯 ' : '▸ '}
-              {marker.date}
-            </text>
-          </g>
-        ))}
+        {model.markers.map((marker, i) => {
+          // A centred label at/near the chart edge spills past the SVG
+          // boundary and gets clipped — anchor to the near edge instead once
+          // there isn't room either side for half the label.
+          const anchor = marker.frac > 0.92 ? 'end' : marker.frac < 0.08 ? 'start' : 'middle';
+          return (
+            <g key={`m${i}`}>
+              <line
+                x1={x(marker.frac)}
+                x2={x(marker.frac)}
+                y1={HEAD_H - 4}
+                y2={height - PAD}
+                className={marker.kind === 'target' ? 'tl-marker tl-marker-target' : 'tl-marker'}
+              />
+              <text
+                x={x(marker.frac)}
+                y={height - 2}
+                className={`tl-marker-label${
+                  marker.kind === 'target' ? ' tl-marker-label-target' : ''
+                }`}
+                textAnchor={anchor}
+              >
+                {marker.kind === 'target' ? '🎯 ' : '▸ '}
+                {marker.date}
+              </text>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
