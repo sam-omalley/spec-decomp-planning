@@ -17,6 +17,7 @@ import { childrenOf } from './graph.ts';
 import { cycleIndexOf } from './analysis.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
 import { calendarDaysBetween, workingDaysInclusive } from './metrics.ts';
+import { toDateOnly } from './time.ts';
 
 export type ConcernKind =
   | 'overdue' // started, past its projected finish
@@ -94,7 +95,7 @@ export function analyzeConcerns(
         severity: 'high',
         id,
         title: titleOf(graph, id),
-        detail: `Started ${node.actualStart}; projected finish ${scheduled.finish} is ${late} working day${late === 1 ? '' : 's'} ago.`,
+        detail: `Started ${toDateOnly(node.actualStart!)}; projected finish ${scheduled.finish} is ${late} working day${late === 1 ? '' : 's'} ago.`,
       });
     }
 

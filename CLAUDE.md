@@ -41,7 +41,10 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays
   of epics, epics of sub-epics, any depth. Bare groups; depth conveys
   meaning, no kind labels. Groups carry the planning fields: `status`,
   effort points, `durationEstimate` (working days), `actualStart` /
-  `actualFinish`, and `externalRefs` (Jira etc.). `effort` (size) and
+  `actualFinish` (ISO date, or ISO datetime-local when a time is set — a
+  bare date reads as 00:00; the scheduler stays day-granular and drops any
+  time, elapsed-duration metrics use it), and `externalRefs` (Jira etc.).
+  `effort` (size) and
   `durationEstimate` (time) are distinct axes, convertible via
   `settings.pointsPerDay`. Groups are the nodes that get scheduled,
   tracked, and sequenced by dependencies.

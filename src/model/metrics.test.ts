@@ -67,13 +67,13 @@ describe('estimateVsActual', () => {
       id: 'e1',
       title: 'Epic 1',
       estimateDays: 2,
-      actualDays: 3,
-      varianceDays: 1, // took a day longer than estimated
+      actualDays: 2, // Mon 00:00 → Wed 00:00 is 2 elapsed days, not 3
+      varianceDays: 0,
       resourceId: null,
       resourceName: 'Unassigned',
     });
     assert.equal(e.totalEstimate, 2);
-    assert.equal(e.totalActual, 3);
+    assert.equal(e.totalActual, 2);
   });
 
   it('tags each row with its assignee (dangling ids → Unassigned)', () => {
@@ -118,11 +118,11 @@ describe('estimateVsActual', () => {
 
     const ada = filterVarianceByAssignee(all, 'r1');
     assert.deepEqual(ada.rows.map((r) => r.id), ['a']);
-    assert.equal(ada.totalActual, 2);
+    assert.equal(ada.totalActual, 1); // Mon 00:00 → Tue 00:00
 
     const un = filterVarianceByAssignee(all, null);
     assert.deepEqual(un.rows.map((r) => r.id), ['b']);
-    assert.equal(un.totalActual, 3);
+    assert.equal(un.totalActual, 2); // Mon 00:00 → Wed 00:00
   });
 });
 

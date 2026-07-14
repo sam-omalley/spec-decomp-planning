@@ -29,6 +29,7 @@
 import type { ProjectGraph } from './types.ts';
 import { childrenOf, groupRootsOf, parentOf, subtreeIds } from './graph.ts';
 import { dependencyAdjacency } from './analysis.ts';
+import { toDateOnly } from './time.ts';
 
 export interface ScheduledGroup {
   /** ISO date (yyyy-mm-dd). */
@@ -252,17 +253,20 @@ export function scheduleProject(
     if (node.actualFinish !== null) {
       // Done: real dates win; a past unit frees no future capacity.
       // finishOffset is exclusive (the next free day) so a dependent
-      // starts the working day *after* the actual finish.
-      const start = node.actualStart ?? node.actualFinish;
-      groups.set(u, { start, finish: node.actualFinish, source: 'actual', isUnit: true });
+      // starts the working day *after* the actual finish. The scheduler is
+      // day-granular — any time-of-day on the actual is dropped here.
+      const finish = toDateOnly(node.actualFinish);
+      const start = toDateOnly(node.actualStart ?? node.actualFinish);
+      groups.set(u, { start, finish, source: 'actual', isUnit: true });
       startOffset.set(u, cal.offsetOf(start));
-      finishOffset.set(u, cal.offsetOf(node.actualFinish) + 1);
+      finishOffset.set(u, cal.offsetOf(finish) + 1);
     } else if (node.actualStart !== null) {
       // In progress: real start, projected remainder.
-      const startOff = cal.offsetOf(node.actualStart);
+      const start = toDateOnly(node.actualStart);
+      const startOff = cal.offsetOf(start);
       const finishOff = startOff + duration;
       groups.set(u, {
-        start: node.actualStart,
+        start,
         finish: cal.isoAt(finishIndex(startOff, duration)),
         source: 'planned',
         isUnit: true,

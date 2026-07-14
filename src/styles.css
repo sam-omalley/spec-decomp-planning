@@ -1049,6 +1049,10 @@ body {
   width: 130px;
 }
 
+.meta-input[type='datetime-local'] {
+  width: 212px;
+}
+
 .meta-refs {
   display: flex;
   align-items: center;
@@ -2267,7 +2271,7 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 }
 
 .cell-date {
-  width: 140px;
+  width: 212px;
   color: var(--muted);
 }
 

@@ -11,6 +11,7 @@
 
 import type { ProjectGraph } from './types.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
+import { elapsedWorkingDays, toDateOnly } from './time.ts';
 
 const DAY_MS = 86_400_000;
 function utc(iso: string): number {
@@ -20,7 +21,9 @@ function utc(iso: string): number {
 export function calendarDaysBetween(a: string, b: string): number {
   return Math.round((utc(b) - utc(a)) / DAY_MS);
 }
-/** Working days from a to b inclusive (weekends skipped); 0 if b < a. */
+/** Working days from a to b inclusive (weekends skipped); 0 if b < a. For
+ *  day-granular schedule dates (projected finish vs today, target date) —
+ *  actual-duration math uses `elapsedWorkingDays` instead. */
 export function workingDaysInclusive(a: string, b: string): number {
   if (utc(b) < utc(a)) return 0;
   let count = 0;
@@ -134,7 +137,7 @@ export function estimateVsActual(graph: ProjectGraph): EstimateVsActual {
     const node = graph.nodes[id]!;
     if (!isDone(graph, id) || node.actualStart === null || node.actualFinish === null) continue;
     const estimateDays = node.durationEstimate;
-    const actualDays = workingDaysInclusive(node.actualStart, node.actualFinish);
+    const actualDays = elapsedWorkingDays(node.actualStart, node.actualFinish);
     const resourceId =
       node.resourceId !== null && nameById.has(node.resourceId) ? node.resourceId : null;
     rows.push({
@@ -192,7 +195,7 @@ export function burnUp(graph: ProjectGraph, now: string = graph.settings.startDa
     const days = node.durationEstimate ?? 0;
     total += days;
     if (isDone(graph, id) && node.actualFinish !== null) {
-      finishes.push({ date: node.actualFinish, days });
+      finishes.push({ date: toDateOnly(node.actualFinish), days });
     }
   }
   if (units.length === 0) return [];

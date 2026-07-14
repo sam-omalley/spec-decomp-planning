@@ -16,7 +16,7 @@
 
 import type { ProjectGraph } from './types.ts';
 import { schedulingUnits } from './schedule.ts';
-import { workingDaysInclusive } from './metrics.ts';
+import { elapsedWorkingDays, toDateOnly } from './time.ts';
 
 const DAY_MS = 86_400_000;
 
@@ -104,9 +104,9 @@ export function assigneeMetrics(graph: ProjectGraph): AssigneeMetrics {
     if (node.status !== 'done' || node.actualStart === null || node.actualFinish === null) continue;
     bucketFor(node.resourceId).completed.push({
       estimate: node.durationEstimate,
-      actual: workingDaysInclusive(node.actualStart, node.actualFinish),
+      actual: elapsedWorkingDays(node.actualStart, node.actualFinish),
       points: node.effort ?? 0,
-      finish: node.actualFinish,
+      finish: toDateOnly(node.actualFinish),
     });
   }
 

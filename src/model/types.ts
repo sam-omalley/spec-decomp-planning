@@ -63,9 +63,14 @@ export interface WorkNode {
    * convertible via `pointsPerDay`. null = unestimated.
    */
   durationEstimate: number | null;
-  /** Actual start (ISO date), or null if not started. */
+  /**
+   * Actual start: an ISO date (`YYYY-MM-DD`, no time entered — reads as
+   * 00:00) or an ISO datetime-local value (`YYYY-MM-DDTHH:MM`); null if not
+   * started. The scheduler only ever reads the date part (day-granular);
+   * elapsed-duration metrics (est. vs actual) use the full timestamp.
+   */
   actualStart: string | null;
-  /** Actual finish (ISO date), or null if unfinished. */
+  /** Actual finish — same format as `actualStart`; null if unfinished. */
   actualFinish: string | null;
   /**
    * The `Resource` (team member) this item is assigned to; null = unassigned.
