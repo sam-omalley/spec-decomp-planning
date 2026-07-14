@@ -2102,6 +2102,35 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   color: var(--muted);
 }
 
+/* Per-status row highlighting (#45). Status is shown by a coloured left-edge
+   stripe on the first cell — kept off the row background so it never collides
+   with the blue-family selection / multi-select / hover shades. Done rows
+   additionally get a muted grey shade + muted text so completed work recedes.
+   The stripe is an inset shadow on the first <td> (border-collapse makes a
+   real border-left unreliable) and sits at the cell's left edge regardless of
+   the depth indent. */
+.plan-table-row.row-status-in_progress td.col-title {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+/* Blocked gets a thicker stripe so it is distinguishable by width, not colour
+   alone (colour-blind-friendly). */
+.plan-table-row.row-status-blocked td.col-title {
+  box-shadow: inset 8px 0 0 #c23b3b;
+}
+.plan-table-row.row-status-done td.col-title {
+  box-shadow: inset 4px 0 0 #0e9f6e;
+}
+
+/* Done rows recede. Declared before hover/selection so those stronger
+   backgrounds still read on top (equal specificity → later rule wins). */
+.plan-table-row.row-status-done {
+  background: #eceef0;
+}
+.plan-table-row.row-status-done .cell-input,
+.plan-table-row.row-status-done .cell-select {
+  color: var(--muted);
+}
+
 .plan-table-row:hover {
   background: #f6f6f4;
 }
@@ -2163,7 +2192,10 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   min-width: 220px;
 }
 
-.plan-table td.col-title {
+/* The flex layout lives on an inner wrapper, not the <td> itself: a flex
+   table-cell drops out of the row's equal-height sizing, so its bottom border
+   lands ~1px above the sibling cells' and the row line looks broken (#45). */
+.col-title-inner {
   display: flex;
   align-items: center;
   gap: 2px;
