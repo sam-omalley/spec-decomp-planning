@@ -5,6 +5,7 @@
  * Pure geometry comes from `timelineLayout.ts`; this file only paints it.
  */
 
+import { useMemo } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
 import { buildTimeline } from './timelineLayout.ts';
@@ -28,7 +29,8 @@ const PAD = 12;
 
 export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewProps) {
   const graph = useProjectGraph();
-  const model = buildTimeline(graph, todayIso());
+  const now = todayIso();
+  const model = useMemo(() => buildTimeline(graph, now), [graph, now]);
 
   if (model.empty) {
     return (

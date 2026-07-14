@@ -6,7 +6,7 @@
  * SVG (no chart dep), matching the Metrics view.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { assigneeMetrics, type AssigneeMetrics } from '../model/assigneeMetrics.ts';
 import { GROUP_COLORS } from './colors.ts';
@@ -36,7 +36,7 @@ function colorMap(m: AssigneeMetrics): Map<string | null, string> {
 
 export function AssigneeMetricsView() {
   const graph = useProjectGraph();
-  const m = assigneeMetrics(graph);
+  const m = useMemo(() => assigneeMetrics(graph), [graph]);
   const [mode, setMode] = useState<'points' | 'issues'>('points');
   // Which assignee the histogram is filtered to (#49); null = all. The id may
   // itself be null (the Unassigned bucket), so the "all" state is the outer
