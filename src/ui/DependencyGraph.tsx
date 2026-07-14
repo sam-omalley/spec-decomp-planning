@@ -28,21 +28,10 @@
  * non-matches in place so structure stays legible.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
-import {
-  Background,
-  ConnectionMode,
-  Controls,
-  Handle,
-  MarkerType,
-  Position,
-  ReactFlow,
-  useConnection,
-  useReactFlow,
-} from '@xyflow/react';
+import { useMemo, useRef } from 'react';
+import { Handle, MarkerType, Position } from '@xyflow/react';
 import type {
   Connection,
-  ConnectionLineComponentProps,
   Edge as FlowEdge,
   Node as FlowNode,
   NodeProps,
@@ -50,6 +39,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 import { addEdge, edgeBetween, removeEdge } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { AuthoringCanvas, makeArrowConnectionLine, useConnectionSignature } from './AuthoringCanvas.tsx';
 import { dragHandleVisibility, resolveDependencyEnds } from './depAuthoring.ts';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { layoutDependencies } from './depLayout.ts';
@@ -94,11 +84,7 @@ function DepGraphNode({ id, data }: NodeProps<DepFlowNode>) {
   // `fromHandle` is the anchored end — the origin when authoring, the
   // still-attached end when reconnecting; the valid target is the opposite
   // side on any *other* card, and the anchored side only on the from-card.
-  // Signature of the in-progress connection (empty when idle) — a primitive so
-  // the selector stays referentially stable across renders.
-  const conn = useConnection((c) =>
-    c.inProgress ? `${c.fromNode?.id ?? ''}:${c.fromHandle?.id ?? ''}` : '',
-  );
+  const conn = useConnectionSignature();
   let leftDrag = '';
   let rightDrag = '';
   if (conn) {
@@ -134,46 +120,12 @@ const nodeTypes = { dep: DepGraphNode };
 
 /** The in-progress connection line: a dashed flow line whose arrow always
  *  points at the left handle (the dependent side), previewing the edge. */
-function DepConnectionLine({ fromX, fromY, toX, toY, fromHandle }: ConnectionLineComponentProps) {
-  // Grab a left handle → the arrow sits at that fixed start; grab a right
-  // handle → the arrow rides the moving end, toward the dependent's left.
-  const arrowAtFrom = fromHandle?.id === 'l';
-  const tipX = arrowAtFrom ? fromX : toX;
-  const tipY = arrowAtFrom ? fromY : toY;
-  const baseX = arrowAtFrom ? toX : fromX;
-  const baseY = arrowAtFrom ? toY : fromY;
-  const dx = tipX - baseX;
-  const dy = tipY - baseY;
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len;
-  const uy = dy / len;
-  const size = 9;
-  const half = 5.5;
-  const backX = tipX - ux * size;
-  const backY = tipY - uy * size;
-  const arrow = `M ${tipX} ${tipY} L ${backX - uy * half} ${backY + ux * half} L ${backX + uy * half} ${backY - ux * half} Z`;
-  return (
-    <g>
-      <path
-        d={`M ${fromX} ${fromY} L ${toX} ${toY}`}
-        fill="none"
-        stroke={EDGE_COLOR}
-        strokeWidth={2}
-        strokeDasharray="5 4"
-      />
-      <path d={arrow} fill={EDGE_COLOR} />
-    </g>
-  );
-}
-
-/** Re-fit when the layout signature changes (the infer-chains toggle). */
-function FitOnReflow({ signature }: { signature: string }) {
-  const { fitView } = useReactFlow();
-  useEffect(() => {
-    void fitView({ duration: 200 });
-  }, [signature, fitView]);
-  return null;
-}
+const DepConnectionLine = makeArrowConnectionLine({
+  color: EDGE_COLOR,
+  arrowAtFromHandleId: 'l',
+  strokeWidth: 2,
+  dashArray: '5 4',
+});
 
 interface DependencyGraphProps {
   selectedId: string | null;
@@ -334,33 +286,19 @@ export function DependencyGraph({
   }
 
   return (
-    <ReactFlow
+    <AuthoringCanvas
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      fitView
-      minZoom={0.2}
-      nodesDraggable={false}
-      nodesConnectable
-      elementsSelectable={false}
-      connectionMode={ConnectionMode.Loose}
       connectionLineComponent={DepConnectionLine}
       isValidConnection={isValidConnection}
       onConnect={onConnect}
-      // Wider than the 10px default (issue #62): with nodes close together
-      // the grabbable end of a short edge sits right at a node's boundary,
-      // and the default radius is too tight to reliably land on — the drag
-      // falls through to the pane and just pans instead.
-      reconnectRadius={20}
       onReconnectStart={onReconnectStart}
       onReconnect={onReconnect}
       onReconnectEnd={onReconnectEnd}
-      onNodeClick={(_, node) => onSelect(node.id)}
+      onNodeClick={onSelect}
       onPaneClick={() => onSelect(null)}
-    >
-      <Background gap={24} />
-      <Controls showInteractive={false} />
-      <FitOnReflow signature={`${inferChains}`} />
-    </ReactFlow>
+      reflowSignature={`${inferChains}`}
+    />
   );
 }
