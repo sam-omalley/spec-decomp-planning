@@ -9,6 +9,7 @@
 
 import { assignResource, setActualDates, setEstimate, updateNode } from '../model/graph.ts';
 import type { Priority, Status } from '../model/types.ts';
+import { toDatetimeLocalValue } from '../model/time.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { KeyEditor } from './KeyEditor.tsx';
 
@@ -138,8 +139,8 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
           <span className="meta-label">Actual start</span>
           <input
             className="meta-input"
-            type="date"
-            value={node.actualStart ?? ''}
+            type="datetime-local"
+            value={toDatetimeLocalValue(node.actualStart)}
             onChange={(e) =>
               store.commit((g) => setActualDates(g, id, { actualStart: e.target.value || null }))
             }
@@ -149,8 +150,8 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
           <span className="meta-label">Actual finish</span>
           <input
             className="meta-input"
-            type="date"
-            value={node.actualFinish ?? ''}
+            type="datetime-local"
+            value={toDatetimeLocalValue(node.actualFinish)}
             onChange={(e) =>
               store.commit((g) => setActualDates(g, id, { actualFinish: e.target.value || null }))
             }
