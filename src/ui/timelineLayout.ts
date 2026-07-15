@@ -1,9 +1,9 @@
 /**
  * Pure layout for the timeline / Gantt view. Turns the scheduler's output
  * into positioned rows (fractions in [0,1] across the date range, so the
- * SVG view just multiplies by a pixel width), plus projected-finish and
- * target-date markers and weekly gridline ticks. No pixels here — all
- * geometry is fraction-based and unit-testable.
+ * SVG view just multiplies by a pixel width), plus planned-start/now/
+ * target/projected-finish markers and weekly gridline ticks. No pixels
+ * here — all geometry is fraction-based and unit-testable.
  */
 
 import type { ProjectGraph } from '../model/types.ts';
@@ -38,7 +38,9 @@ export interface TimelineRow {
 export interface TimelineMarker {
   frac: number;
   date: string;
-  kind: 'finish' | 'target';
+  /** 'start'/'now' are always present; 'target' only when set, 'finish'
+   *  only once the scheduler has a projected finish. */
+  kind: 'start' | 'now' | 'finish' | 'target';
 }
 
 export interface TimelineTick {
@@ -132,9 +134,11 @@ export function buildTimeline(
     if (g.finish > rangeEnd) rangeEnd = g.finish;
   }
   const target = graph.settings.targetDate;
-  if (target) {
-    if (target < rangeStart) rangeStart = target;
-    if (target > rangeEnd) rangeEnd = target;
+  // Extend the range so every marker below (planned start, now, target)
+  // lands inside [0,1] instead of getting clamped to an edge by frac().
+  for (const d of [graph.settings.startDate, now, target].filter((v): v is string => v !== null)) {
+    if (d < rangeStart) rangeStart = d;
+    if (d > rangeEnd) rangeEnd = d;
   }
 
   const span = Math.max(1, daysBetween(rangeStart, rangeEnd));
@@ -166,7 +170,10 @@ export function buildTimeline(
     };
   });
 
-  const markers: TimelineMarker[] = [];
+  const markers: TimelineMarker[] = [
+    { frac: frac(graph.settings.startDate), date: graph.settings.startDate, kind: 'start' },
+    { frac: frac(now), date: now, kind: 'now' },
+  ];
   if (schedule.projectFinish) {
     markers.push({ frac: frac(schedule.projectFinish), date: schedule.projectFinish, kind: 'finish' });
   }
@@ -207,4 +214,12 @@ export function buildTimeline(
   if (bandStart !== null) weekends.push({ startFrac: bandStart / span, endFrac: 1 });
 
   return { rows, markers, ticks, weekends, rangeStart, rangeEnd, empty: false };
+}
+
+/** The calendar date at a fraction across `model`'s range — the inverse of
+ *  the internal `frac()` used to place rows/markers. For the view's hover
+ *  crosshair: pixel under the cursor → fraction → date. */
+export function dateAtFrac(model: TimelineModel, frac: number): string {
+  const span = Math.max(1, daysBetween(model.rangeStart, model.rangeEnd));
+  return addDaysIso(model.rangeStart, Math.round(frac * span));
 }
