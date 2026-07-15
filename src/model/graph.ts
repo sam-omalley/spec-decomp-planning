@@ -155,8 +155,14 @@ function buildIndex(graph: ProjectGraph): GraphIndex {
   const childrenByParent = new Map<string, string[]>();
   for (const [parentId, edges] of childrenEdgesByParent) {
     edges.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    childrenByParent.set(parentId, edges.map((e) => e.to));
+    childrenByParent.set(parentId, Object.freeze(edges.map((e) => e.to)) as string[]);
   }
+  // childrenOf/membersOfGroup return these arrays by reference (not a fresh
+  // copy) to keep the O(1) win from the cache — freeze them so an accidental
+  // in-place mutation (.sort()/.push()/…) on a caller's end throws instead of
+  // silently corrupting the index for every later selector call against the
+  // same graph reference.
+  for (const members of membersByGroup.values()) Object.freeze(members);
 
   return { parentByChild, childrenByParent, assignmentByFrom, membersByGroup, edgeByKey };
 }
