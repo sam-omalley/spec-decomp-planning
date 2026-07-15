@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraphError } from './model/graph.ts';
 import { deserializeProject, serializeProject } from './model/serialize.ts';
+import { clearUnrecoveredText, loadUnrecoveredText } from './persist/persistence.ts';
 import { store, useProjectGraph } from './store/appStore.ts';
 import { GraphView, type GraphMode } from './ui/GraphView.tsx';
 import { MarkdownView } from './ui/MarkdownView.tsx';
@@ -45,6 +46,12 @@ export function App() {
   const [specMaxDepth, setSpecMaxDepth] = useState<number | undefined>(undefined);
   const [planMaxDepth, setPlanMaxDepth] = useState<number | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A prior autosave that failed to load (main.tsx backs it up rather than
+  // discarding it) shows a recovery banner until downloaded or dismissed.
+  const [backupText, setBackupText] = useState<string | null>(null);
+  useEffect(() => {
+    void loadUnrecoveredText().then((text) => setBackupText(text ?? null));
+  }, []);
 
   const filter: FilterState = useMemo(() => ({ text: filterText }), [filterText]);
   const filterActive = isFilterActive(filter);
@@ -64,16 +71,31 @@ export function App() {
     }).length;
   }, [filterActive, searchable, graph, filter, section, planMode]);
 
-  function exportProject() {
-    const blob = new Blob([serializeProject(store.getState())], {
-      type: 'application/json',
-    });
+  function downloadJson(text: string, filename: string) {
+    const blob = new Blob([text], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `planning-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function exportProject() {
+    downloadJson(
+      serializeProject(store.getState()),
+      `planning-${new Date().toISOString().slice(0, 10)}.json`,
+    );
+  }
+
+  function downloadBackup() {
+    if (!backupText) return;
+    downloadJson(backupText, `planning-backup-${new Date().toISOString().slice(0, 10)}.json`);
+  }
+
+  function discardBackup() {
+    void clearUnrecoveredText();
+    setBackupText(null);
   }
 
   async function importProject(file: File) {
@@ -282,6 +304,14 @@ export function App() {
           ↪ Redo
         </button>
       </header>
+      {backupText && (
+        <div className="app-banner" role="alert">
+          A previous autosave couldn’t be loaded — nothing was deleted, it was kept as a backup
+          instead.
+          <button onClick={downloadBackup}>Recover backup…</button>
+          <button onClick={discardBackup}>Discard</button>
+        </div>
+      )}
       <main className={`app-main${section === 'spec' ? '' : ' app-main-wide'}`}>
         {section === 'spec' && (
           <Outliner
