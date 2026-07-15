@@ -65,8 +65,21 @@ describe('matchesFilter text', () => {
     assert.equal(matchesFilter(node({ tags: ['api', 'security'] }), { text: 'secur' }), true);
   });
 
+  it('matches an external-ref (Jira) key', () => {
+    const n = node({ externalRefs: [{ system: 'jira', key: 'PROJ-123' }] });
+    assert.equal(matchesFilter(n, { text: 'proj-123' }), true);
+    assert.equal(matchesFilter(n, { text: 'PROJ-123' }), true);
+    assert.equal(matchesFilter(n, { text: 'proj-999' }), false);
+  });
+
   it('ignores surrounding whitespace in the query', () => {
     assert.equal(matchesFilter(node({ title: 'Login' }), { text: '  log ' }), true);
+  });
+
+  it('does not run adjacent fields together (joined with a space)', () => {
+    const n = node({ title: 'Auth', description: 'Billing' });
+    assert.equal(matchesFilter(n, { text: 'authbilling' }), false);
+    assert.equal(matchesFilter(n, { text: 'auth billing' }), true);
   });
 });
 
