@@ -24,6 +24,15 @@ export interface TimelineRow {
   finish: string;
   startFrac: number;
   endFrac: number;
+  /** This unit's raw duration estimate (working days), when it has one. */
+  durationEstimate: number | null;
+  /**
+   * A human-readable explanation of why the scheduled span is longer (or
+   * shorter) than `durationEstimate` alone implies — present only when the
+   * scheduler's speed/FTE stretch on this unit isn't a 1× no-op (see
+   * `ScheduledGroup.stretch` in `schedule.ts`).
+   */
+  stretchNote?: string;
 }
 
 export interface TimelineMarker {
@@ -63,6 +72,27 @@ function daysBetween(a: string, b: string): number {
 }
 function addDaysIso(iso: string, n: number): string {
   return new Date(utc(iso) + n * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Trims a number to at most 2 decimals, dropping a trailing `.00`/`0`. */
+function formatDays(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/**
+ * Explains why a unit's scheduled span is longer (or shorter) than its raw
+ * `durationEstimate` alone implies: the speed multiplier and/or resource FTE
+ * that stretched it into working days (see `ScheduledGroup.stretch`).
+ */
+function stretchNote(
+  durationEstimate: number,
+  stretch: { speedMultiplier: number; fte: number },
+): string {
+  const effective = durationEstimate / (stretch.speedMultiplier * stretch.fte);
+  const factors: string[] = [];
+  if (stretch.speedMultiplier !== 1) factors.push(`${formatDays(stretch.speedMultiplier)}× speed`);
+  if (stretch.fte !== 1) factors.push(`${formatDays(stretch.fte)} FTE`);
+  return `${formatDays(durationEstimate)}d estimate ÷ ${factors.join(' × ')} = ${formatDays(effective)} working days`;
 }
 
 const EMPTY: TimelineModel = {
@@ -116,6 +146,7 @@ export function buildTimeline(
   const criticalSet = new Set(schedule.criticalPath);
   const rows: TimelineRow[] = scheduled.map(({ id, depth }) => {
     const g = schedule.groups.get(id)!;
+    const durationEstimate = graph.nodes[id]?.durationEstimate ?? null;
     return {
       id,
       title: graph.nodes[id]?.title.trim() || 'Untitled',
@@ -128,6 +159,10 @@ export function buildTimeline(
       finish: g.finish,
       startFrac: frac(g.start),
       endFrac: frac(g.finish),
+      durationEstimate,
+      ...(g.stretch && durationEstimate !== null
+        ? { stretchNote: stretchNote(durationEstimate, g.stretch) }
+        : {}),
     };
   });
 

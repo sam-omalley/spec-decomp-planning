@@ -39,6 +39,14 @@ export interface ScheduledGroup {
   source: 'planned' | 'actual';
   /** True for a scheduling unit; false for a container spanning its units. */
   isUnit: boolean;
+  /**
+   * The speed multiplier and track FTE that stretched this unit's
+   * `durationEstimate` into working days — present only when that combined
+   * factor isn't a no-op (≠ 1), i.e. there is something to explain about why
+   * the bar spans more (or fewer) days than the raw estimate alone implies.
+   * Absent for done units (real dates, nothing projected) and for containers.
+   */
+  stretch?: { speedMultiplier: number; fte: number };
 }
 
 export interface Schedule {
@@ -242,7 +250,11 @@ export function scheduleProject(
       for (let k = 1; k < tracks.length; k++) if (tracks[k]! < tracks[track]!) track = k;
     }
     // The track's FTE stretches the projected duration (fte < 1 ⇒ longer).
-    const duration = (node.durationEstimate ?? 0) / (speed * trackFte[track]!);
+    const fte = trackFte[track]!;
+    const duration = (node.durationEstimate ?? 0) / (speed * fte);
+    // Surfaced on the schedule so a view can explain a longer-than-estimate
+    // span; omitted when there's nothing to explain (a 1× no-op).
+    const stretch = speed * fte !== 1 ? { speedMultiplier: speed, fte } : undefined;
 
     let prereqFinish = 0;
     for (const p of unitPrereqs.get(u)!) {
@@ -270,6 +282,7 @@ export function scheduleProject(
         finish: cal.isoAt(finishIndex(startOff, duration)),
         source: 'planned',
         isUnit: true,
+        ...(stretch ? { stretch } : {}),
       });
       startOffset.set(u, startOff);
       finishOffset.set(u, finishOff);
@@ -285,6 +298,7 @@ export function scheduleProject(
         finish: cal.isoAt(finishIndex(startOff, duration)),
         source: 'planned',
         isUnit: true,
+        ...(stretch ? { stretch } : {}),
       });
       startOffset.set(u, startOff);
       finishOffset.set(u, finishOff);
