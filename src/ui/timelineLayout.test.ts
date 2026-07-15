@@ -91,4 +91,19 @@ describe('buildTimeline', () => {
     assert.equal(t.weekends[0]!.startFrac, 5 / 7); // Jan6 (Sat)
     assert.equal(t.weekends[0]!.endFrac, 1); // through Jan8 (exclusive)
   });
+
+  it('omits stretchNote when speed/FTE are a 1× no-op (#64)', () => {
+    const t = buildTimeline(fixture());
+    assert.equal(t.rows[1]!.durationEstimate, 2);
+    assert.equal(t.rows[1]!.stretchNote, undefined);
+  });
+
+  it('explains a slower-than-estimate span via stretchNote (#64)', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, { startDate: '2024-01-01', speedMultiplier: 0.8 });
+    g = createGroup(g, { id: 'u1', title: 'U1' });
+    g = setEstimate(g, 'u1', { durationEstimate: 2 });
+    const t = buildTimeline(g);
+    assert.equal(t.rows[0]!.stretchNote, '2d estimate ÷ 0.8× speed = 2.5 working days');
+  });
 });

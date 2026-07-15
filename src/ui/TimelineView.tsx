@@ -12,7 +12,7 @@ import { buildTimeline } from './timelineLayout.ts';
 import { InfoDot } from './InfoDot.tsx';
 
 const SCHEDULING_HELP =
-  'Done units use their real actual dates; an in-progress unit uses its real start and projects the remainder; not-started work is fully projected and is never dated before today — so as today advances, un-started bars shift right to stay realistic.';
+  'Done units use their real actual dates; an in-progress unit uses its real start and projects the remainder; not-started work is fully projected and is never dated before today — so as today advances, un-started bars shift right to stay realistic. A projected span can run longer than the raw estimate when the speed multiplier or an assigned resource’s FTE is below 1× (Settings tab) — hover a bar for the breakdown when that applies.';
 
 interface TimelineViewProps {
   selectedId: string | null;
@@ -127,6 +127,7 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
                   {row.title}: {row.start} → {row.finish}
                   {row.source === 'actual' ? ' (actual)' : ' (planned)'}
                   {row.critical ? ' · on critical path' : ''}
+                  {row.stretchNote ? ` · ${row.stretchNote}` : ''}
                 </title>
               </rect>
             </g>
