@@ -63,6 +63,13 @@ describe('scheduleProject — calendar & weekends', () => {
     assert.equal(s.projectFinish, '2024-01-05');
   });
 
+  it('omits `stretch` when speed and FTE are both a no-op (1×)', () => {
+    let g = base();
+    g = group(g, 'a', 2);
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.stretch, undefined);
+  });
+
   it('starts a dependent after its prerequisite, across the weekend', () => {
     let g = base();
     g = group(g, 'a', 5); // finishes Fri Jan 5 (offset 5)
@@ -99,6 +106,20 @@ describe('scheduleProject — capacity', () => {
     g = group(g, 'a', 4); // 4 / 2 = 2 working days → Mon..Tue
     const s = scheduleProject(g);
     assert.equal(s.groups.get('a')!.finish, '2024-01-02');
+    assert.deepEqual(s.groups.get('a')!.stretch, { speedMultiplier: 2, fte: 1 });
+  });
+
+  it('reports the stretch that lands a 2-day estimate on the Monday after a weekend (#64)', () => {
+    // 2024-01-04 is a Thursday: 2 raw days would finish Fri Jan 5, but at
+    // 0.8× speed the working-day span is 2.5 — Thu, Fri, then the weekend
+    // is skipped so the finish lands on Mon Jan 8, not the estimate-implied
+    // Friday. `stretch` is what a view uses to explain that gap.
+    let g = base({ startDate: '2024-01-04', speedMultiplier: 0.8 });
+    g = group(g, 'a', 2);
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-04');
+    assert.equal(s.groups.get('a')!.finish, '2024-01-08');
+    assert.deepEqual(s.groups.get('a')!.stretch, { speedMultiplier: 0.8, fte: 1 });
   });
 });
 
@@ -109,6 +130,7 @@ describe('scheduleProject — resourcing', () => {
     g = assignResource(g, 'a', 'r0');
     const s = scheduleProject(g);
     assert.equal(s.groups.get('a')!.finish, '2024-01-04');
+    assert.deepEqual(s.groups.get('a')!.stretch, { speedMultiplier: 1, fte: 0.5 });
   });
 
   it('pins assigned units to their resource track, serialising them', () => {
@@ -170,7 +192,7 @@ describe('scheduleProject — cycles & containers', () => {
 
 describe('scheduleProject — actuals blend over projection', () => {
   it('uses real dates for a done unit and projects dependents from its finish', () => {
-    let g = base();
+    let g = base({ speedMultiplier: 0.8 }); // even with a stretch factor set...
     g = group(g, 'a', 5);
     g = group(g, 'b', 1);
     g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a' });
@@ -182,6 +204,7 @@ describe('scheduleProject — actuals blend over projection', () => {
       finish: '2024-01-03',
       source: 'actual',
       isUnit: true,
+      // ...a done unit has real dates, nothing projected, so no stretch to explain.
     });
     // b projects from a's actual finish (offset 2 → next is Jan 4).
     assert.equal(s.groups.get('b')!.start, '2024-01-04');
