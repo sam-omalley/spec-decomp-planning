@@ -112,6 +112,21 @@ describe('node creation and the contains tree', () => {
   });
 });
 
+describe('cached selector arrays are frozen (#80)', () => {
+  it('throws rather than silently corrupting the index on in-place mutation', () => {
+    const g = fixture();
+    assert.throws(() => childrenOf(g, 'login').sort(), TypeError);
+    assert.throws(() => childrenOf(g, 'login').push('x'), TypeError);
+  });
+
+  it('throws for membersOfGroup too, and a later call still reads correctly', () => {
+    const g = planned();
+    assert.throws(() => membersOfGroup(g, 'epicA').reverse(), TypeError);
+    // The failed mutation didn't corrupt the cached entry for later callers.
+    assert.deepEqual([...membersOfGroup(g, 'epicA')].sort(), ['oauth', 'password']);
+  });
+});
+
 describe('moveNode', () => {
   it('reparents without touching other relationships', () => {
     let g = planned();
@@ -183,7 +198,7 @@ describe('assignment (work → group)', () => {
     let g = planned();
     g = assignToGroup(g, 'reset', 'block1');
     assert.equal(groupOf(g, 'reset'), 'block1');
-    assert.deepEqual(membersOfGroup(g, 'epicA').sort(), ['oauth', 'password']);
+    assert.deepEqual([...membersOfGroup(g, 'epicA')].sort(), ['oauth', 'password']);
   });
 
   it('membership is single: assigning again moves, atomically', () => {
