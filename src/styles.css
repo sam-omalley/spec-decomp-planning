@@ -1375,6 +1375,10 @@ body {
   opacity: 0.85;
   border: 1.5px solid #d1495b;
 }
+.tl-legend-markers {
+  gap: 14px;
+  flex-wrap: wrap;
+}
 .tl-marker {
   stroke: var(--accent);
   stroke-width: 1.5;
@@ -1383,12 +1387,37 @@ body {
 .tl-marker-target {
   stroke: #d1495b;
 }
+.tl-marker-start {
+  stroke: #2e7d32;
+  stroke-dasharray: 2 2;
+}
+.tl-marker-now {
+  stroke: var(--text);
+  stroke-dasharray: none;
+}
 .tl-marker-label {
   font-size: 10px;
   fill: var(--accent);
 }
 .tl-marker-label-target {
   fill: #d1495b;
+}
+.tl-marker-label-start {
+  fill: #2e7d32;
+}
+.tl-marker-label-now {
+  fill: var(--text);
+  font-weight: 600;
+}
+.tl-crosshair line {
+  stroke: var(--text);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+.tl-crosshair text {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--text);
 }
 
 /* ------------------------------ metrics view ------------------------------ */

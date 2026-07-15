@@ -1,15 +1,28 @@
 /**
  * Timeline / Gantt view: bars per scheduling unit (and spanning bars for
- * their containers) on a calendar axis, with projected-finish and
- * target-date markers. Hand-rolled SVG like GraphView — no chart dep.
- * Pure geometry comes from `timelineLayout.ts`; this file only paints it.
+ * their containers) on a calendar axis, with planned-start/now/target/
+ * projected-finish markers and a hover crosshair. Hand-rolled SVG like
+ * GraphView — no chart dep. Pure geometry comes from `timelineLayout.ts`;
+ * this file only paints it.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
-import { buildTimeline } from './timelineLayout.ts';
+import { buildTimeline, dateAtFrac } from './timelineLayout.ts';
+import type { TimelineMarker } from './timelineLayout.ts';
 import { InfoDot } from './InfoDot.tsx';
+
+/** Icon + short label per marker kind — colorblind-safe (never color-only),
+ *  matching the convention used for concern severities/dependency edges
+ *  elsewhere in the app. */
+const MARKER_INFO: Record<TimelineMarker['kind'], { icon: string; label: string }> = {
+  start: { icon: '🚩', label: 'Planned start' },
+  now: { icon: '⏱', label: 'Now' },
+  target: { icon: '🎯', label: 'Planned end' },
+  finish: { icon: '▸', label: 'Projected finish' },
+};
 
 const SCHEDULING_HELP =
   'Done units use their real actual dates; an in-progress unit uses its real start and projects the remainder; not-started work is fully projected and is never dated before today — so as today advances, un-started bars shift right to stay realistic. A projected span can run longer than the raw estimate when the speed multiplier or an assigned resource’s FTE is below 1× (Settings tab) — hover a bar for the breakdown when that applies.';
@@ -31,6 +44,9 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
   const graph = useProjectGraph();
   const now = todayIso();
   const model = useMemo(() => buildTimeline(graph, now), [graph, now]);
+  // Hover crosshair: the fraction under the cursor, or null when the mouse
+  // isn't over the chart area (outside the row-label gutter, on either side).
+  const [hoverFrac, setHoverFrac] = useState<number | null>(null);
 
   if (model.empty) {
     return (
@@ -46,6 +62,12 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
 
   const hasCritical = model.rows.some((r) => r.critical);
 
+  function handleMouseMove(event: ReactMouseEvent<SVGSVGElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const frac = (event.clientX - rect.left - LABEL_W - PAD) / CHART_W;
+    setHoverFrac(frac >= 0 && frac <= 1 ? frac : null);
+  }
+
   return (
     <div className="timeline-wrap">
       <div className="tl-legend">
@@ -57,7 +79,21 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
           Critical path — the dependency chain that sets the projected finish
         </div>
       )}
-      <svg width={width} height={height} className="timeline-svg" role="img">
+      <div className="tl-legend tl-legend-markers">
+        {(Object.keys(MARKER_INFO) as TimelineMarker['kind'][]).map((kind) => (
+          <span key={kind}>
+            {MARKER_INFO[kind].icon} {MARKER_INFO[kind].label}
+          </span>
+        ))}
+      </div>
+      <svg
+        width={width}
+        height={height}
+        className="timeline-svg"
+        role="img"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoverFrac(null)}
+      >
         {/* non-working (weekend) bands */}
         {model.weekends.map((band, i) => (
           <rect
@@ -140,6 +176,8 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
           // boundary and gets clipped — anchor to the near edge instead once
           // there isn't room either side for half the label.
           const anchor = marker.frac > 0.92 ? 'end' : marker.frac < 0.08 ? 'start' : 'middle';
+          const info = MARKER_INFO[marker.kind];
+          const modifier = marker.kind === 'finish' ? '' : ` tl-marker-${marker.kind}`;
           return (
             <g key={`m${i}`}>
               <line
@@ -147,22 +185,36 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
                 x2={x(marker.frac)}
                 y1={HEAD_H - 4}
                 y2={height - PAD}
-                className={marker.kind === 'target' ? 'tl-marker tl-marker-target' : 'tl-marker'}
+                className={`tl-marker${modifier}`}
               />
               <text
                 x={x(marker.frac)}
                 y={height - 2}
-                className={`tl-marker-label${
-                  marker.kind === 'target' ? ' tl-marker-label-target' : ''
-                }`}
+                className={`tl-marker-label${modifier ? ` tl-marker-label-${marker.kind}` : ''}`}
                 textAnchor={anchor}
               >
-                {marker.kind === 'target' ? '🎯 ' : '▸ '}
-                {marker.date}
+                {info.icon} {marker.date}
               </text>
+              <title>
+                {info.label}: {marker.date}
+              </title>
             </g>
           );
         })}
+
+        {/* hover crosshair: the date under the cursor */}
+        {hoverFrac !== null && (
+          <g className="tl-crosshair" pointerEvents="none">
+            <line x1={x(hoverFrac)} x2={x(hoverFrac)} y1={HEAD_H} y2={height - PAD} />
+            <text
+              x={x(hoverFrac)}
+              y={16}
+              textAnchor={hoverFrac > 0.92 ? 'end' : hoverFrac < 0.08 ? 'start' : 'middle'}
+            >
+              {dateAtFrac(model, hoverFrac)}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );
