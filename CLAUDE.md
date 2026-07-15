@@ -139,7 +139,13 @@ nothing rolls up from assigned spec items.
   debounced (300 ms) subscriber, deduped by state reference, flushed on
   visibilitychange; `main.tsx` loads before first render. Import
   confirms before replacing a non-empty project; `store.reset` clears
-  undo history by design.
+  undo history by design. If the autosave under `current` fails to
+  deserialize (corrupt, or from an unsupported version), `main.tsx` never
+  just falls back to an empty project silently: the raw text is copied to
+  a separate `unrecovered` key first — out of the autosaver's reach, so
+  the next edit's save (to `current`) can't destroy the only copy — and
+  the user gets a loud alert plus a header banner (`App.tsx`) to download
+  or discard it, instead of a console-only warning and permanent loss.
 - Navigation is hash-routed (`src/ui/route.ts`, pure + tested): the active
   top-level section (Spec / Planning / Graph / Reporting / Settings) and
   its sub-view are mirrored into the location hash (`#/reporting/metrics`)
