@@ -11,6 +11,7 @@ import { useProjectGraph } from '../store/appStore.ts';
 import { assigneeMetrics, type AssigneeMetrics } from '../model/assigneeMetrics.ts';
 import { GROUP_COLORS } from './colors.ts';
 import { InfoDot } from './InfoDot.tsx';
+import { formatDays } from './format.ts';
 
 const UNASSIGNED_COLOR = '#98a2b3';
 
@@ -121,7 +122,7 @@ export function AssigneeMetricsView() {
                           className="eva-bar eva-bar-est"
                           style={{ width: `${(r.estimateDays / estActMax) * 100}%` }}
                         />
-                        <span className="eva-num">{r.estimateDays}d</span>
+                        <span className="eva-num">{formatDays(r.estimateDays)}d</span>
                       </span>
                       <span className="eva-bar-wrap">
                         <span className="eva-tag">act</span>
@@ -129,11 +130,11 @@ export function AssigneeMetricsView() {
                           className={`eva-bar ${over ? 'eva-bar-over' : 'eva-bar-under'}`}
                           style={{ width: `${(r.actualDays / estActMax) * 100}%` }}
                         />
-                        <span className="eva-num">{r.actualDays}d</span>
+                        <span className="eva-num">{formatDays(r.actualDays)}d</span>
                         <span className={`asg-var${over ? ' eva-var-over' : ''}`}>
                           {r.varianceDays === 0
                             ? '±0'
-                            : `${r.varianceDays > 0 ? '+' : ''}${r.varianceDays}d`}
+                            : `${r.varianceDays > 0 ? '+' : ''}${formatDays(r.varianceDays)}d`}
                         </span>
                       </span>
                     </>
