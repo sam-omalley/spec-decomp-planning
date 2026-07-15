@@ -138,6 +138,34 @@ body {
   background: var(--accent-soft);
 }
 
+/* Recovery banner for an autosave that failed to load (main.tsx backs it up
+   instead of discarding it) — amber, matching the concern-medium tone. */
+.app-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  font-size: 13px;
+  background: #fdf3e4;
+  border-bottom: 1px solid #c67c1e;
+}
+
+.app-banner button {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  border: 1px solid #c67c1e;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-banner button:hover {
+  background: #fdf3e4;
+}
+
 .app-main {
   flex: 1;
   min-height: 0;

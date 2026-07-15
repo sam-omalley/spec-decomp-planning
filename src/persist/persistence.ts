@@ -12,6 +12,11 @@
 const DB_NAME = 'planning-tool';
 const STORE_NAME = 'project';
 const KEY = 'current';
+/** A slot for an autosave that failed to load (corrupt, or from an
+ *  unsupported version) — separate from `current` so it survives once the
+ *  app falls back to an empty project and the next edit's autosave
+ *  overwrites `current`; see `saveUnrecoveredText` below. */
+const UNRECOVERED_KEY = 'unrecovered';
 
 function withStore<T>(
   mode: IDBTransactionMode,
@@ -38,6 +43,24 @@ export function saveProjectText(text: string): Promise<unknown> {
 
 export function loadProjectText(): Promise<string | undefined> {
   return withStore<string | undefined>('readonly', (store) => store.get(KEY));
+}
+
+/**
+ * Backs up an autosave that failed to load, so a deserialize failure never
+ * silently discards the user's data — the app falls back to an empty
+ * project, but the raw text lives on here until explicitly recovered or
+ * discarded (`loadUnrecoveredText` / `clearUnrecoveredText`).
+ */
+export function saveUnrecoveredText(text: string): Promise<unknown> {
+  return withStore('readwrite', (store) => store.put(text, UNRECOVERED_KEY));
+}
+
+export function loadUnrecoveredText(): Promise<string | undefined> {
+  return withStore<string | undefined>('readonly', (store) => store.get(UNRECOVERED_KEY));
+}
+
+export function clearUnrecoveredText(): Promise<unknown> {
+  return withStore('readwrite', (store) => store.delete(UNRECOVERED_KEY));
 }
 
 export interface AutosaverOptions<S> {
