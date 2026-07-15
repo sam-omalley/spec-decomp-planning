@@ -90,17 +90,39 @@ describe('analyzeConcerns — per-unit signals', () => {
 });
 
 describe('analyzeConcerns — resourcing', () => {
-  it('flags an unassigned, not-done unit only when a team exists', () => {
+  it('flags an unassigned, not-started unit as low severity, only when a team exists', () => {
     let g = base();
     g = group(g, 'a', 3);
     // No team yet → no unassigned concern (everything is unassigned; noise).
     assert.equal(kinds(g).includes('unassigned'), false);
 
     g = addResource(g, { id: 'r1', name: 'Ada', fte: 1 });
-    assert.equal(kinds(g).includes('unassigned'), true);
+    const c = analyzeConcerns(g).find((x) => x.kind === 'unassigned');
+    assert.ok(c);
+    assert.equal(c!.severity, 'low');
 
     g = assignResource(g, 'a', 'r1');
     assert.equal(kinds(g).includes('unassigned'), false);
+  });
+
+  it('flags an unassigned, in-progress unit as medium severity', () => {
+    let g = base();
+    g = group(g, 'a', 3);
+    g = addResource(g, { id: 'r1', name: 'Ada', fte: 1 });
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01' });
+    const c = analyzeConcerns(g).find((x) => x.kind === 'unassigned');
+    assert.ok(c);
+    assert.equal(c!.severity, 'medium');
+  });
+
+  it('flags an unassigned, done unit as medium severity', () => {
+    let g = base();
+    g = group(g, 'a', 3);
+    g = addResource(g, { id: 'r1', name: 'Ada', fte: 1 });
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01', actualFinish: '2024-01-03' });
+    const c = analyzeConcerns(g).find((x) => x.kind === 'unassigned');
+    assert.ok(c);
+    assert.equal(c!.severity, 'medium');
   });
 });
 
