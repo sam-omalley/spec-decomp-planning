@@ -16,6 +16,7 @@ import {
   projectionSummary,
 } from '../model/metrics.ts';
 import { InfoDot } from './InfoDot.tsx';
+import { formatDays } from './format.ts';
 
 /** Sentinel <select> values for the two non-resource assignee options. */
 const EVA_ALL = 'all';
@@ -319,7 +320,9 @@ function EstimateVsActual({
                   className="eva-bar eva-bar-est"
                   style={{ width: `${((row.estimateDays ?? 0) / max) * 100}%` }}
                 />
-                <span className="eva-num">{row.estimateDays ?? '—'}d</span>
+                <span className="eva-num">
+                  {row.estimateDays === null ? '—' : formatDays(row.estimateDays)}d
+                </span>
               </div>
               <div className="eva-bar-wrap">
                 <span className="eva-tag">act</span>
@@ -327,7 +330,9 @@ function EstimateVsActual({
                   className={`eva-bar ${over ? 'eva-bar-over' : 'eva-bar-under'}`}
                   style={{ width: `${((row.actualDays ?? 0) / max) * 100}%` }}
                 />
-                <span className="eva-num">{row.actualDays ?? '—'}d</span>
+                <span className="eva-num">
+                  {row.actualDays === null ? '—' : formatDays(row.actualDays)}d
+                </span>
               </div>
             </div>
             <div className={`eva-var${over ? ' eva-var-over' : ''}`}>
@@ -335,15 +340,16 @@ function EstimateVsActual({
                 ? ''
                 : row.varianceDays === 0
                   ? '±0'
-                  : `${row.varianceDays > 0 ? '+' : ''}${row.varianceDays}d`}
+                  : `${row.varianceDays > 0 ? '+' : ''}${formatDays(row.varianceDays)}d`}
             </div>
           </div>
         );
       })}
       <div className="eva-total">
-        Rolled: est {variance.totalEstimate}d · actual {variance.totalActual}d ·{' '}
+        Rolled: est {formatDays(variance.totalEstimate)}d · actual{' '}
+        {formatDays(variance.totalActual)}d ·{' '}
         {variance.totalActual - variance.totalEstimate >= 0 ? '+' : ''}
-        {variance.totalActual - variance.totalEstimate}d
+        {formatDays(variance.totalActual - variance.totalEstimate)}d
       </div>
     </div>
   );
