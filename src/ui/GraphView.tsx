@@ -121,8 +121,9 @@ function GroupGraphNode({ id, data }: NodeProps<GNode>) {
     .filter(Boolean)
     .join(' ');
   // The left target handle receives assignments (spec → plan); the left source
-  // (contains, group tree) and right target (contains, from parent) only render
-  // existing edges, so they are not connectable.
+  // (contains, group tree), right target (contains, from parent), and right
+  // source (dependency arrows between groups) only render existing edges, so
+  // they are not connectable.
   const leftDrag = dragClass(useConnectionSignature(), id, true);
   return (
     <div className={classes} style={{ ['--group-color' as string]: data.color }}>
@@ -138,6 +139,7 @@ function GroupGraphNode({ id, data }: NodeProps<GNode>) {
       </span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
       <Handle type="target" position={Position.Right} id="rt" className="ghandle" isConnectable={false} />
+      <Handle type="source" position={Position.Right} id="rs" className="ghandle" isConnectable={false} />
     </div>
   );
 }
