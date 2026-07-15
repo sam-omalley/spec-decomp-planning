@@ -6,7 +6,7 @@ import {
   setEstimate,
   updateSettings,
 } from '../model/graph.ts';
-import { buildTimeline } from './timelineLayout.ts';
+import { buildTimeline, dateAtFrac } from './timelineLayout.ts';
 import type { ProjectGraph } from '../model/types.ts';
 
 function fixture(): ProjectGraph {
@@ -54,6 +54,28 @@ describe('buildTimeline', () => {
     assert.equal(finish.frac, 0.75);
     assert.equal(target.date, '2024-01-05');
     assert.equal(target.frac, 1);
+  });
+
+  it('emits a planned-start marker at the settings start date (#85)', () => {
+    const t = buildTimeline(fixture());
+    const start = t.markers.find((m) => m.kind === 'start')!;
+    assert.equal(start.date, '2024-01-01');
+    assert.equal(start.frac, 0);
+  });
+
+  it('emits a now marker, extending the range when now falls outside it (#85)', () => {
+    const t = buildTimeline(fixture(), '2023-12-25'); // before the scheduled range
+    const now = t.markers.find((m) => m.kind === 'now')!;
+    assert.equal(now.date, '2023-12-25');
+    assert.equal(t.rangeStart, '2023-12-25');
+    assert.equal(now.frac, 0);
+  });
+
+  it('dateAtFrac inverts frac back to the calendar date (#85)', () => {
+    const t = buildTimeline(fixture()); // Jan1..Jan5, a 4-day span
+    assert.equal(dateAtFrac(t, 0), '2024-01-01');
+    assert.equal(dateAtFrac(t, 0.5), '2024-01-03');
+    assert.equal(dateAtFrac(t, 1), '2024-01-05');
   });
 
   it('ticks daily for a short range (≤14 days)', () => {
