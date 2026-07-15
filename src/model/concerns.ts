@@ -24,7 +24,7 @@ export type ConcernKind =
   | 'blocked' // manually marked blocked
   | 'cycle' // in a dependency cycle
   | 'unestimated' // leaf group with no duration → not scheduled
-  | 'unassigned' // not-done unit with no resource (team defined)
+  | 'unassigned' // no resource (team defined); medium once started, low otherwise
   | 'thin_wip' // fewer items in progress than capacity
   | 'past_target'; // projected finish beyond the target date
 
@@ -110,14 +110,20 @@ export function analyzeConcerns(
       });
     }
 
-    // Not-done work with no owner, once a team exists.
-    if (teamDefined && !done && node.resourceId === null) {
+    // Work with no owner, once a team exists: medium once it's underway or
+    // done (someone is or was doing the work with nothing to attribute it
+    // to), low while it's still not started (less urgent — plenty of time
+    // to assign before it matters).
+    if (teamDefined && node.resourceId === null) {
+      const underway = started || done;
       concerns.push({
         kind: 'unassigned',
-        severity: 'low',
+        severity: underway ? 'medium' : 'low',
         id,
         title: titleOf(graph, id),
-        detail: 'No resource assigned — nobody owns this work yet.',
+        detail: underway
+          ? 'No resource assigned — work is in progress or done with nobody credited.'
+          : 'No resource assigned — nobody owns this work yet.',
       });
     }
   }
