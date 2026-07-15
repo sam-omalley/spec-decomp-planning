@@ -11,10 +11,16 @@
  * topology and drag-visibility are domain-specific — see `mapAuthoring.ts` /
  * `depAuthoring.ts`), connection-line preview, and connection semantics
  * (`isValidConnection` / `onConnect` / `onReconnect`). This component only
- * factors out the parts that were byte-for-byte identical.
+ * factors out the parts that were byte-for-byte identical, including
+ * Escape-to-cancel (#88): pressing Escape while an edge is grabbed for
+ * reconnection ends the drag immediately (React Flow has no public "abort",
+ * so this replays a mouseup so its own listener tears the gesture down) and
+ * suppresses both the re-home (`onReconnect`) and the drop-into-space
+ * delete (`onReconnectEnd`) — so the edge snaps back rather than requiring
+ * a careful re-drop or an undo.
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { ComponentType } from 'react';
 import {
   Background,
@@ -136,6 +142,72 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
   onPaneClick,
   reflowSignature,
 }: AuthoringCanvasProps<N, E>) {
+  // Escape-to-cancel a reconnect drag (#88): `reconnecting` is true only
+  // between onReconnectStart and onReconnectEnd; Escape during that window
+  // arms `cancelled`, which makes the wrapped onReconnect/onReconnectEnd
+  // below no-ops for the rest of this gesture — so wherever the edge is
+  // eventually dropped, it lands back exactly where it started. That alone
+  // only prevents the *mutation*, though: React Flow's drag only truly ends
+  // on a real mouseup (there's no public "abort" call), so without more the
+  // dashed preview would keep following the cursor until the mouse button
+  // is actually released. To end the gesture immediately, replay a mouseup
+  // at the last known pointer position — React Flow's own document-level
+  // listener treats it exactly like the real one, tearing down the drag.
+  const reconnecting = useRef(false);
+  const cancelled = useRef(false);
+  const lastPointer = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    function onMouseMove(event: MouseEvent) {
+      lastPointer.current = { x: event.clientX, y: event.clientY };
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || !reconnecting.current) return;
+      cancelled.current = true;
+      const { x, y } = lastPointer.current;
+      document.dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }),
+      );
+    }
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
+  const handleReconnectStart = useCallback(() => {
+    reconnecting.current = true;
+    cancelled.current = false;
+    onReconnectStart();
+  }, [onReconnectStart]);
+
+  const handleReconnect: OnReconnect<E> = useCallback(
+    (oldEdge, connection) => {
+      if (cancelled.current) return;
+      onReconnect(oldEdge, connection);
+    },
+    [onReconnect],
+  );
+
+  const handleReconnectEnd = useCallback(
+    (
+      event: MouseEvent | TouchEvent,
+      edge: E,
+      handleType: HandleType,
+      connectionState: FinalConnectionState,
+    ) => {
+      reconnecting.current = false;
+      if (cancelled.current) {
+        cancelled.current = false;
+        return;
+      }
+      onReconnectEnd(event, edge, handleType, connectionState);
+    },
+    [onReconnectEnd],
+  );
+
   return (
     <ReactFlow
       nodes={nodes}
@@ -157,9 +229,9 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
       reconnectRadius={20}
       isValidConnection={isValidConnection}
       onConnect={onConnect}
-      onReconnectStart={onReconnectStart}
-      onReconnect={onReconnect}
-      onReconnectEnd={onReconnectEnd}
+      onReconnectStart={handleReconnectStart}
+      onReconnect={handleReconnect}
+      onReconnectEnd={handleReconnectEnd}
       onNodeClick={(_, node) => onNodeClick(node.id)}
       onPaneClick={onPaneClick}
     >
