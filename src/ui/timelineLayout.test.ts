@@ -6,7 +6,8 @@ import {
   setEstimate,
   updateSettings,
 } from '../model/graph.ts';
-import { buildTimeline, dateAtFrac } from './timelineLayout.ts';
+import { buildTimeline, dateAtFrac, groupMarkersByDate } from './timelineLayout.ts';
+import type { TimelineMarker } from './timelineLayout.ts';
 import type { ProjectGraph } from '../model/types.ts';
 
 function fixture(): ProjectGraph {
@@ -127,5 +128,39 @@ describe('buildTimeline', () => {
     g = setEstimate(g, 'u1', { durationEstimate: 2 });
     const t = buildTimeline(g);
     assert.equal(t.rows[0]!.stretchNote, '2d estimate ÷ 0.8× speed = 2.5 working days');
+  });
+});
+
+describe('groupMarkersByDate', () => {
+  it('keeps markers on distinct dates in separate groups, in first-seen order', () => {
+    const markers: TimelineMarker[] = [
+      { frac: 0, date: '2024-01-01', kind: 'start' },
+      { frac: 0.5, date: '2024-01-03', kind: 'now' },
+    ];
+    const groups = groupMarkersByDate(markers);
+    assert.deepEqual(
+      groups.map((g) => [g.date, g.kinds]),
+      [
+        ['2024-01-01', ['start']],
+        ['2024-01-03', ['now']],
+      ],
+    );
+  });
+
+  it('merges markers sharing a date into one group (#104)', () => {
+    const markers: TimelineMarker[] = [
+      { frac: 0, date: '2024-01-01', kind: 'start' },
+      { frac: 0, date: '2024-01-01', kind: 'now' },
+      { frac: 1, date: '2024-01-05', kind: 'finish' },
+      { frac: 1, date: '2024-01-05', kind: 'target' },
+    ];
+    const groups = groupMarkersByDate(markers);
+    assert.deepEqual(
+      groups.map((g) => [g.date, g.kinds]),
+      [
+        ['2024-01-01', ['start', 'now']],
+        ['2024-01-05', ['finish', 'target']],
+      ],
+    );
   });
 });
