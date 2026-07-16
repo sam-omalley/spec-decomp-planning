@@ -420,23 +420,34 @@ export function GraphView({
                 ['lockSpec', 'Lock Spec'],
                 ['lockPlan', 'Lock Plan'],
               ] as [MapSort, string][]
-            ).map(([s, label]) => (
-              <button
-                key={s}
-                className={`graph-filter-btn${mapSort === s ? ' graph-filter-btn-active' : ''}`}
-                aria-pressed={mapSort === s}
-                onClick={() => setMapSort(s)}
-                title={
-                  s === 'locked'
-                    ? 'Each side keeps its own order'
-                    : s === 'lockSpec'
-                      ? 'Spec order fixed; the plan re-flows to align with it'
-                      : 'Plan order fixed; the spec re-flows to align with it'
-                }
-              >
-                {label}
-              </button>
-            ))}
+            ).map(([s, label]) => {
+              // Lock Spec/Lock Plan re-flow one side to align with its
+              // assignments to the other — but Hide mode's visible set is
+              // exactly the unassigned work / empty groups, which by
+              // definition have no assigned_to edges between them, so there
+              // is never anything for either to align with here.
+              const inertInHide = s !== 'locked' && hiding;
+              return (
+                <button
+                  key={s}
+                  className={`graph-filter-btn${mapSort === s ? ' graph-filter-btn-active' : ''}`}
+                  aria-pressed={mapSort === s}
+                  disabled={inertInHide}
+                  onClick={() => setMapSort(s)}
+                  title={
+                    inertInHide
+                      ? 'Not available in Hide mode — the hidden side has nothing to align with'
+                      : s === 'locked'
+                        ? 'Each side keeps its own order'
+                        : s === 'lockSpec'
+                          ? 'Spec order fixed; the plan re-flows to align with it'
+                          : 'Plan order fixed; the spec re-flows to align with it'
+                  }
+                >
+                  {label}
+                </button>
+              );
+            })}
           </>
         ) : (
           <button
