@@ -830,6 +830,22 @@ body {
   color: var(--accent);
 }
 
+/* Animate node repositioning on layout/filter/sort changes (#96). React
+ * Flow places every node via an inline `transform: translate(x,y)` style
+ * (see @xyflow/react's NodeWrapper) recomputed on every relayout, so a
+ * plain CSS transition on that property is enough to animate it — no JS
+ * interpolation needed. Skipped mid-drag (`.dragging`, a class React Flow
+ * itself toggles) so dragging stays 1:1 with the pointer, and skipped
+ * under reduced-motion. Edge paths aren't part of this: they're plain SVG
+ * `d` attributes recomputed from each node's already-updated position, so
+ * they redraw instantly rather than tweening — same trade-off as xyflow's
+ * own animated-layout examples. */
+@media (prefers-reduced-motion: no-preference) {
+  .react-flow__node:not(.dragging) {
+    transition: transform 200ms ease;
+  }
+}
+
 .gnode-dim {
   opacity: 0.18;
 }
