@@ -12,12 +12,13 @@
  * `depAuthoring.ts`), connection-line preview, and connection semantics
  * (`isValidConnection` / `onConnect` / `onReconnect`). This component only
  * factors out the parts that were byte-for-byte identical, including
- * Escape-to-cancel (#88): pressing Escape while an edge is grabbed for
- * reconnection ends the drag immediately (React Flow has no public "abort",
- * so this replays a mouseup so its own listener tears the gesture down) and
- * suppresses both the re-home (`onReconnect`) and the drop-into-space
- * delete (`onReconnectEnd`) — so the edge snaps back rather than requiring
- * a careful re-drop or an undo.
+ * Escape-to-cancel (#88): pressing Escape while an arrow is being dragged —
+ * either re-grabbing an existing edge or dragging a brand-new one out of a
+ * handle — ends the drag immediately (React Flow has no public "abort", so
+ * this replays a mouseup so its own listener tears the gesture down) and
+ * suppresses whatever that gesture would otherwise do on drop: the re-home
+ * (`onReconnect`) or drop-into-space delete (`onReconnectEnd`) for an
+ * existing edge, or edge creation (`onConnect`) for a new one.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
@@ -142,18 +143,21 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
   onPaneClick,
   reflowSignature,
 }: AuthoringCanvasProps<N, E>) {
-  // Escape-to-cancel a reconnect drag (#88): `reconnecting` is true only
-  // between onReconnectStart and onReconnectEnd; Escape during that window
-  // arms `cancelled`, which makes the wrapped onReconnect/onReconnectEnd
-  // below no-ops for the rest of this gesture — so wherever the edge is
-  // eventually dropped, it lands back exactly where it started. That alone
-  // only prevents the *mutation*, though: React Flow's drag only truly ends
-  // on a real mouseup (there's no public "abort" call), so without more the
-  // dashed preview would keep following the cursor until the mouse button
-  // is actually released. To end the gesture immediately, replay a mouseup
-  // at the last known pointer position — React Flow's own document-level
-  // listener treats it exactly like the real one, tearing down the drag.
-  const reconnecting = useRef(false);
+  // Escape-to-cancel an arrow drag (#88): `dragActive` is true between the
+  // start and end of either gesture React Flow can be mid-drag on — a
+  // reconnect (grabbing an existing edge) or a fresh connect (dragging a new
+  // one out of a handle). Escape while it's true arms `cancelled`, which
+  // makes the wrapped onReconnect/onReconnectEnd/onConnect below no-ops for
+  // the rest of this gesture — so an existing edge lands back exactly where
+  // it started, and a new one never gets created, wherever the drag ends.
+  // That alone only prevents the *mutation*, though: React Flow's drag only
+  // truly ends on a real mouseup (there's no public "abort" call), so
+  // without more the dashed preview would keep following the cursor until
+  // the mouse button is actually released. To end the gesture immediately,
+  // replay a mouseup at the last known pointer position — React Flow's own
+  // document-level listener treats it exactly like the real one, tearing
+  // down the drag.
+  const dragActive = useRef(false);
   const cancelled = useRef(false);
   const lastPointer = useRef({ x: 0, y: 0 });
 
@@ -162,7 +166,7 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
       lastPointer.current = { x: event.clientX, y: event.clientY };
     }
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Escape' || !reconnecting.current) return;
+      if (event.key !== 'Escape' || !dragActive.current) return;
       cancelled.current = true;
       const { x, y } = lastPointer.current;
       document.dispatchEvent(
@@ -178,7 +182,7 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
   }, []);
 
   const handleReconnectStart = useCallback(() => {
-    reconnecting.current = true;
+    dragActive.current = true;
     cancelled.current = false;
     onReconnectStart();
   }, [onReconnectStart]);
@@ -198,7 +202,7 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
       handleType: HandleType,
       connectionState: FinalConnectionState,
     ) => {
-      reconnecting.current = false;
+      dragActive.current = false;
       if (cancelled.current) {
         cancelled.current = false;
         return;
@@ -207,6 +211,28 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
     },
     [onReconnectEnd],
   );
+
+  const handleConnectStart = useCallback(() => {
+    dragActive.current = true;
+    cancelled.current = false;
+  }, []);
+
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      if (cancelled.current) return;
+      onConnect(connection);
+    },
+    [onConnect],
+  );
+
+  const handleConnectEnd = useCallback(() => {
+    // Deliberately does not reset `cancelled` here: React Flow's reconnect
+    // gesture (grabbing an existing edge) fires this same onConnectEnd
+    // internally before it fires onReconnectEnd, and onReconnectEnd is what
+    // needs to see `cancelled` still set. A start handler always resets it
+    // before the next gesture begins, so leaving it be here is harmless.
+    dragActive.current = false;
+  }, []);
 
   return (
     <ReactFlow
@@ -228,7 +254,9 @@ export function AuthoringCanvas<N extends FlowNode, E extends FlowEdge>({
       // default radius is too tight to reliably land on.
       reconnectRadius={20}
       isValidConnection={isValidConnection}
-      onConnect={onConnect}
+      onConnect={handleConnect}
+      onConnectStart={handleConnectStart}
+      onConnectEnd={handleConnectEnd}
       onReconnectStart={handleReconnectStart}
       onReconnect={handleReconnect}
       onReconnectEnd={handleReconnectEnd}
