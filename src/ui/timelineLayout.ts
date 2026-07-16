@@ -43,6 +43,30 @@ export interface TimelineMarker {
   kind: 'start' | 'now' | 'finish' | 'target';
 }
 
+/** Markers sharing a date (e.g. `now` lands on the planned start, or the
+ *  projected finish lands exactly on the target date) merged into one
+ *  label — otherwise their text draws on top of itself and is unreadable
+ *  (#104). Grouped by exact date, not pixel proximity: zooming in already
+ *  separates markers that only *look* close, but two on the same date
+ *  stay on the same pixel at every zoom level. */
+export interface TimelineMarkerGroup {
+  frac: number;
+  date: string;
+  kinds: TimelineMarker['kind'][];
+}
+
+/** Groups `markers` by date, preserving first-seen order (start/now, then
+ *  whichever of finish/target apply). */
+export function groupMarkersByDate(markers: TimelineMarker[]): TimelineMarkerGroup[] {
+  const groups: TimelineMarkerGroup[] = [];
+  for (const m of markers) {
+    const existing = groups.find((g) => g.date === m.date);
+    if (existing) existing.kinds.push(m.kind);
+    else groups.push({ frac: m.frac, date: m.date, kinds: [m.kind] });
+  }
+  return groups;
+}
+
 export interface TimelineTick {
   frac: number;
   label: string;

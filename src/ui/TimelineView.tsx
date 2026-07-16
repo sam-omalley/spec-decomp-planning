@@ -22,7 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
-import { buildTimeline, dateAtFrac } from './timelineLayout.ts';
+import { buildTimeline, dateAtFrac, groupMarkersByDate } from './timelineLayout.ts';
 import type { TimelineMarker } from './timelineLayout.ts';
 import { InfoDot } from './InfoDot.tsx';
 
@@ -155,6 +155,11 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
   const relative = (frac: number) => (frac - view.start) / viewSpan;
 
   const hasCritical = model.rows.some((r) => r.critical);
+  // Merge markers landing on the same date into one label — otherwise the
+  // text draws on top of itself and is unreadable (#104). Lines still draw
+  // one per marker (below); harmless when they coincide, since a stacked
+  // vertical line isn't the readability problem the merge is fixing.
+  const markerGroups = groupMarkersByDate(model.markers);
 
   // Attached at the svg level (not the catcher rect) so it fires whether
   // the mousedown lands on empty chart space or on top of a bar — a bar
@@ -315,34 +320,46 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
             );
           })}
 
-          {/* markers */}
+          {/* marker lines: one per marker; coinciding lines just stack, which
+              isn't the readability problem (the label below is) */}
           {model.markers.map((marker, i) => {
+            const modifier = marker.kind === 'finish' ? '' : ` tl-marker-${marker.kind}`;
+            return (
+              <line
+                key={`ml${i}`}
+                x1={x(marker.frac)}
+                x2={x(marker.frac)}
+                y1={HEAD_H - 4}
+                y2={height - PAD}
+                className={`tl-marker${modifier}`}
+              />
+            );
+          })}
+
+          {/* marker labels: merged per date (#104) — each icon keeps its own
+              kind's colour (a tspan per kind), with the shared date once at
+              the end, so coinciding markers never draw overlapping text. */}
+          {markerGroups.map((group, i) => {
             // A centred label at/near the chart edge spills past the visible
             // window and gets clipped — anchor to the near edge instead once
             // there isn't room either side for half the label.
-            const rel = relative(marker.frac);
+            const rel = relative(group.frac);
             const anchor = rel > 0.92 ? 'end' : rel < 0.08 ? 'start' : 'middle';
-            const info = MARKER_INFO[marker.kind];
-            const modifier = marker.kind === 'finish' ? '' : ` tl-marker-${marker.kind}`;
             return (
-              <g key={`m${i}`}>
-                <line
-                  x1={x(marker.frac)}
-                  x2={x(marker.frac)}
-                  y1={HEAD_H - 4}
-                  y2={height - PAD}
-                  className={`tl-marker${modifier}`}
-                />
-                <text
-                  x={x(marker.frac)}
-                  y={height - 2}
-                  className={`tl-marker-label${modifier ? ` tl-marker-label-${marker.kind}` : ''}`}
-                  textAnchor={anchor}
-                >
-                  {info.icon} {marker.date}
+              <g key={`mg${i}`}>
+                <text x={x(group.frac)} y={height - 2} className="tl-marker-label" textAnchor={anchor}>
+                  {group.kinds.map((kind) => (
+                    <tspan
+                      key={kind}
+                      className={kind === 'finish' ? undefined : `tl-marker-label-${kind}`}
+                    >
+                      {MARKER_INFO[kind].icon}
+                    </tspan>
+                  ))}{' '}
+                  {group.date}
                 </text>
                 <title>
-                  {info.label}: {marker.date}
+                  {group.kinds.map((kind) => MARKER_INFO[kind].label).join(' · ')}: {group.date}
                 </title>
               </g>
             );
