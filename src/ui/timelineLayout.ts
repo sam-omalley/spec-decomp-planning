@@ -61,6 +61,10 @@ export interface TimelineModel {
   weekends: TimelineWeekendBand[];
   rangeStart: string;
   rangeEnd: string;
+  /** Whole days spanned by [rangeStart, rangeEnd] — lets the view derive a
+   *  sensible zoom-in limit (e.g. never zoom narrower than a day) without
+   *  redoing the date math. */
+  rangeDays: number;
   empty: boolean;
 }
 
@@ -104,6 +108,7 @@ const EMPTY: TimelineModel = {
   weekends: [],
   rangeStart: '',
   rangeEnd: '',
+  rangeDays: 0,
   empty: true,
 };
 
@@ -213,7 +218,7 @@ export function buildTimeline(
   }
   if (bandStart !== null) weekends.push({ startFrac: bandStart / span, endFrac: 1 });
 
-  return { rows, markers, ticks, weekends, rangeStart, rangeEnd, empty: false };
+  return { rows, markers, ticks, weekends, rangeStart, rangeEnd, rangeDays: span, empty: false };
 }
 
 /** The calendar date at a fraction across `model`'s range — the inverse of
