@@ -107,6 +107,30 @@ export function makeArrowConnectionLine(options: {
   };
 }
 
+/**
+ * Builds a connection-line preview component: a plain dashed line with no
+ * arrowhead, matching how a real `assigned_to` edge renders once dropped
+ * (see `.gedge-assigned` in styles.css) rather than a Dependency-style arrow.
+ */
+export function makePlainConnectionLine(options: {
+  color: string;
+  strokeWidth?: number;
+  dashArray?: string;
+}): ComponentType<ConnectionLineComponentProps> {
+  const { color, strokeWidth = 1.5, dashArray = '6 4' } = options;
+  return function PlainConnectionLine({ fromX, fromY, toX, toY }) {
+    return (
+      <path
+        d={`M ${fromX} ${fromY} L ${toX} ${toY}`}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeDasharray={dashArray}
+      />
+    );
+  };
+}
+
 interface AuthoringCanvasProps<N extends FlowNode, E extends FlowEdge> {
   nodes: N[];
   edges: E[];
