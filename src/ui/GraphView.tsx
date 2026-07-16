@@ -38,7 +38,7 @@ import '@xyflow/react/dist/style.css';
 import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import { assignToGroup, removeEdge } from '../model/graph.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
-import { AuthoringCanvas, makeArrowConnectionLine, useConnectionSignature } from './AuthoringCanvas.tsx';
+import { AuthoringCanvas, makePlainConnectionLine, useConnectionSignature } from './AuthoringCanvas.tsx';
 import { rootGroupColor } from './colors.ts';
 import { DependencyGraph } from './DependencyGraph.tsx';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
@@ -144,9 +144,10 @@ function GroupGraphNode({ id, data }: NodeProps<GNode>) {
 
 const nodeTypes = { work: WorkGraphNode, group: GroupGraphNode };
 
-/** In-progress assignment line: a dashed link whose arrow points at the group
- *  (the plan side the work flows into), previewing the `assigned_to` edge. */
-const MapConnectionLine = makeArrowConnectionLine({ color: '#9aa0a6', arrowAtFromHandleId: 'lt' });
+/** In-progress assignment line: a plain dashed link with no arrowhead,
+ *  matching the dropped `assigned_to` edge's style (this canvas isn't the
+ *  Dependency graph, so it shouldn't look like one — see #100). */
+const MapConnectionLine = makePlainConnectionLine({ color: '#9aa0a6' });
 
 interface GraphViewProps {
   selectedId: string | null;
