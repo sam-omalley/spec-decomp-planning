@@ -1309,6 +1309,9 @@ body {
   border-radius: 10px;
 }
 
+.timeline-svg {
+  user-select: none;
+}
 .tl-weekend {
   fill: var(--border);
   opacity: 0.35;
@@ -1327,8 +1330,12 @@ body {
 .tl-row:hover .tl-row-hit {
   fill: var(--accent-soft);
 }
-.tl-row {
+.tl-label-hit {
+  fill: transparent;
   cursor: pointer;
+}
+.tl-chart-catcher {
+  fill: transparent;
 }
 .tl-label {
   font-size: 12px;
