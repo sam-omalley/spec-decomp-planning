@@ -27,7 +27,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Handle, MarkerType, Position } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import type {
   Connection,
   Edge as FlowEdge,
@@ -121,8 +121,8 @@ function GroupGraphNode({ id, data }: NodeProps<GNode>) {
     .filter(Boolean)
     .join(' ');
   // The left target handle receives assignments (spec → plan); the left source
-  // (contains, group tree) and right target (contains, from parent) only render
-  // existing edges, so they are not connectable.
+  // (contains, group tree) and right target (contains, from parent) only
+  // render existing edges, so they are not connectable.
   const leftDrag = dragClass(useConnectionSignature(), id, true);
   return (
     <div className={classes} style={{ ['--group-color' as string]: data.color }}>
@@ -321,29 +321,12 @@ export function GraphView({
     const result: FlowEdge<GEdgeData>[] = [];
     for (const edge of Object.values(graph.edges)) {
       if (!visibleIds.has(edge.from) || !visibleIds.has(edge.to)) continue;
-      if (edge.type === 'depends_on' || edge.type === 'blocks') {
-        // Normalize to "dependent → prerequisite"; the arrow points at
-        // what is needed first.
-        const [dependent, prerequisite] =
-          edge.type === 'depends_on' ? [edge.from, edge.to] : [edge.to, edge.from];
-        const cycleA = analysis.cycles.get(dependent);
-        const inCycle = cycleA !== undefined && cycleA === analysis.cycles.get(prerequisite);
-        result.push({
-          id: edge.id,
-          source: dependent,
-          target: prerequisite,
-          sourceHandle: 'rs',
-          targetHandle: 'lt',
-          className: inCycle ? 'gedge-dep gedge-dep-cycle' : 'gedge-dep',
-          animated: inCycle,
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 16,
-            height: 16,
-            color: inCycle ? '#b42318' : '#b58a2c',
-          },
-        });
-      } else if (edge.type === 'contains') {
+      // Dependency (depends_on/blocks) arrows are deliberately not drawn here —
+      // this canvas is for assignment authoring, and a plan with non-trivial
+      // dependencies gets visually unreadable once those arrows are layered
+      // on top of contains/assigned_to. They have their own canvas (Dependency
+      // mode) where the layout is built around showing them clearly.
+      if (edge.type === 'contains') {
         const groupSide = graph.nodes[edge.from]?.type === 'group';
         result.push({
           id: edge.id,
