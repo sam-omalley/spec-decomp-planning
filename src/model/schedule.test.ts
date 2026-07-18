@@ -231,6 +231,76 @@ describe('scheduleProject — calendar exceptions (holidays & leave)', () => {
   });
 });
 
+describe('scheduleProject — slack', () => {
+  it('gives a parallel non-critical unit slack up to the project finish', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 5); // Mon..Fri, defines the project finish
+    g = group(g, 'b', 2); // Mon..Tue, idle the rest of the week
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.slackUntil, undefined); // critical, 0 slack
+    assert.equal(s.groups.get('b')!.slackUntil, '2024-01-05'); // could slip to Fri
+  });
+
+  it('gives every unit on the critical chain zero slack', () => {
+    let g = base();
+    g = group(g, 'a', 2);
+    g = group(g, 'b', 2);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a' });
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.slackUntil, undefined);
+    assert.equal(s.groups.get('b')!.slackUntil, undefined);
+  });
+
+  it('gives a shorter branch of a diamond slack up to the longer branch', () => {
+    // a → b (4 days) → d, and a → c (1 day) → d: c is slack, b is critical.
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 1);
+    g = group(g, 'b', 4);
+    g = group(g, 'c', 1);
+    g = group(g, 'd', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a' });
+    g = addEdge(g, { type: 'depends_on', from: 'c', to: 'a' });
+    g = addEdge(g, { type: 'depends_on', from: 'd', to: 'b' });
+    g = addEdge(g, { type: 'depends_on', from: 'd', to: 'c' });
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('b')!.slackUntil, undefined); // on the critical path
+    assert.notEqual(s.groups.get('c')!.slackUntil, undefined); // 3 days of float
+  });
+
+  it("treats a shared track's queue as an implicit prereq — no false slack from capacity alone", () => {
+    // No dependency edge between a and b, but a single track (no team) means
+    // b is queued behind a. Delaying a would delay b, so a must show zero
+    // slack even though nothing *depends* on it.
+    let g = base(); // empty team ⇒ one full-time track
+    g = group(g, 'a', 2); // Mon..Tue
+    g = group(g, 'b', 2); // queued: Wed..Thu, defines the project finish
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.slackUntil, undefined);
+    assert.equal(s.groups.get('b')!.slackUntil, undefined);
+  });
+
+  it('never reports slack for a done unit — nothing left to flex', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 5);
+    g = group(g, 'b', 1);
+    g = setActualDates(g, 'b', { actualStart: '2024-01-01', actualFinish: '2024-01-01' });
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('b')!.source, 'actual');
+    assert.equal(s.groups.get('b')!.slackUntil, undefined);
+  });
+
+  it('does not hang on a dependency cycle', () => {
+    let g = base();
+    g = group(g, 'a', 1);
+    g = group(g, 'b', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'a', to: 'b' });
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a' });
+    const s = scheduleProject(g); // must return, not loop forever
+    assert.ok(s.groups.get('a'));
+    assert.ok(s.groups.get('b'));
+  });
+});
+
 describe('scheduleProject — cycles & containers', () => {
   it('schedules a dependency cycle as a batch without hanging', () => {
     let g = base();
