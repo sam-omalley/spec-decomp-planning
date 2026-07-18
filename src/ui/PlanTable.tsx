@@ -15,9 +15,9 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
 import { assignResource, setActualDates, setEstimate, updateNode } from '../model/graph.ts';
 import { rolledDuration, rolledEffort } from '../model/rollup.ts';
-import { toDatetimeLocalValue } from '../model/time.ts';
 import type { Priority, ProjectGraph, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { ActualDateInput } from './ActualDateInput.tsx';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { KeyEditor } from './KeyEditor.tsx';
 import { isLocked } from './locks.ts';
@@ -341,26 +341,28 @@ export function PlanTable({
                     onBlur={() => store.breakCoalescing()}
                   />
                 </td>
-                <td>
-                  <input
-                    className="cell-input cell-date"
-                    type="datetime-local"
-                    value={toDatetimeLocalValue(node.actualStart)}
-                    onChange={(e) =>
-                      bulkCommit(row.id, (g, t) =>
-                        setActualDates(g, t, { actualStart: e.target.value || null }),
+                <td className="cell-date">
+                  <ActualDateInput
+                    compact
+                    value={node.actualStart}
+                    onChange={(value) =>
+                      bulkCommit(
+                        row.id,
+                        (g, t) => setActualDates(g, t, { actualStart: value }),
+                        `actual-start:${row.id}`,
                       )
                     }
                   />
                 </td>
-                <td>
-                  <input
-                    className="cell-input cell-date"
-                    type="datetime-local"
-                    value={toDatetimeLocalValue(node.actualFinish)}
-                    onChange={(e) =>
-                      bulkCommit(row.id, (g, t) =>
-                        setActualDates(g, t, { actualFinish: e.target.value || null }),
+                <td className="cell-date">
+                  <ActualDateInput
+                    compact
+                    value={node.actualFinish}
+                    onChange={(value) =>
+                      bulkCommit(
+                        row.id,
+                        (g, t) => setActualDates(g, t, { actualFinish: value }),
+                        `actual-finish:${row.id}`,
                       )
                     }
                   />

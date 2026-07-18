@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { elapsedWorkingDays, toDateOnly, toDatetimeLocalValue } from './time.ts';
+import {
+  combineDateAndTime,
+  elapsedWorkingDays,
+  toDateInputValue,
+  toDateOnly,
+  toTimeInputValue,
+} from './time.ts';
 
 describe('toDateOnly', () => {
   it('strips a time-of-day, leaves a bare date unchanged', () => {
@@ -9,11 +15,34 @@ describe('toDateOnly', () => {
   });
 });
 
-describe('toDatetimeLocalValue', () => {
-  it('defaults a bare date to 00:00, passes a datetime through, null → empty', () => {
-    assert.equal(toDatetimeLocalValue('2026-07-08'), '2026-07-08T00:00');
-    assert.equal(toDatetimeLocalValue('2026-07-08T14:30'), '2026-07-08T14:30');
-    assert.equal(toDatetimeLocalValue(null), '');
+describe('toDateInputValue', () => {
+  it('strips a time-of-day, passes a bare date through, null → empty', () => {
+    assert.equal(toDateInputValue('2026-07-08T14:30'), '2026-07-08');
+    assert.equal(toDateInputValue('2026-07-08'), '2026-07-08');
+    assert.equal(toDateInputValue(null), '');
+  });
+});
+
+describe('toTimeInputValue', () => {
+  it('extracts the time-of-day, empty for a bare date or unset', () => {
+    assert.equal(toTimeInputValue('2026-07-08T14:30'), '14:30');
+    assert.equal(toTimeInputValue('2026-07-08'), '');
+    assert.equal(toTimeInputValue(null), '');
+  });
+});
+
+describe('combineDateAndTime', () => {
+  it('combines into a datetime-local string when time is set', () => {
+    assert.equal(combineDateAndTime('2026-07-08', '14:30'), '2026-07-08T14:30');
+  });
+
+  it('stays a bare date when time is empty', () => {
+    assert.equal(combineDateAndTime('2026-07-08', ''), '2026-07-08');
+  });
+
+  it('is null when date is empty, regardless of time', () => {
+    assert.equal(combineDateAndTime('', ''), null);
+    assert.equal(combineDateAndTime('', '14:30'), null);
   });
 });
 
