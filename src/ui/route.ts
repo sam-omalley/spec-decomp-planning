@@ -11,7 +11,7 @@ import type { GraphMode } from './GraphView.tsx';
 
 export type Section = 'spec' | 'planning' | 'graph' | 'reporting' | 'settings';
 export type PlanMode = 'outline' | 'table' | 'markdown';
-export type ReportMode = 'timeline' | 'metrics' | 'assignees' | 'concerns';
+export type ReportMode = 'timeline' | 'metrics' | 'assignees' | 'concerns' | 'coverage';
 export type { GraphMode };
 
 /** The full navigation state the URL encodes. */
@@ -33,7 +33,13 @@ export interface RoutePatch {
 const SECTIONS: readonly Section[] = ['spec', 'planning', 'graph', 'reporting', 'settings'];
 const PLAN_MODES: readonly PlanMode[] = ['outline', 'table', 'markdown'];
 const GRAPH_MODES: readonly GraphMode[] = ['map', 'dep'];
-const REPORT_MODES: readonly ReportMode[] = ['timeline', 'metrics', 'assignees', 'concerns'];
+const REPORT_MODES: readonly ReportMode[] = [
+  'timeline',
+  'metrics',
+  'assignees',
+  'concerns',
+  'coverage',
+];
 
 /** The active sub-view for a section, or null for a section with none (Spec). */
 export function subOf(state: RouteState): string | null {

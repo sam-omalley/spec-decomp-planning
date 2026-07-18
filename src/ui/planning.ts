@@ -90,6 +90,30 @@ export function uncoveredWorkIds(graph: ProjectGraph): Set<string> {
   return result;
 }
 
+export interface UncoveredNode {
+  id: string;
+  children: UncoveredNode[];
+}
+
+/**
+ * Top-down forest of uncovered spec subtrees. The moment a node is
+ * covered, it — and everything under it, which inherits that coverage —
+ * is pruned, so a covered node nested inside an otherwise-uncovered
+ * subtree (its own direct assignment) still stops that branch.
+ */
+export function uncoveredForest(graph: ProjectGraph): UncoveredNode[] {
+  function visit(id: string): UncoveredNode | null {
+    if (!isUncovered(graph, id)) return null;
+    const children = childrenOf(graph, id)
+      .map(visit)
+      .filter((n): n is UncoveredNode => n !== null);
+    return { id, children };
+  }
+  return rootsOf(graph)
+    .map(visit)
+    .filter((n): n is UncoveredNode => n !== null);
+}
+
 /**
  * True when `groupId` is a leaf group (no child groups) with no work
  * items assigned to it — an epic you created but never filled.

@@ -13,6 +13,7 @@ import {
   isUncovered,
   overlappingMembers,
   rootGroupOf,
+  uncoveredForest,
   uncoveredWorkIds,
 } from './planning.ts';
 
@@ -117,6 +118,51 @@ describe('uncoveredWorkIds', () => {
     const ids = uncoveredWorkIds(fixture());
     assert.equal(ids.has('block1'), false);
     assert.equal(ids.has('epicA'), false);
+  });
+});
+
+describe('uncoveredForest', () => {
+  it('nests the full tree under the uncovered root when nothing is assigned', () => {
+    assert.deepEqual(uncoveredForest(fixture()), [
+      {
+        id: 'app',
+        children: [
+          {
+            id: 'auth',
+            children: [
+              { id: 'login', children: [] },
+              { id: 'signup', children: [] },
+            ],
+          },
+          { id: 'billing', children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it('prunes a covered branch entirely, keeping uncovered siblings', () => {
+    const g = assignToGroup(fixture(), 'auth', 'epicA');
+    assert.deepEqual(uncoveredForest(g), [
+      { id: 'app', children: [{ id: 'billing', children: [] }] },
+    ]);
+  });
+
+  it('prunes only a covered island, surfacing its uncovered sibling', () => {
+    const g = assignToGroup(fixture(), 'login', 'epicA');
+    assert.deepEqual(uncoveredForest(g), [
+      {
+        id: 'app',
+        children: [
+          { id: 'auth', children: [{ id: 'signup', children: [] }] },
+          { id: 'billing', children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it('is empty once the root is covered', () => {
+    const g = assignToGroup(fixture(), 'app', 'block1');
+    assert.deepEqual(uncoveredForest(g), []);
   });
 });
 

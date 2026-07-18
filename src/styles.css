@@ -1712,6 +1712,26 @@ body {
   }
 }
 
+/* ------------------------------ coverage view ------------------------------ */
+.coverage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.coverage-row {
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.coverage-row-link {
+  cursor: pointer;
+}
+.coverage-row-link:hover {
+  background: color-mix(in srgb, var(--muted) 6%, var(--panel));
+}
+
 /* ⓘ info affordance: a muted glyph that reveals a calculation note on
    hover/focus. Read-mostly, hand-rolled — no JS positioning. */
 .info-dot {
