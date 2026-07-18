@@ -9,6 +9,8 @@
 import { useMemo, useState } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { assigneeMetrics, type AssigneeMetrics } from '../model/assigneeMetrics.ts';
+import { forwardLoad, type ForwardLoadModel } from '../model/forwardLoad.ts';
+import { todayIso } from '../model/graph.ts';
 import { GROUP_COLORS } from './colors.ts';
 import { InfoDot } from './InfoDot.tsx';
 import { formatDays } from './format.ts';
@@ -22,6 +24,8 @@ const HELP = {
     'Completed effort points divided by the actual working days spent on that assignee’s completed stories. Higher = more points delivered per day worked. FTE is shown for context but not divided out.',
   histogram:
     'Completed stories bucketed by the week (Monday-start) of their actual finish, stacked by assignee. Toggle between summed effort points and story count. Empty weeks between the first and last completion are kept so the cadence is visible.',
+  forward:
+    'Working days per week (weekends, holidays, and that resource’s own leave already excluded) that the projected schedule has committed on each resource’s track, vs. how many are available — from scheduleProject, the same projection Timeline/Metrics use. Never over 100%: the scheduler places one thing at a time per resource, so this shows how close to full someone is, not double-booking.',
 } as const;
 
 /** Stable per-assignee colour: resources cycle the shared palette by their
@@ -38,6 +42,7 @@ function colorMap(m: AssigneeMetrics): Map<string | null, string> {
 export function AssigneeMetricsView() {
   const graph = useProjectGraph();
   const m = useMemo(() => assigneeMetrics(graph), [graph]);
+  const forward = useMemo(() => forwardLoad(graph, todayIso()), [graph]);
   const [mode, setMode] = useState<'points' | 'issues'>('points');
   // Which assignee the histogram is filtered to (#49); null = all. The id may
   // itself be null (the Unassigned bucket), so the "all" state is the outer
@@ -47,7 +52,8 @@ export function AssigneeMetricsView() {
     setSelected((cur) => (cur && cur.id === id ? null : { id }));
 
   const anyCompleted = m.rows.some((r) => r.completedCount > 0);
-  if (!anyCompleted) {
+  const hasForward = forward.resources.length > 0;
+  if (!anyCompleted && !hasForward) {
     const noTeam = graph.settings.resources.length === 0;
     return (
       <div className="metrics-empty">
@@ -72,6 +78,8 @@ export function AssigneeMetricsView() {
 
   return (
     <div className="metrics-wrap">
+      {anyCompleted && (
+      <>
       <section className="metric-panel">
         <h3>
           Estimate vs actual &amp; throughput <InfoDot text={HELP.estVsActual} />
@@ -199,6 +207,61 @@ export function AssigneeMetricsView() {
           )}
         </div>
       </section>
+      </>
+      )}
+
+      {hasForward && (
+        <section className="metric-panel">
+          <h3>
+            Forward capacity <InfoDot text={HELP.forward} align="start" />
+          </h3>
+          <ForwardCapacity model={forward} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ForwardCapacity({ model }: { model: ForwardLoadModel }) {
+  return (
+    <div className="fwd-table">
+      <div className="fwd-row fwd-head">
+        <span className="fwd-name">Resource</span>
+        {model.weekStarts.map((w) => (
+          <span key={w} className="fwd-cell fwd-week-label">
+            {w.slice(5)}
+          </span>
+        ))}
+      </div>
+      {model.resources.map((r) => (
+        <div className="fwd-row" key={r.id}>
+          <span className="fwd-name">
+            {r.name}
+            {r.fte !== 1 && <span className="asg-fte">{r.fte} FTE</span>}
+          </span>
+          {r.weeks.map((w) => {
+            const pct = Math.round(w.utilization * 100);
+            const state =
+              w.capacityDays === 0 ? 'off' : pct === 0 ? 'idle' : pct >= 100 ? 'full' : 'mid';
+            return (
+              <span
+                key={w.weekStart}
+                className={`fwd-cell fwd-cell-${state}`}
+                title={`Week of ${w.weekStart}: ${w.committedDays} of ${w.capacityDays} working days committed`}
+              >
+                <span
+                  className="fwd-cell-fill"
+                  style={{ width: `${Math.min(100, pct)}%` }}
+                  aria-hidden="true"
+                />
+                <span className="fwd-cell-label">
+                  {state === 'off' ? '—' : state === 'idle' ? 'Idle' : `${pct}%`}
+                </span>
+              </span>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
