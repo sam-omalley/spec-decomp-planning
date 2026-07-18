@@ -1481,6 +1481,19 @@ body {
   stroke: var(--text);
   stroke-width: 1.5;
 }
+/* Slack (float) trailing indicator: a diagonal-hatch texture and a dashed
+   outline — deliberately not a solid colour block, so it reads regardless
+   of colour perception (issue #108). */
+.tl-slack {
+  fill: url(#tl-slack-hatch);
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+.tl-slack-hatch-line {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
 .tl-legend {
   display: flex;
   align-items: center;
@@ -1499,6 +1512,16 @@ body {
   background: var(--accent);
   opacity: 0.85;
   border: 1.5px solid #d1495b;
+}
+.tl-legend-slack {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    var(--muted) 2px,
+    var(--muted) 3px
+  );
+  border: 1.5px dashed var(--muted);
 }
 .tl-legend-markers {
   gap: 14px;
