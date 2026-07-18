@@ -1154,7 +1154,7 @@ body {
 }
 
 .actual-date-input .meta-input[type='time'] {
-  width: 90px;
+  width: 118px;
   color: var(--muted);
 }
 
@@ -1198,11 +1198,6 @@ body {
 
 .ref-input-key {
   width: 90px;
-}
-
-.ref-add-button:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 
 /* Shared key editor (chips + single key input), used in the details card
@@ -2675,7 +2670,7 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 }
 
 .cell-date {
-  width: 212px;
+  width: 250px;
   color: var(--muted);
 }
 
@@ -2686,14 +2681,18 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   width: 100%;
 }
 
+/* Table cells shrink under the browser's auto table-layout once the sum of
+   column widths outgrows the viewport — min-width: 0 let that eat these
+   inputs down to icon-only. A real min-width instead makes the *table*
+   overflow (the wrap already scrolls) rather than clipping the fields. */
 .cell-date .cell-date-part {
-  width: 0;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 108px;
+  min-width: 108px;
 }
 
 .cell-date .cell-date-part[type='time'] {
-  flex: 0 1 68px;
+  flex: 0 0 104px;
+  min-width: 104px;
 }
 
 .plan-table .col-title {
