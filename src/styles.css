@@ -40,7 +40,10 @@ body {
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  z-index: 1;
+  /* Above the sticky table thead (z-index: 1) and any other in-page sticky
+     content, so a header dropdown (.header-menu-list) always paints over
+     the scrolled body instead of the other way round. */
+  z-index: 2;
   /* Toolbar chrome: never leave a text selection or blinking caret behind on
      clicks (Firefox will place a caret in non-editable text where Chromium
      won't). The search input re-enables both below. */
@@ -135,6 +138,45 @@ body {
 }
 
 .header-link:hover {
+  background: var(--accent-soft);
+}
+
+.header-menu {
+  position: relative;
+}
+
+.header-menu-trigger[aria-expanded='true'] {
+  background: var(--accent-soft);
+}
+
+.header-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 15;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+}
+
+.header-menu-list button,
+.header-menu-list a.header-link {
+  border: none;
+  border-radius: 5px;
+  background: none;
+  text-align: left;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.header-menu-list button:hover,
+.header-menu-list a.header-link:hover {
   background: var(--accent-soft);
 }
 
