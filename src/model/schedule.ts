@@ -48,6 +48,15 @@ export interface ScheduledGroup {
    */
   stretch?: { speedMultiplier: number; fte: number };
   /**
+   * The resource id whose track this unit was placed on — whether pinned
+   * there explicitly (`WorkNode.resourceId`) or auto-placed onto the
+   * earliest-free track; null when there's no explicit team (the single
+   * implicit track). Present only for units, not containers, so a forward
+   * capacity view can attribute *every* scheduled unit (including
+   * unassigned ones) to the resource whose calendar it actually occupies.
+   */
+  trackResourceId?: string | null;
+  /**
    * The latest this unit could finish without moving the project's
    * projected finish (its float/slack) — present only for a still-projected
    * unit (`source: 'planned'`) with slack > 0; absent on the critical path
@@ -352,6 +361,7 @@ export function scheduleProject(
     }
     if (trackLastUnit[track] !== null) capacityPrereqs.set(u, trackLastUnit[track]!);
     trackLastUnit[track] = u;
+    const trackResourceId = resources.length > 0 ? resources[track]!.id : null;
     // The track's FTE stretches the projected duration (fte < 1 ⇒ longer).
     const fte = trackFte[track]!;
     const duration = (node.durationEstimate ?? 0) / (speed * fte);
@@ -372,7 +382,7 @@ export function scheduleProject(
       // day-granular — any time-of-day on the actual is dropped here.
       const finish = toDateOnly(node.actualFinish);
       const start = toDateOnly(node.actualStart ?? node.actualFinish);
-      groups.set(u, { start, finish, source: 'actual', isUnit: true });
+      groups.set(u, { start, finish, source: 'actual', isUnit: true, trackResourceId });
       startOffset.set(u, cal.offsetOf(start));
       finishOffset.set(u, cal.offsetOf(finish) + 1);
     } else if (node.actualStart !== null) {
@@ -393,6 +403,7 @@ export function scheduleProject(
         finish: cal.isoAt(finishIdx),
         source: 'planned',
         isUnit: true,
+        trackResourceId,
         ...(stretch ? { stretch } : {}),
       });
       startOffset.set(u, startOff);
@@ -421,6 +432,7 @@ export function scheduleProject(
         finish: cal.isoAt(finishIdx),
         source: 'planned',
         isUnit: true,
+        trackResourceId,
         ...(stretch ? { stretch } : {}),
       });
       startOffset.set(u, startOff);

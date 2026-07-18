@@ -59,6 +59,7 @@ describe('scheduleProject — calendar & weekends', () => {
       finish: '2024-01-05',
       source: 'planned',
       isUnit: true,
+      trackResourceId: null,
     });
     assert.equal(s.projectFinish, '2024-01-05');
   });
@@ -151,6 +152,16 @@ describe('scheduleProject — resourcing', () => {
     g = group(g, 'b', 3); // unassigned → floats to the free r1, runs in parallel
     const s = scheduleProject(g);
     assert.equal(s.groups.get('b')!.start, '2024-01-01');
+  });
+
+  it('reports trackResourceId for both a pinned and an auto-placed unit', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    g = group(g, 'b', 3); // unassigned → auto-placed on r1
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.trackResourceId, 'r0');
+    assert.equal(s.groups.get('b')!.trackResourceId, 'r1');
   });
 
   it('treats an empty team as one full-time track', () => {
@@ -342,6 +353,7 @@ describe('scheduleProject — actuals blend over projection', () => {
       finish: '2024-01-03',
       source: 'actual',
       isUnit: true,
+      trackResourceId: null,
       // ...a done unit has real dates, nothing projected, so no stretch to explain.
     });
     // b projects from a's actual finish (offset 2 → next is Jan 4).

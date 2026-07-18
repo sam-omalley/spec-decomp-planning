@@ -2186,6 +2186,90 @@ button.asg-legend-item:hover {
   min-width: 120px;
 }
 
+/* Forward capacity (per-resource, upcoming weeks) — Assignees view */
+.fwd-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-x: auto;
+}
+.fwd-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fwd-head {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.fwd-name {
+  flex: 0 0 120px;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.fwd-week-label {
+  background: none !important;
+  color: var(--muted);
+  font-weight: 600;
+  justify-content: center;
+}
+.fwd-cell {
+  position: relative;
+  flex: 1 0 56px;
+  min-width: 56px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.fwd-cell-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent-soft);
+}
+.fwd-cell-label {
+  position: relative;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+/* Idle and full weeks are marked by border style + text, not colour alone. */
+.fwd-cell-idle {
+  border-style: dashed;
+}
+.fwd-cell-idle .fwd-cell-label {
+  color: var(--muted);
+}
+.fwd-cell-full {
+  border-width: 2px;
+  border-color: var(--text);
+  font-weight: 700;
+}
+.fwd-cell-off {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 3px,
+    var(--border) 3px,
+    var(--border) 4px
+  );
+}
+.fwd-cell-off .fwd-cell-label {
+  color: var(--muted);
+}
+
 /* graph view dependency styling */
 
 .gedge-dep .react-flow__edge-path {
