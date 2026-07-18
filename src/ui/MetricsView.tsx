@@ -17,6 +17,7 @@ import {
 } from '../model/metrics.ts';
 import { InfoDot } from './InfoDot.tsx';
 import { formatDays } from './format.ts';
+import { applyScenario, type ScenarioPatch } from './scenario.ts';
 
 /** Sentinel <select> values for the two non-resource assignee options. */
 const EVA_ALL = 'all';
@@ -50,18 +51,25 @@ const HELP = {
 interface MetricsViewProps {
   /** Jump to a unit's group definition in the plan outline. */
   onReveal?: (id: string) => void;
+  /** Active what-if scenario (team/speed override), or null/absent for the
+   *  real projection — see `scenario.ts`. Shared with TimelineView via
+   *  App.tsx. Only the schedule-derived figures below (projection summary,
+   *  burn-up) use it; estimate-vs-actual is completed history and stays on
+   *  the real graph regardless. */
+  scenario?: ScenarioPatch | null;
 }
 
-export function MetricsView({ onReveal }: MetricsViewProps = {}) {
+export function MetricsView({ onReveal, scenario = null }: MetricsViewProps = {}) {
   const graph = useProjectGraph();
   const now = todayIso();
-  const schedule = useMemo(() => scheduleProject(graph, now), [graph, now]);
+  const effectiveGraph = useMemo(() => applyScenario(graph, scenario), [graph, scenario]);
+  const schedule = useMemo(() => scheduleProject(effectiveGraph, now), [effectiveGraph, now]);
   const summary = useMemo(
-    () => projectionSummary(graph, now, schedule),
-    [graph, now, schedule],
+    () => projectionSummary(effectiveGraph, now, schedule),
+    [effectiveGraph, now, schedule],
   );
   const variance = useMemo(() => estimateVsActual(graph), [graph]);
-  const burn = useMemo(() => burnUp(graph, now, schedule), [graph, now, schedule]);
+  const burn = useMemo(() => burnUp(effectiveGraph, now, schedule), [effectiveGraph, now, schedule]);
 
   // Assignee filter for the estimate-vs-actual panel (#50). Options are the
   // assignees that actually have completed units, in team order + Unassigned.
@@ -102,7 +110,7 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
         : `${Math.abs(summary.varianceDays)}d ${summary.varianceDays > 0 ? 'late' : 'early'}`;
 
   return (
-    <div className="metrics-wrap">
+    <div className={`metrics-wrap${scenario ? ' metrics-wrap-scenario' : ''}`}>
       <section className="metric-cards">
         <Card
           label="Projected finish"
@@ -160,7 +168,7 @@ export function MetricsView({ onReveal }: MetricsViewProps = {}) {
         <h3>
           Burn-up — completed vs total scope (days) <InfoDot text={HELP.burnUp} />
         </h3>
-        <BurnUpChart graph={graph} summary={summary} burn={burn} />
+        <BurnUpChart graph={effectiveGraph} summary={summary} burn={burn} />
       </section>
 
       <section className="metric-panel">
