@@ -152,7 +152,9 @@ body {
 .header-menu-list {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  /* The trigger sits at the header's far right edge, so anchor the list to
+     its right side (opening leftward) rather than overflowing off-screen. */
+  right: 0;
   z-index: 15;
   min-width: 160px;
   display: flex;

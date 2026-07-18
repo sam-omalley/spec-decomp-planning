@@ -311,6 +311,13 @@ export function App() {
             if (file) void importProject(file);
           }}
         />
+        <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
+          ↩ Undo
+        </button>
+        <button disabled={!store.canRedo} onClick={() => store.redo()} title="⇧⌘Z">
+          ↪ Redo
+        </button>
+        <span className="header-divider" />
         <HeaderMenu label="☰" title="Menu">
           <button onClick={() => fileInputRef.current?.click()} title="Open a project .json">
             Open…
@@ -336,13 +343,6 @@ export function App() {
             GitHub ↗
           </a>
         </HeaderMenu>
-        <span className="header-divider" />
-        <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
-          ↩ Undo
-        </button>
-        <button disabled={!store.canRedo} onClick={() => store.redo()} title="⇧⌘Z">
-          ↪ Redo
-        </button>
       </header>
       {backupText && (
         <div className="app-banner" role="alert">
