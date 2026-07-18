@@ -130,8 +130,8 @@ describe('analyzeConcerns — project-level signals', () => {
   it('flags thin WIP when work waits below capacity', () => {
     let g = base({
       resources: [
-        { id: 'r1', name: 'A', fte: 1 },
-        { id: 'r2', name: 'B', fte: 1 },
+        { id: 'r1', name: 'A', fte: 1, leave: [] },
+        { id: 'r2', name: 'B', fte: 1, leave: [] },
       ],
     });
     g = group(g, 'a', 3); // not started
@@ -157,7 +157,7 @@ describe('analyzeConcerns — project-level signals', () => {
   });
 
   it('is empty for a clean, on-track plan', () => {
-    let g = base({ targetDate: '2024-12-31', resources: [{ id: 'r1', name: 'A', fte: 1 }] });
+    let g = base({ targetDate: '2024-12-31', resources: [{ id: 'r1', name: 'A', fte: 1, leave: [] }] });
     g = group(g, 'a', 3);
     g = assignResource(g, 'a', 'r1');
     g = setActualDates(g, 'a', { actualStart: '2024-01-01' }); // in progress, on time

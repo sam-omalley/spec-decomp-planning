@@ -27,9 +27,16 @@
  * preserve capacity, turns `parallelTracks > 1` into that many generic
  * full-time resources (a single track stays an empty team). Nodes gain
  * `resourceId` (backfilled null). No data loss.
+ *
+ * v6 → v7: calendar exceptions. Settings gain `holidays` (project-wide
+ * non-working date ranges); each `Resource` gains `leave` (individual time
+ * off). Both backfilled to `[]` — an empty calendar-exception list is a
+ * pure no-op for the scheduler, so older files behave identically until
+ * exceptions are added. No data loss.
  */
 
 import type {
+  DateRange,
   Edge,
   EdgeType,
   ProjectGraph,
@@ -39,7 +46,7 @@ import type {
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 6;
+export const FILE_VERSION = 7;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -47,7 +54,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -116,6 +123,21 @@ function backfillNodeDefaults(nodes: Record<string, WorkNode>): void {
   }
 }
 
+/** Sanitises a persisted date-range array; drops entries that aren't valid. */
+function normalizeRanges(provided: unknown): DateRange[] {
+  if (!Array.isArray(provided)) return [];
+  const out: DateRange[] = [];
+  for (const item of provided) {
+    if (typeof item !== 'object' || item === null) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.start !== 'string' || r.start === '') continue;
+    if (typeof r.end !== 'string' || r.end === '') continue;
+    if (r.start > r.end) continue;
+    out.push({ start: r.start, end: r.end });
+  }
+  return out;
+}
+
 /** Sanitises a persisted resources array; drops entries that aren't valid. */
 function normalizeResources(provided: unknown): Resource[] | null {
   if (!Array.isArray(provided)) return null;
@@ -126,7 +148,12 @@ function normalizeResources(provided: unknown): Resource[] | null {
     const r = item as Record<string, unknown>;
     if (typeof r.id !== 'string' || r.id === '' || seen.has(r.id)) continue;
     const fte = typeof r.fte === 'number' && r.fte > 0 ? r.fte : 1;
-    out.push({ id: r.id, name: typeof r.name === 'string' ? r.name : '', fte });
+    out.push({
+      id: r.id,
+      name: typeof r.name === 'string' ? r.name : '',
+      fte,
+      leave: normalizeRanges(r.leave),
+    });
     seen.add(r.id);
   }
   return out;
@@ -163,6 +190,7 @@ function normalizeSettings(provided: unknown): ProjectSettings {
             id: createId(),
             name: `Resource ${i + 1}`,
             fte: 1,
+            leave: [],
           }))
         : [];
   }
@@ -174,6 +202,7 @@ function normalizeSettings(provided: unknown): ProjectSettings {
     hoursPerWeek,
     resources,
     speedMultiplier: num(p.speedMultiplier, base.speedMultiplier),
+    holidays: normalizeRanges(p.holidays),
     specLockDepth: lockDepth(p.specLockDepth, base.specLockDepth),
     planLockDepth: lockDepth(p.planLockDepth, base.planLockDepth),
   };

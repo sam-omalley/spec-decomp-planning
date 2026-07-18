@@ -22,7 +22,7 @@ function base(overrides: Partial<Parameters<typeof updateSettings>[1]> = {}): Pr
 
 /** N full-time tracks, ids r0..r(N-1) — capacity is one track per resource. */
 function tracks(n: number, fte = 1) {
-  return Array.from({ length: n }, (_, i) => ({ id: `r${i}`, name: `R${i}`, fte }));
+  return Array.from({ length: n }, (_, i) => ({ id: `r${i}`, name: `R${i}`, fte, leave: [] }));
 }
 
 function group(g: ProjectGraph, id: string, days: number | null, parent?: string): ProjectGraph {
@@ -125,7 +125,7 @@ describe('scheduleProject — capacity', () => {
 
 describe('scheduleProject — resourcing', () => {
   it('stretches a duration by the assigned resource FTE', () => {
-    let g = base({ resources: [{ id: 'r0', name: 'Half', fte: 0.5 }] });
+    let g = base({ resources: [{ id: 'r0', name: 'Half', fte: 0.5, leave: [] }] });
     g = group(g, 'a', 2); // 2 / (1 × 0.5) = 4 working days → Mon..Thu
     g = assignResource(g, 'a', 'r0');
     const s = scheduleProject(g);
@@ -160,6 +160,74 @@ describe('scheduleProject — resourcing', () => {
     const s = scheduleProject(g);
     assert.equal(s.groups.get('a')!.start, '2024-01-01');
     assert.equal(s.groups.get('b')!.start, '2024-01-03');
+  });
+});
+
+describe('scheduleProject — calendar exceptions (holidays & leave)', () => {
+  it('skips a project-wide holiday for a unit with no resource at all', () => {
+    let g = base({ holidays: [{ start: '2024-01-02', end: '2024-01-02' }] }); // Tue
+    g = group(g, 'a', 2); // 2 working days, would naively be Mon+Tue
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-01');
+    assert.equal(s.groups.get('a')!.finish, '2024-01-03'); // Tue skipped
+  });
+
+  it('is a no-op when the holiday list is empty (default, backward compatible)', () => {
+    let g = base();
+    g = group(g, 'a', 5);
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.finish, '2024-01-05');
+  });
+
+  it("extends a unit's finish past a mid-span leave day on its own resource's track", () => {
+    let g = base({
+      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-03', end: '2024-01-03' }] }],
+    });
+    g = group(g, 'a', 3); // naively Mon..Wed
+    g = assignResource(g, 'a', 'r0');
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-01'); // start unaffected
+    assert.equal(s.groups.get('a')!.finish, '2024-01-04'); // Wed skipped, spills to Thu
+  });
+
+  it("pushes a unit's start forward when it would otherwise begin on its resource's leave", () => {
+    let g = base({
+      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-01', end: '2024-01-01' }] }],
+    });
+    g = group(g, 'a', 1);
+    g = assignResource(g, 'a', 'r0');
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-02');
+    assert.equal(s.groups.get('a')!.finish, '2024-01-02');
+  });
+
+  it("only affects the leave-taking resource's own track, not a parallel one", () => {
+    let g = base({
+      resources: [
+        { id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-02', end: '2024-01-03' }] },
+        { id: 'r1', name: 'Bo', fte: 1, leave: [] },
+      ],
+    });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    g = group(g, 'b', 3);
+    g = assignResource(g, 'b', 'r1');
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.finish, '2024-01-05'); // Tue+Wed skipped
+    assert.equal(s.groups.get('b')!.finish, '2024-01-03'); // unaffected
+  });
+
+  it('never moves an in-progress unit\'s real start, only extends its projected remainder', () => {
+    let g = base({
+      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-03', end: '2024-01-03' }] }],
+    });
+    g = group(g, 'a', 4); // 4-day estimate
+    g = assignResource(g, 'a', 'r0');
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01' }); // in progress
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-01'); // unmoved
+    // Naive finish (no leave) would be Jan4; the Jan3 leave day pushes it to Jan5.
+    assert.equal(s.groups.get('a')!.finish, '2024-01-05');
   });
 });
 
