@@ -1143,8 +1143,19 @@ body {
   width: 130px;
 }
 
-.meta-input[type='datetime-local'] {
-  width: 212px;
+.actual-date-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.actual-date-input .meta-input {
+  width: 132px;
+}
+
+.actual-date-input .meta-input[type='time'] {
+  width: 90px;
+  color: var(--muted);
 }
 
 .meta-refs {
@@ -1401,6 +1412,14 @@ body {
 .date-range-input {
   width: 130px;
 }
+.date-range-input-invalid {
+  border-color: #d1495b;
+}
+.date-range-error {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #d1495b;
+}
 .date-range-editor-compact .date-range-input {
   width: 116px;
   font-size: 12px;
@@ -1425,8 +1444,9 @@ body {
   flex: 1;
   min-width: 0;
 }
-.holiday-lookup-year {
+.holiday-lookup-row .holiday-lookup-year {
   width: 70px;
+  flex: none;
 }
 .holiday-lookup-error {
   font-size: 11px;
@@ -2657,6 +2677,23 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 .cell-date {
   width: 212px;
   color: var(--muted);
+}
+
+.cell-date .actual-date-input-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.cell-date .cell-date-part {
+  width: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cell-date .cell-date-part[type='time'] {
+  flex: 0 1 68px;
 }
 
 .plan-table .col-title {

@@ -21,11 +21,23 @@ export function toDateOnly(iso: string): string {
   return iso.slice(0, 10);
 }
 
-/** A value for a `<input type="datetime-local">`: a bare date displays as
- *  that date at 00:00, matching how it's actually interpreted. */
-export function toDatetimeLocalValue(iso: string | null): string {
-  if (!iso) return '';
-  return iso.length <= 10 ? `${iso}T00:00` : iso;
+/** The `YYYY-MM-DD` portion for a `<input type="date">`, or '' if unset. */
+export function toDateInputValue(iso: string | null): string {
+  return iso ? toDateOnly(iso) : '';
+}
+
+/** The `HH:MM` portion for a `<input type="time">`, or '' for a bare date
+ *  (no time set) or unset. */
+export function toTimeInputValue(iso: string | null): string {
+  return iso && iso.length > 10 ? iso.slice(11, 16) : '';
+}
+
+/** Combine separate date/time input values back into the stored
+ *  actual-date(time) format: a bare date if no time is set, otherwise an
+ *  ISO datetime-local string. `date` empty means "clear the field". */
+export function combineDateAndTime(date: string, time: string): string | null {
+  if (!date) return null;
+  return time ? `${date}T${time}` : date;
 }
 
 /**

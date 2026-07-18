@@ -9,8 +9,8 @@
 
 import { assignResource, setActualDates, setEstimate, updateNode } from '../model/graph.ts';
 import type { Priority, Status } from '../model/types.ts';
-import { toDatetimeLocalValue } from '../model/time.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { ActualDateInput } from './ActualDateInput.tsx';
 import { KeyEditor } from './KeyEditor.tsx';
 
 const STATUSES: Status[] = ['not_started', 'in_progress', 'blocked', 'done'];
@@ -137,23 +137,23 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
       <div className="meta-row">
         <label className="meta-field">
           <span className="meta-label">Actual start</span>
-          <input
-            className="meta-input"
-            type="datetime-local"
-            value={toDatetimeLocalValue(node.actualStart)}
-            onChange={(e) =>
-              store.commit((g) => setActualDates(g, id, { actualStart: e.target.value || null }))
+          <ActualDateInput
+            value={node.actualStart}
+            onChange={(value) =>
+              store.commit((g) => setActualDates(g, id, { actualStart: value }), {
+                coalesce: `actual-start:${id}`,
+              })
             }
           />
         </label>
         <label className="meta-field">
           <span className="meta-label">Actual finish</span>
-          <input
-            className="meta-input"
-            type="datetime-local"
-            value={toDatetimeLocalValue(node.actualFinish)}
-            onChange={(e) =>
-              store.commit((g) => setActualDates(g, id, { actualFinish: e.target.value || null }))
+          <ActualDateInput
+            value={node.actualFinish}
+            onChange={(value) =>
+              store.commit((g) => setActualDates(g, id, { actualFinish: value }), {
+                coalesce: `actual-finish:${id}`,
+              })
             }
           />
         </label>
