@@ -13,6 +13,8 @@ import { MetricsView } from './ui/MetricsView.tsx';
 import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
 import { ConcernsView } from './ui/ConcernsView.tsx';
 import { CoverageView } from './ui/CoverageView.tsx';
+import { ScenarioPanel } from './ui/ScenarioPanel.tsx';
+import type { ScenarioPatch } from './ui/scenario.ts';
 import { SettingsView } from './ui/SettingsView.tsx';
 import { ShortcutCheatsheet } from './ui/ShortcutCheatsheet.tsx';
 import { shortcutsFor } from './ui/shortcuts.ts';
@@ -50,6 +52,9 @@ export function App() {
   // like planMode — never serialized.
   const [specMaxDepth, setSpecMaxDepth] = useState<number | undefined>(undefined);
   const [planMaxDepth, setPlanMaxDepth] = useState<number | undefined>(undefined);
+  // What-if scenario (team/speed override) for Reporting's Timeline/Metrics
+  // only — ephemeral, like the view state above; never touches the graph.
+  const [scenario, setScenario] = useState<ScenarioPatch | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // A prior autosave that failed to load (main.tsx backs it up rather than
   // discarding it) shows a recovery banner until downloaded or dismissed.
@@ -275,6 +280,9 @@ export function App() {
             onSelect={setReportMode}
           />
         )}
+        {section === 'reporting' && (reportMode === 'timeline' || reportMode === 'metrics') && (
+          <ScenarioPanel value={scenario} onChange={setScenario} baseSettings={graph.settings} />
+        )}
         <span className="app-count">
           {itemCount} item{itemCount === 1 ? '' : 's'}
         </span>
@@ -385,9 +393,16 @@ export function App() {
           />
         )}
         {section === 'reporting' && reportMode === 'timeline' && (
-          <TimelineView selectedId={selectedId} onSelect={setSelectedId} onReveal={reveal} />
+          <TimelineView
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onReveal={reveal}
+            scenario={scenario}
+          />
         )}
-        {section === 'reporting' && reportMode === 'metrics' && <MetricsView onReveal={reveal} />}
+        {section === 'reporting' && reportMode === 'metrics' && (
+          <MetricsView onReveal={reveal} scenario={scenario} />
+        )}
         {section === 'reporting' && reportMode === 'assignees' && <AssigneeMetricsView />}
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}
         {section === 'reporting' && reportMode === 'coverage' && <CoverageView onReveal={reveal} />}
