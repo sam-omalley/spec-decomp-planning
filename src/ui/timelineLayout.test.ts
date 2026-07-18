@@ -47,6 +47,34 @@ describe('buildTimeline', () => {
     assert.deepEqual([e2.startFrac, e2.endFrac], [0.5, 0.75]);
   });
 
+  it('omits slackEndFrac for units serialised on a single shared track', () => {
+    // e1 and e2 share the one implicit track with no explicit dependency —
+    // delaying e1 would delay e2, so neither should show slack.
+    const t = buildTimeline(fixture());
+    assert.equal(t.rows[1]!.slackEndFrac, undefined); // e1
+    assert.equal(t.rows[2]!.slackEndFrac, undefined); // e2, defines the finish
+  });
+
+  it('reports slackEndFrac for a genuinely idle parallel unit', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, {
+      startDate: '2024-01-01',
+      resources: [
+        { id: 'r0', name: 'R0', fte: 1, leave: [] },
+        { id: 'r1', name: 'R1', fte: 1, leave: [] },
+      ],
+    });
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = createGroup(g, { id: 'b', title: 'B' });
+    g = setEstimate(g, 'a', { durationEstimate: 5 }); // Mon..Fri, on its own track
+    g = setEstimate(g, 'b', { durationEstimate: 2 }); // Mon..Tue, on the other track
+    const t = buildTimeline(g);
+    const a = t.rows.find((r) => r.id === 'a')!;
+    const b = t.rows.find((r) => r.id === 'b')!;
+    assert.equal(a.slackEndFrac, undefined); // defines the project finish
+    assert.equal(b.slackEndFrac, 1); // could slip all the way to Friday
+  });
+
   it('emits projected-finish and target markers', () => {
     const t = buildTimeline(fixture());
     const finish = t.markers.find((m) => m.kind === 'finish')!;

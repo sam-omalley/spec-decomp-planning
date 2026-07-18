@@ -155,6 +155,7 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
   const relative = (frac: number) => (frac - view.start) / viewSpan;
 
   const hasCritical = model.rows.some((r) => r.critical);
+  const hasSlack = model.rows.some((r) => r.slackEndFrac !== undefined);
   // Merge markers landing on the same date into one label — otherwise the
   // text draws on top of itself and is unreadable (#104). Lines still draw
   // one per marker (below); harmless when they coincide, since a stacked
@@ -197,6 +198,12 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
           Critical path — the dependency chain that sets the projected finish
         </div>
       )}
+      {hasSlack && (
+        <div className="tl-legend">
+          <span className="tl-legend-swatch tl-legend-slack" />
+          Slack — how far a bar could slip without delaying the project
+        </div>
+      )}
       <div className="tl-legend tl-legend-markers">
         {(Object.keys(MARKER_INFO) as TimelineMarker['kind'][]).map((kind) => (
           <span key={kind}>
@@ -218,6 +225,11 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
           <clipPath id="tl-chart-clip">
             <rect x={LABEL_W} y={0} width={width - LABEL_W} height={height} />
           </clipPath>
+          {/* Diagonal hatch for the slack (float) indicator — a texture, not
+              a fill colour, so it reads without relying on colour perception. */}
+          <pattern id="tl-slack-hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="6" className="tl-slack-hatch-line" />
+          </pattern>
         </defs>
 
         {/* row hover highlight + titles — outside the clip, never affected
@@ -286,7 +298,7 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
             </g>
           ))}
 
-          {/* bars */}
+          {/* bars, plus a hatched trailing extension for any slack (float) */}
           {model.rows.map((row, i) => {
             const y = HEAD_H + i * ROW_H;
             const barY = y + 5;
@@ -299,24 +311,43 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
               (row.source === 'actual' ? ' tl-bar-actual' : '') +
               (row.critical ? ' tl-bar-critical' : '') +
               (selected ? ' tl-bar-selected' : '');
+            const title = (
+              <title>
+                {row.title}: {row.start} → {row.finish}
+                {row.source === 'actual' ? ' (actual)' : ' (planned)'}
+                {row.critical ? ' · on critical path' : ''}
+                {row.stretchNote ? ` · ${row.stretchNote}` : ''}
+                {row.slackEndFrac !== undefined
+                  ? ` · could slip to ${dateAtFrac(model, row.slackEndFrac)} without delaying the project`
+                  : ''}
+              </title>
+            );
             return (
-              <rect
-                key={row.id}
-                x={bx}
-                y={barY}
-                width={bw}
-                height={barH}
-                rx={3}
-                className={barClass}
-                style={{ ['--bar-color' as string]: row.color }}
-              >
-                <title>
-                  {row.title}: {row.start} → {row.finish}
-                  {row.source === 'actual' ? ' (actual)' : ' (planned)'}
-                  {row.critical ? ' · on critical path' : ''}
-                  {row.stretchNote ? ` · ${row.stretchNote}` : ''}
-                </title>
-              </rect>
+              <g key={row.id}>
+                {row.slackEndFrac !== undefined && (
+                  <rect
+                    x={bx + bw}
+                    y={barY}
+                    width={Math.max(0, x(row.slackEndFrac) - (bx + bw))}
+                    height={barH}
+                    rx={2}
+                    className="tl-slack"
+                  >
+                    {title}
+                  </rect>
+                )}
+                <rect
+                  x={bx}
+                  y={barY}
+                  width={bw}
+                  height={barH}
+                  rx={3}
+                  className={barClass}
+                  style={{ ['--bar-color' as string]: row.color }}
+                >
+                  {title}
+                </rect>
+              </g>
             );
           })}
 

@@ -47,6 +47,13 @@ export interface ScheduledGroup {
    * Absent for done units (real dates, nothing projected) and for containers.
    */
   stretch?: { speedMultiplier: number; fte: number };
+  /**
+   * The latest this unit could finish without moving the project's
+   * projected finish (its float/slack) — present only for a still-projected
+   * unit (`source: 'planned'`) with slack > 0; absent on the critical path
+   * (slack 0) and on a done unit (nothing left to flex). See `computeSlack`.
+   */
+  slackUntil?: string;
 }
 
 export interface Schedule {
@@ -158,6 +165,49 @@ function finishIndex(startOffset: number, duration: number): number {
   return Math.max(Math.floor(startOffset), Math.ceil(startOffset + duration) - 1);
 }
 
+/**
+ * Per-unit latest-allowable-finish (working-day offset): the classic CPM
+ * backward pass over the already-placed forward schedule, seeded at the
+ * project's own finish and relaxed backward through binding prerequisites.
+ * `latestFinishOffset(u) - finishOffset(u)` is the unit's slack/float — how
+ * many working days it could slip without moving the project's projected
+ * finish; 0 along the critical path by construction.
+ *
+ * A simplification shared with every CPM tool: it doesn't re-level resource
+ * contention for the backward pass (that would mean a second, much more
+ * complex resource-constrained solve), so this answers "if only the
+ * dependency graph mattered" — same spirit as dependency cycles being
+ * tolerated rather than solved perfectly elsewhere in this scheduler.
+ * Tolerates cycles too: a fixed-point relaxation (not a strict topological
+ * walk) just converges to *a* consistent answer for a cyclic component
+ * instead of hanging or throwing.
+ */
+function computeLatestFinish(
+  units: string[],
+  unitPrereqs: Map<string, Set<string>>,
+  startOffset: Map<string, number>,
+  finishOffset: Map<string, number>,
+  projectFinishOffset: number,
+): Map<string, number> {
+  const latestFinish = new Map<string, number>();
+  for (const u of units) latestFinish.set(u, projectFinishOffset);
+  for (let pass = 0; pass < units.length; pass++) {
+    let changed = false;
+    for (const u of units) {
+      const span = finishOffset.get(u)! - startOffset.get(u)!;
+      const latestStart = latestFinish.get(u)! - span;
+      for (const p of unitPrereqs.get(u) ?? []) {
+        if (latestStart < latestFinish.get(p)!) {
+          latestFinish.set(p, latestStart);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  return latestFinish;
+}
+
 /* --------------------------- scheduling units --------------------------- */
 
 /** Topmost groups with an own duration estimate, in group pre-order. */
@@ -267,6 +317,14 @@ export function scheduleProject(
   const finishOffset = new Map<string, number>(); // exclusive: next free day
   const startOffset = new Map<string, number>(); // where each unit begins
   const groups = new Map<string, ScheduledGroup>();
+  // Slack (see computeLatestFinish) needs capacity queuing treated as an
+  // implicit prerequisite too — two units sharing a track are chained by
+  // it even with no explicit dependency, and ignoring that would let a
+  // unit report slack that delaying it would actually eat into a
+  // track-mate's start. Each unit's implicit prereq is whichever unit
+  // was placed immediately before it on the same track (if any).
+  const trackLastUnit = new Array<string | null>(trackFte.length).fill(null);
+  const capacityPrereqs = new Map<string, string>();
 
   const remaining = new Set(units);
   while (remaining.size > 0) {
@@ -292,6 +350,8 @@ export function scheduleProject(
       track = 0;
       for (let k = 1; k < tracks.length; k++) if (tracks[k]! < tracks[track]!) track = k;
     }
+    if (trackLastUnit[track] !== null) capacityPrereqs.set(u, trackLastUnit[track]!);
+    trackLastUnit[track] = u;
     // The track's FTE stretches the projected duration (fte < 1 ⇒ longer).
     const fte = trackFte[track]!;
     const duration = (node.durationEstimate ?? 0) / (speed * fte);
@@ -425,6 +485,30 @@ export function scheduleProject(
     cur = binding;
   }
   criticalPath.reverse();
+
+  // Slack: how far a still-projected unit's finish could slip without
+  // moving the project's own finish (see `computeLatestFinish`). Attached
+  // only where there's something to show — a done unit has nothing left to
+  // flex, and a zero-slack (critical-path) unit is already highlighted.
+  // Folds the implicit capacity-queue prereqs in with the real dependency
+  // ones, so slack never overstates how free a track-mate actually is.
+  const slackPrereqs = new Map<string, Set<string>>();
+  for (const u of units) {
+    const combined = new Set(unitPrereqs.get(u));
+    const capacityPrereq = capacityPrereqs.get(u);
+    if (capacityPrereq !== undefined) combined.add(capacityPrereq);
+    slackPrereqs.set(u, combined);
+  }
+  const projectFinishOffset = last !== null ? finishOffset.get(last)! : 0;
+  const latestFinish = computeLatestFinish(units, slackPrereqs, startOffset, finishOffset, projectFinishOffset);
+  for (const u of units) {
+    const g = groups.get(u);
+    if (!g || g.source !== 'planned') continue;
+    const lf = latestFinish.get(u)!;
+    if (lf > finishOffset.get(u)!) {
+      groups.set(u, { ...g, slackUntil: cal.isoAt(lf - 1) });
+    }
+  }
 
   return { groups, projectStart, projectFinish, criticalPath };
 }

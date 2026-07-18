@@ -33,6 +33,11 @@ export interface TimelineRow {
    * `ScheduledGroup.stretch` in `schedule.ts`).
    */
   stretchNote?: string;
+  /** End of this unit's slack (float) window, as a fraction — a trailing
+   *  indicator past `endFrac` showing how far the finish could slip without
+   *  moving the project's projected finish. Present only when there's slack
+   *  to show (see `ScheduledGroup.slackUntil` in `schedule.ts`). */
+  slackEndFrac?: number;
 }
 
 export interface TimelineMarker {
@@ -197,6 +202,7 @@ export function buildTimeline(
       ...(g.stretch && durationEstimate !== null
         ? { stretchNote: stretchNote(durationEstimate, g.stretch) }
         : {}),
+      ...(g.slackUntil ? { slackEndFrac: frac(g.slackUntil) } : {}),
     };
   });
 
