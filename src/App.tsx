@@ -12,6 +12,7 @@ import { PlanningView } from './ui/PlanningView.tsx';
 import { MetricsView } from './ui/MetricsView.tsx';
 import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
 import { ConcernsView } from './ui/ConcernsView.tsx';
+import { CoverageView } from './ui/CoverageView.tsx';
 import { SettingsView } from './ui/SettingsView.tsx';
 import { ShortcutCheatsheet } from './ui/ShortcutCheatsheet.tsx';
 import { shortcutsFor } from './ui/shortcuts.ts';
@@ -268,6 +269,7 @@ export function App() {
               ['metrics', 'Metrics'],
               ['assignees', 'Assignees'],
               ['concerns', 'Concerns'],
+              ['coverage', 'Coverage'],
             ]}
             active={reportMode}
             onSelect={setReportMode}
@@ -388,6 +390,7 @@ export function App() {
         {section === 'reporting' && reportMode === 'metrics' && <MetricsView onReveal={reveal} />}
         {section === 'reporting' && reportMode === 'assignees' && <AssigneeMetricsView />}
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}
+        {section === 'reporting' && reportMode === 'coverage' && <CoverageView onReveal={reveal} />}
         {section === 'settings' && <SettingsView />}
       </main>
       <footer className="app-hints">
@@ -434,6 +437,10 @@ export function App() {
         {section === 'reporting' && reportMode === 'concerns' && (
           <>Monitoring signals for the plan · overdue, blocked, cycles, gaps &amp; behind-target ·
             click a concern to open its group</>
+        )}
+        {section === 'reporting' && reportMode === 'coverage' && (
+          <>Spec subtrees no group addresses, directly or via an ancestor · click an item to open
+            it in the spec outliner</>
         )}
         {section === 'settings' && (
           <>Project &amp; scheduling settings · dates, team, capacity, conversion &amp; locks · every
