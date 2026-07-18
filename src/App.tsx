@@ -311,7 +311,7 @@ export function App() {
             if (file) void importProject(file);
           }}
         />
-        <HeaderMenu label="File">
+        <HeaderMenu label="☰" title="Menu">
           <button onClick={() => fileInputRef.current?.click()} title="Open a project .json">
             Open…
           </button>
@@ -321,6 +321,11 @@ export function App() {
           <button onClick={exportCsv} title="Download the plan as .csv">
             Export CSV…
           </button>
+          <div className="header-menu-divider" />
+          <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">
+            ⌨ Shortcuts
+          </button>
+          <div className="header-menu-divider" />
           <a
             className="header-link"
             href={GITHUB_URL}
@@ -331,9 +336,6 @@ export function App() {
             GitHub ↗
           </a>
         </HeaderMenu>
-        <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">
-          ⌨ Shortcuts
-        </button>
         <span className="header-divider" />
         <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
           ↩ Undo

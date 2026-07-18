@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 interface HeaderMenuProps {
-  label: string;
+  label: ReactNode;
+  title?: string;
   children: ReactNode;
 }
 
-/** A small dropdown for header actions (File: Open/Save/Export/GitHub) that
+/** A small dropdown for header actions (file ops, help, external links) that
  *  would otherwise crowd the header as buttons. Closes on outside click,
  *  Escape, or picking any item (a click anywhere in the list bubbles up). */
-export function HeaderMenu({ label, children }: HeaderMenuProps) {
+export function HeaderMenu({ label, title, children }: HeaderMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -34,9 +35,10 @@ export function HeaderMenu({ label, children }: HeaderMenuProps) {
       <button
         className="header-menu-trigger"
         aria-expanded={open}
+        title={title}
         onClick={() => setOpen((o) => !o)}
       >
-        {label} ▾
+        {label}
       </button>
       {open && (
         <div className="header-menu-list" role="menu" onClick={() => setOpen(false)}>

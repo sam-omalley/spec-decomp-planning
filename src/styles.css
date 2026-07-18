@@ -175,6 +175,12 @@ body {
   white-space: nowrap;
 }
 
+.header-menu-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
 .header-menu-list button:hover,
 .header-menu-list a.header-link:hover {
   background: var(--accent-soft);
