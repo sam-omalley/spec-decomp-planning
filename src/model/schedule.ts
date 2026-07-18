@@ -26,7 +26,7 @@
  * `assigned_to` is traceability only and plays no part here.
  */
 
-import type { ProjectGraph } from './types.ts';
+import type { DateRange, ProjectGraph } from './types.ts';
 import { childrenOf, groupRootsOf, parentOf, subtreeIds } from './graph.ts';
 import { dependencyAdjacency } from './analysis.ts';
 import { toDateOnly } from './time.ts';
@@ -82,18 +82,26 @@ function isWeekend(date: Date): boolean {
 function addCalendarDays(date: Date, n: number): Date {
   return new Date(date.getTime() + n * DAY_MS);
 }
+/** True when `iso` falls within any of `ranges` (inclusive both ends). */
+function inRanges(iso: string, ranges: readonly DateRange[]): boolean {
+  return ranges.some((r) => r.start <= iso && iso <= r.end);
+}
 
-/** A skip-weekends calendar: working-day offsets ⇄ ISO dates. */
-function makeCalendar(startIso: string) {
+/** A skip-weekends-and-holidays calendar: working-day offsets ⇄ ISO dates.
+ *  Holidays are project-wide, so they're baked into every track's shared
+ *  day sequence (unlike a resource's individual `leave` — see
+ *  `spendWorkingDays`/`skipLeave` below, applied per-track on top of this). */
+function makeCalendar(startIso: string, holidays: readonly DateRange[]) {
+  const isNonWorking = (date: Date): boolean => isWeekend(date) || inRanges(dateToIso(date), holidays);
   let anchor = isoToDate(startIso);
-  while (isWeekend(anchor)) anchor = addCalendarDays(anchor, 1);
+  while (isNonWorking(anchor)) anchor = addCalendarDays(anchor, 1);
   const days: Date[] = [anchor]; // days[i] = date at working-day offset i
 
   function dateAt(index: number): Date {
     const i = Math.max(0, Math.floor(index));
     while (days.length <= i) {
       let next = addCalendarDays(days[days.length - 1]!, 1);
-      while (isWeekend(next)) next = addCalendarDays(next, 1);
+      while (isNonWorking(next)) next = addCalendarDays(next, 1);
       days.push(next);
     }
     return days[i]!;
@@ -105,13 +113,44 @@ function makeCalendar(startIso: string) {
     /** Working-day offset of an ISO date (snapped forward; ≥ 0). */
     offsetOf: (iso: string): number => {
       let target = isoToDate(iso);
-      while (isWeekend(target)) target = addCalendarDays(target, 1);
+      while (isNonWorking(target)) target = addCalendarDays(target, 1);
       if (target.getTime() <= anchor.getTime()) return 0;
       let i = 0;
       while (dateAt(i).getTime() < target.getTime()) i++;
       return i;
     },
   };
+}
+
+type Calendar = ReturnType<typeof makeCalendar>;
+
+/** Next working-day index at/after `idx` that isn't in `leave`. */
+function skipLeave(cal: Calendar, idx: number, leave: readonly DateRange[]): number {
+  let i = idx;
+  while (inRanges(cal.isoAt(i), leave)) i++;
+  return i;
+}
+
+/**
+ * The working-day index reached after spending `spanDays` days starting at
+ * `startIdx` (inclusive), passing over — but not counting — any day that
+ * falls in `leave`. Unlike `skipLeave`, this never moves the start itself
+ * (used for in-progress units, whose actual start already happened).
+ */
+function spendWorkingDays(
+  cal: Calendar,
+  startIdx: number,
+  spanDays: number,
+  leave: readonly DateRange[],
+): number {
+  if (leave.length === 0) return startIdx + spanDays - 1;
+  let idx = startIdx;
+  let counted = inRanges(cal.isoAt(idx), leave) ? 0 : 1;
+  while (counted < spanDays) {
+    idx++;
+    if (!inRanges(cal.isoAt(idx), leave)) counted++;
+  }
+  return idx;
 }
 
 /** Working-day index of the last day a unit spans (start offset + duration). */
@@ -191,7 +230,7 @@ export function scheduleProject(
   const { settings } = graph;
   const units = schedulingUnits(graph);
   const unitSet = new Set(units);
-  const cal = makeCalendar(settings.startDate);
+  const cal = makeCalendar(settings.startDate, settings.holidays);
   const nowOffset = cal.offsetOf(now);
   const pre = groupPreOrder(graph);
 
@@ -218,6 +257,10 @@ export function scheduleProject(
   // and assigned units pin to their resource's track.
   const resources = settings.resources;
   const trackFte = resources.length > 0 ? resources.map((r) => (r.fte > 0 ? r.fte : 1)) : [1];
+  // Each track's individual leave, on top of the shared holiday calendar —
+  // an unassigned unit still lands on *some* resource's track, so this
+  // applies regardless of whether the unit was explicitly pinned.
+  const trackLeave: DateRange[][] = resources.length > 0 ? resources.map((r) => r.leave) : [[]];
   const resourceTrack = new Map<string, number>();
   resources.forEach((r, i) => resourceTrack.set(r.id, i));
   const tracks = new Array<number>(trackFte.length).fill(0); // free working-day offset
@@ -273,13 +316,21 @@ export function scheduleProject(
       startOffset.set(u, cal.offsetOf(start));
       finishOffset.set(u, cal.offsetOf(finish) + 1);
     } else if (node.actualStart !== null) {
-      // In progress: real start, projected remainder.
+      // In progress: real start (never moved — it already happened),
+      // projected remainder. A leave-affected track spends whole working
+      // days only, skipping over any that fall in the resource's leave.
       const start = toDateOnly(node.actualStart);
       const startOff = cal.offsetOf(start);
-      const finishOff = startOff + duration;
+      const leave = trackLeave[track]!;
+      const naiveFinishIdx = finishIndex(startOff, duration);
+      const finishIdx =
+        leave.length === 0
+          ? naiveFinishIdx
+          : spendWorkingDays(cal, startOff, naiveFinishIdx - Math.floor(startOff) + 1, leave);
+      const finishOff = leave.length === 0 ? startOff + duration : finishIdx + 1;
       groups.set(u, {
         start,
-        finish: cal.isoAt(finishIndex(startOff, duration)),
+        finish: cal.isoAt(finishIdx),
         source: 'planned',
         isUnit: true,
         ...(stretch ? { stretch } : {}),
@@ -291,11 +342,23 @@ export function scheduleProject(
       // Not started: earliest of a free track and its prerequisites, but
       // never before today — future work cannot be dated in the past
       // (which understated the projection when startDate is behind us).
-      const startOff = Math.max(tracks[track]!, prereqFinish, nowOffset);
-      const finishOff = startOff + duration;
+      // A leave-affected track additionally pushes the start itself past
+      // any leave (the resource genuinely can't begin that day), then
+      // spends only whole working days for the projected span.
+      const naiveStartOff = Math.max(tracks[track]!, prereqFinish, nowOffset);
+      const leave = trackLeave[track]!;
+      const naiveFinishIdx = finishIndex(naiveStartOff, duration);
+      let startOff = naiveStartOff;
+      let finishIdx = naiveFinishIdx;
+      if (leave.length > 0) {
+        const spanDays = naiveFinishIdx - Math.floor(naiveStartOff) + 1;
+        startOff = skipLeave(cal, Math.floor(naiveStartOff), leave);
+        finishIdx = spendWorkingDays(cal, startOff, spanDays, leave);
+      }
+      const finishOff = leave.length === 0 ? naiveStartOff + duration : finishIdx + 1;
       groups.set(u, {
         start: cal.isoAt(Math.floor(startOff)),
-        finish: cal.isoAt(finishIndex(startOff, duration)),
+        finish: cal.isoAt(finishIdx),
         source: 'planned',
         isUnit: true,
         ...(stretch ? { stretch } : {}),

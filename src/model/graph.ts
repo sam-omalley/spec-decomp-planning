@@ -17,6 +17,7 @@
  */
 
 import type {
+  DateRange,
   Edge,
   EdgeType,
   ExternalRef,
@@ -48,6 +49,7 @@ export function defaultSettings(): ProjectSettings {
     hoursPerWeek: 38,
     resources: [],
     speedMultiplier: 1,
+    holidays: [],
     specLockDepth: 0,
     planLockDepth: 0,
   };
@@ -678,6 +680,17 @@ export function removeExternalRef(
   return putNode(graph, { ...node, externalRefs });
 }
 
+/** Throws unless every range is well-formed (non-empty ISO bounds, start ≤ end). */
+function validateRanges(ranges: unknown, label: string): asserts ranges is DateRange[] {
+  if (!Array.isArray(ranges)) throw new GraphError(`${label} must be an array`);
+  for (const r of ranges as DateRange[]) {
+    if (typeof r?.start !== 'string' || r.start === '' || typeof r?.end !== 'string' || r.end === '') {
+      throw new GraphError(`${label} range needs a start and end date`);
+    }
+    if (r.start > r.end) throw new GraphError(`${label} range's start must not be after its end`);
+  }
+}
+
 /** Patches project settings, validating capacity/conversion invariants. */
 export function updateSettings(
   graph: ProjectGraph,
@@ -704,7 +717,9 @@ export function updateSettings(
     if (seen.has(r.id)) throw new GraphError(`duplicate resource id: ${r.id}`);
     seen.add(r.id);
     if (!(r.fte > 0)) throw new GraphError('resource fte must be greater than 0');
+    validateRanges(r.leave, 'resource leave');
   }
+  validateRanges(settings.holidays, 'holidays');
   if (!Number.isInteger(settings.specLockDepth) || settings.specLockDepth < 0) {
     throw new GraphError('specLockDepth must be a non-negative integer');
   }
@@ -723,24 +738,29 @@ export function addResource(
 ): ProjectGraph {
   const name = input.name.trim();
   const fte = input.fte ?? 1;
-  const resource: Resource = { id: input.id, name, fte };
+  const resource: Resource = { id: input.id, name, fte, leave: [] };
   return updateSettings(graph, {
     resources: [...graph.settings.resources, resource],
   });
 }
 
-/** Patches a resource's name and/or fte; validation runs in updateSettings. */
+/** Patches a resource's name, fte and/or leave; validation runs in updateSettings. */
 export function updateResource(
   graph: ProjectGraph,
   id: string,
-  patch: { name?: string; fte?: number },
+  patch: { name?: string; fte?: number; leave?: DateRange[] },
 ): ProjectGraph {
   if (!graph.settings.resources.some((r) => r.id === id)) {
     throw new GraphError(`No resource with id ${id}`);
   }
   const resources = graph.settings.resources.map((r) =>
     r.id === id
-      ? { ...r, ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.fte !== undefined ? { fte: patch.fte } : {}) }
+      ? {
+          ...r,
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.fte !== undefined ? { fte: patch.fte } : {}),
+          ...(patch.leave !== undefined ? { leave: patch.leave } : {}),
+        }
       : r,
   );
   return updateSettings(graph, { resources });
