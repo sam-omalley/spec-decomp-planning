@@ -25,6 +25,7 @@ import { todayIso } from '../model/graph.ts';
 import { buildTimeline, dateAtFrac, groupMarkersByDate } from './timelineLayout.ts';
 import type { TimelineMarker } from './timelineLayout.ts';
 import { InfoDot } from './InfoDot.tsx';
+import { applyScenario, type ScenarioPatch } from './scenario.ts';
 
 /** Icon + short label per marker kind — colorblind-safe (never color-only),
  *  matching the convention used for concern severities/dependency edges
@@ -44,6 +45,10 @@ interface TimelineViewProps {
   onSelect: (id: string | null) => void;
   /** Jump to a bar's group definition in the plan outline. */
   onReveal?: (id: string) => void;
+  /** Active what-if scenario (team/speed override), or null for the real
+   *  projection — see `scenario.ts`. Shared with MetricsView via App.tsx so
+   *  switching Reporting sub-tabs keeps the same scenario active. */
+  scenario?: ScenarioPatch | null;
 }
 
 const LABEL_W = 220;
@@ -68,10 +73,11 @@ function clampView(start: number, end: number): ViewWindow {
   return { start, end };
 }
 
-export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewProps) {
+export function TimelineView({ selectedId, onSelect, onReveal, scenario = null }: TimelineViewProps) {
   const graph = useProjectGraph();
   const now = todayIso();
-  const model = useMemo(() => buildTimeline(graph, now), [graph, now]);
+  const effectiveGraph = useMemo(() => applyScenario(graph, scenario), [graph, scenario]);
+  const model = useMemo(() => buildTimeline(effectiveGraph, now), [effectiveGraph, now]);
   // Hover crosshair: the fraction under the cursor, or null when the mouse
   // isn't over the chart area (outside the row-label gutter, on either side).
   const [hoverFrac, setHoverFrac] = useState<number | null>(null);
@@ -188,7 +194,7 @@ export function TimelineView({ selectedId, onSelect, onReveal }: TimelineViewPro
   }
 
   return (
-    <div className="timeline-wrap" ref={wrapRef}>
+    <div className={`timeline-wrap${scenario ? ' timeline-wrap-scenario' : ''}`} ref={wrapRef}>
       <div className="tl-legend">
         How dates are calculated <InfoDot text={SCHEDULING_HELP} align="start" />
       </div>
