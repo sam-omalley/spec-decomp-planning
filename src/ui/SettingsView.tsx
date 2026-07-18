@@ -27,6 +27,8 @@ import {
 import type { DateRange, ProjectSettings } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { DateRangeEditor } from './DateRangeEditor.tsx';
+import { HolidayLookup } from './HolidayLookup.tsx';
+import { newHolidays } from './holidaySource.ts';
 
 export function SettingsView() {
   const graph = useProjectGraph();
@@ -79,6 +81,13 @@ export function SettingsView() {
       updateSettings(g, { holidays: g.settings.holidays.filter((_, i) => i !== index) }),
     );
   }
+  /** Adds a batch from a country/subdivision lookup in one undo step,
+   *  skipping any already present. */
+  function addHolidays(ranges: DateRange[]) {
+    store.commit((g) =>
+      updateSettings(g, { holidays: [...g.settings.holidays, ...newHolidays(ranges, g.settings.holidays)] }),
+    );
+  }
 
   /** Commit a lock depth: a non-negative integer (0 = unlocked). */
   function commitLock(field: 'specLockDepth' | 'planLockDepth', raw: string) {
@@ -125,6 +134,11 @@ export function SettingsView() {
               closures) — on top of the weekends the scheduler already skips.
             </p>
             <DateRangeEditor ranges={s.holidays} onAdd={addHoliday} onRemove={removeHoliday} />
+            <HolidayLookup
+              existingHolidays={s.holidays}
+              defaultYear={new Date(`${s.startDate}T00:00:00Z`).getUTCFullYear()}
+              onAdd={addHolidays}
+            />
           </section>
 
           <section className="settings-card">
