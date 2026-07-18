@@ -11,6 +11,8 @@ import { MetricsView } from './ui/MetricsView.tsx';
 import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
 import { ConcernsView } from './ui/ConcernsView.tsx';
 import { SettingsView } from './ui/SettingsView.tsx';
+import { ShortcutCheatsheet } from './ui/ShortcutCheatsheet.tsx';
+import { shortcutsFor } from './ui/shortcuts.ts';
 import { TimelineView } from './ui/TimelineView.tsx';
 import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
 import { hashFor, parseHash, type PlanMode, type ReportMode, type Section } from './ui/route.ts';
@@ -49,6 +51,7 @@ export function App() {
   // A prior autosave that failed to load (main.tsx backs it up rather than
   // discarding it) shows a recovery banner until downloaded or dismissed.
   const [backupText, setBackupText] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   useEffect(() => {
     void loadUnrecoveredText().then((text) => setBackupText(text ?? null));
   }, []);
@@ -177,16 +180,28 @@ export function App() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      const key = event.key.toLowerCase();
-      if (key === 'z') {
-        event.preventDefault();
-        if (event.shiftKey) store.redo();
-        else store.undo();
-      } else if (key === 'y') {
-        event.preventDefault();
-        store.redo();
+      if (event.metaKey || event.ctrlKey) {
+        const key = event.key.toLowerCase();
+        if (key === 'z') {
+          event.preventDefault();
+          if (event.shiftKey) store.redo();
+          else store.undo();
+        } else if (key === 'y') {
+          event.preventDefault();
+          store.redo();
+        }
+        return;
       }
+      if (event.key !== '?' || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const editable =
+          target.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+        if (editable) return;
+      }
+      event.preventDefault();
+      setShortcutsOpen(true);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -296,6 +311,9 @@ export function App() {
         >
           GitHub ↗
         </a>
+        <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">
+          ⌨ Shortcuts
+        </button>
         <span className="header-divider" />
         <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
           ↩ Undo
@@ -400,6 +418,11 @@ export function App() {
             change is undoable and autosaved</>
         )}
       </footer>
+      <ShortcutCheatsheet
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        groups={shortcutsFor(section, planMode, graphMode)}
+      />
     </div>
   );
 }
