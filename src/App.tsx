@@ -4,8 +4,10 @@ import { deserializeProject, serializeProject } from './model/serialize.ts';
 import { clearUnrecoveredText, loadUnrecoveredText } from './persist/persistence.ts';
 import { store, useProjectGraph } from './store/appStore.ts';
 import { GraphView, type GraphMode } from './ui/GraphView.tsx';
+import { HeaderMenu } from './ui/HeaderMenu.tsx';
 import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
+import { projectToCsv } from './ui/planCsv.ts';
 import { PlanningView } from './ui/PlanningView.tsx';
 import { MetricsView } from './ui/MetricsView.tsx';
 import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
@@ -74,8 +76,8 @@ export function App() {
     }).length;
   }, [filterActive, searchable, graph, filter, section, planMode]);
 
-  function downloadJson(text: string, filename: string) {
-    const blob = new Blob([text], { type: 'application/json' });
+  function downloadFile(text: string, filename: string, mime: string) {
+    const blob = new Blob([text], { type: mime });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -85,15 +87,28 @@ export function App() {
   }
 
   function exportProject() {
-    downloadJson(
+    downloadFile(
       serializeProject(store.getState()),
       `planning-${new Date().toISOString().slice(0, 10)}.json`,
+      'application/json',
+    );
+  }
+
+  function exportCsv() {
+    downloadFile(
+      projectToCsv(store.getState()),
+      `planning-${new Date().toISOString().slice(0, 10)}.csv`,
+      'text/csv',
     );
   }
 
   function downloadBackup() {
     if (!backupText) return;
-    downloadJson(backupText, `planning-backup-${new Date().toISOString().slice(0, 10)}.json`);
+    downloadFile(
+      backupText,
+      `planning-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      'application/json',
+    );
   }
 
   function discardBackup() {
@@ -296,31 +311,38 @@ export function App() {
             if (file) void importProject(file);
           }}
         />
-        <button onClick={() => fileInputRef.current?.click()} title="Open a project .json">
-          Open…
-        </button>
-        <button onClick={exportProject} title="Download the project as .json">
-          Save…
-        </button>
-        <a
-          className="header-link"
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noreferrer noopener"
-          title="Open the project on GitHub (raise an issue, browse the code)"
-        >
-          GitHub ↗
-        </a>
-        <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">
-          ⌨ Shortcuts
-        </button>
-        <span className="header-divider" />
         <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
           ↩ Undo
         </button>
         <button disabled={!store.canRedo} onClick={() => store.redo()} title="⇧⌘Z">
           ↪ Redo
         </button>
+        <span className="header-divider" />
+        <HeaderMenu label="☰" title="Menu">
+          <button onClick={() => fileInputRef.current?.click()} title="Open a project .json">
+            Open…
+          </button>
+          <button onClick={exportProject} title="Download the project as .json">
+            Save…
+          </button>
+          <button onClick={exportCsv} title="Download the plan as .csv">
+            Export CSV…
+          </button>
+          <div className="header-menu-divider" />
+          <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">
+            ⌨ Shortcuts
+          </button>
+          <div className="header-menu-divider" />
+          <a
+            className="header-link"
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Open the project on GitHub (raise an issue, browse the code)"
+          >
+            GitHub ↗
+          </a>
+        </HeaderMenu>
       </header>
       {backupText && (
         <div className="app-banner" role="alert">
