@@ -1406,6 +1406,57 @@ body {
   font-size: 12px;
 }
 
+/* Holiday lookup (issue #121): "populate from country" sub-form under the
+   Holidays card's manual DateRangeEditor. */
+.holiday-lookup {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.holiday-lookup-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.holiday-lookup-row select {
+  flex: 1;
+  min-width: 0;
+}
+.holiday-lookup-year {
+  width: 70px;
+}
+.holiday-lookup-error {
+  font-size: 11px;
+  color: #d1495b;
+  margin: 0;
+}
+.holiday-lookup-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.holiday-lookup-subdivision {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.holiday-lookup-subdivision select {
+  flex: 1;
+}
+.holiday-lookup-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ------------------------------ timeline view ------------------------------ */
 
 .timeline-wrap {
