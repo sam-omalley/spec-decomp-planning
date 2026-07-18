@@ -72,7 +72,8 @@ export interface TimelineTick {
   label: string;
 }
 
-/** A contiguous non-working (weekend) band across the date range. */
+/** A contiguous non-working band across the date range — a weekend run,
+ *  a project holiday, or the two merged when adjacent. */
 export interface TimelineWeekendBand {
   startFrac: number;
   endFrac: number;
@@ -227,15 +228,18 @@ export function buildTimeline(
     }
   }
 
-  // Non-working (weekend) bands across the range, merged into contiguous
-  // runs so a Sat+Sun pair paints as one band, not two.
+  // Non-working bands across the range — weekends and project holidays,
+  // merged into contiguous runs so e.g. a holiday abutting a weekend paints
+  // as one band, not two.
+  const holidays = graph.settings.holidays;
   const weekends: TimelineWeekendBand[] = [];
   let bandStart: number | null = null;
   for (let d = 0; d <= span; d++) {
-    const dow = new Date(utc(addDaysIso(rangeStart, d))).getUTCDay();
-    const isWeekend = dow === 0 || dow === 6;
-    if (isWeekend && bandStart === null) bandStart = d;
-    if (!isWeekend && bandStart !== null) {
+    const date = addDaysIso(rangeStart, d);
+    const dow = new Date(utc(date)).getUTCDay();
+    const isNonWorking = dow === 0 || dow === 6 || holidays.some((h) => h.start <= date && date <= h.end);
+    if (isNonWorking && bandStart === null) bandStart = d;
+    if (!isNonWorking && bandStart !== null) {
       weekends.push({ startFrac: bandStart / span, endFrac: d / span });
       bandStart = null;
     }

@@ -1309,8 +1309,21 @@ body {
 }
 .resource-row {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.resource-row-main {
+  display: flex;
   align-items: flex-end;
   gap: 8px;
+}
+.resource-leave {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.resource-leave .meta-label {
+  flex: 0 0 auto;
 }
 .resource-name {
   flex: 1;
@@ -1352,6 +1365,45 @@ body {
 }
 .resource-add:hover {
   border-color: var(--muted);
+}
+
+/* Date-range editor (project holidays / a resource's leave) — chips plus a
+   two-date add row, styled like the Keys chip editor. */
+.date-range-editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.date-range-editor-compact {
+  gap: 4px;
+}
+.date-range-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.date-range-editor-compact .date-range-chip {
+  font-size: 11px;
+  padding: 1px 3px;
+}
+.date-range-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.date-range-input {
+  width: 130px;
+}
+.date-range-editor-compact .date-range-input {
+  width: 116px;
+  font-size: 12px;
 }
 
 /* ------------------------------ timeline view ------------------------------ */

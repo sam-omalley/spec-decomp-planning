@@ -328,9 +328,12 @@ describe('serialization', () => {
     g = setActualDates(g, 'login', { actualStart: '2026-07-01' });
     g = addExternalRef(g, 'login', { system: 'jira', key: 'PT-1', url: 'http://x/PT-1' });
     g = updateSettings(g, {
-      resources: [{ id: 'r1', name: 'Ada', fte: 0.8 }],
+      resources: [
+        { id: 'r1', name: 'Ada', fte: 0.8, leave: [{ start: '2026-08-01', end: '2026-08-14' }] },
+      ],
       speedMultiplier: 1.5,
       targetDate: '2026-12-01',
+      holidays: [{ start: '2026-12-25', end: '2026-12-26' }],
     });
     g = updateSettings(g, { specLockDepth: 1, planLockDepth: 2 });
     assert.deepEqual(deserializeProject(serializeProject(g)), g);
@@ -369,6 +372,48 @@ describe('serialization', () => {
     // Lock depths (v5) backfill to unlocked.
     assert.equal(g.settings.specLockDepth, 0);
     assert.equal(g.settings.planLockDepth, 0);
+    // Calendar exceptions (v7) backfill to empty.
+    assert.deepEqual(g.settings.holidays, []);
+  });
+
+  it('migrates a v6 file by backfilling holidays and per-resource leave', () => {
+    const v6 = {
+      version: 6,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerWeek: 38, speedMultiplier: 1, specLockDepth: 0, planLockDepth: 0,
+          resources: [{ id: 'r1', name: 'Ada', fte: 1 }], // no `leave` yet
+        },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(v6));
+    assert.deepEqual(g.settings.holidays, []);
+    assert.deepEqual(g.settings.resources[0]!.leave, []);
+  });
+
+  it('drops an invalid persisted range (missing bound, or start after end)', () => {
+    const file = {
+      version: 7,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerWeek: 38, speedMultiplier: 1, specLockDepth: 0, planLockDepth: 0,
+          resources: [],
+          holidays: [
+            { start: '2026-12-25', end: '2026-12-26' }, // valid
+            { start: '2026-12-31', end: '2026-01-01' }, // start after end
+            { start: '2026-06-01' }, // missing end
+          ],
+        },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(file));
+    assert.deepEqual(g.settings.holidays, [{ start: '2026-12-25', end: '2026-12-26' }]);
   });
 
   it('migrates a v5 file to resourcing (parallelTracks → team, hours/day → hours/week)', () => {
@@ -497,6 +542,25 @@ describe('external refs and settings', () => {
     assert.equal(updateSettings(g, { planLockDepth: 3 }).settings.planLockDepth, 3);
     assert.throws(() => updateSettings(g, { specLockDepth: -1 }), /specLockDepth/);
     assert.throws(() => updateSettings(g, { planLockDepth: 1.5 }), /planLockDepth/);
+  });
+
+  it('validates holiday and resource-leave date ranges', () => {
+    let g = fixture();
+    g = updateSettings(g, { holidays: [{ start: '2026-12-25', end: '2026-12-26' }] });
+    assert.deepEqual(g.settings.holidays, [{ start: '2026-12-25', end: '2026-12-26' }]);
+    assert.throws(
+      () => updateSettings(g, { holidays: [{ start: '2026-12-26', end: '2026-12-25' }] }),
+      /holidays/,
+    );
+    assert.throws(() => updateSettings(g, { holidays: [{ start: '', end: '2026-12-25' }] }), /holidays/);
+
+    g = addResource(g, { id: 'r1', name: 'Ada' });
+    g = updateResource(g, 'r1', { leave: [{ start: '2026-08-01', end: '2026-08-14' }] });
+    assert.deepEqual(g.settings.resources[0]!.leave, [{ start: '2026-08-01', end: '2026-08-14' }]);
+    assert.throws(
+      () => updateResource(g, 'r1', { leave: [{ start: '2026-08-14', end: '2026-08-01' }] }),
+      /resource leave/,
+    );
   });
 
   it('manages the resource team and pins assignments', () => {

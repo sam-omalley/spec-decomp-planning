@@ -115,6 +115,36 @@ describe('buildTimeline', () => {
     assert.equal(t.weekends[0]!.endFrac, 1); // through Jan8 (exclusive)
   });
 
+  it('includes a project holiday as its own non-working band', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, {
+      startDate: '2024-01-01',
+      targetDate: '2024-01-05',
+      holidays: [{ start: '2024-01-03', end: '2024-01-03' }], // Wed
+    });
+    g = createGroup(g, { id: 'u1', title: 'U1' });
+    g = setEstimate(g, 'u1', { durationEstimate: 1 });
+    const t = buildTimeline(g); // Jan1 (Mon) .. Jan5 (Fri), span 4 days
+    assert.equal(t.weekends.length, 1);
+    assert.equal(t.weekends[0]!.startFrac, 2 / 4); // Jan3
+    assert.equal(t.weekends[0]!.endFrac, 3 / 4); // through Jan4 (exclusive)
+  });
+
+  it('merges a holiday abutting a weekend into one band', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, {
+      startDate: '2024-01-01',
+      targetDate: '2024-01-08',
+      holidays: [{ start: '2024-01-05', end: '2024-01-05' }], // Fri, right before the weekend
+    });
+    g = createGroup(g, { id: 'u1', title: 'U1' });
+    g = setEstimate(g, 'u1', { durationEstimate: 2 });
+    const t = buildTimeline(g);
+    assert.equal(t.weekends.length, 1);
+    assert.equal(t.weekends[0]!.startFrac, 4 / 7); // Jan5 (holiday)
+    assert.equal(t.weekends[0]!.endFrac, 1); // through Jan8 (exclusive) — Sat+Sun merged in
+  });
+
   it('omits stretchNote when speed/FTE are a 1× no-op (#64)', () => {
     const t = buildTimeline(fixture());
     assert.equal(t.rows[1]!.durationEstimate, 2);

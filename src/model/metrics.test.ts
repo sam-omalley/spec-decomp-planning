@@ -80,7 +80,7 @@ describe('estimateVsActual', () => {
     let g = emptyGraph();
     g = updateSettings(g, {
       startDate: '2024-01-01',
-      resources: [{ id: 'r1', name: 'Ada', fte: 1 }],
+      resources: [{ id: 'r1', name: 'Ada', fte: 1, leave: [] }],
     });
     g = createGroup(g, { id: 'a', title: 'A' });
     g = createGroup(g, { id: 'b', title: 'B' });
@@ -103,7 +103,7 @@ describe('estimateVsActual', () => {
     let g = emptyGraph();
     g = updateSettings(g, {
       startDate: '2024-01-01',
-      resources: [{ id: 'r1', name: 'Ada', fte: 1 }],
+      resources: [{ id: 'r1', name: 'Ada', fte: 1, leave: [] }],
     });
     g = createGroup(g, { id: 'a', title: 'A' });
     g = createGroup(g, { id: 'b', title: 'B' });

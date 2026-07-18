@@ -24,8 +24,9 @@ import {
   updateResource,
   updateSettings,
 } from '../model/graph.ts';
-import type { ProjectSettings } from '../model/types.ts';
+import type { DateRange, ProjectSettings } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
+import { DateRangeEditor } from './DateRangeEditor.tsx';
 
 export function SettingsView() {
   const graph = useProjectGraph();
@@ -62,6 +63,21 @@ export function SettingsView() {
   }
   function dropResource(id: string) {
     store.commit((g) => removeResource(g, id));
+  }
+  function addResourceLeave(id: string, current: DateRange[], range: DateRange) {
+    store.commit((g) => updateResource(g, id, { leave: [...current, range] }));
+  }
+  function removeResourceLeave(id: string, current: DateRange[], index: number) {
+    store.commit((g) => updateResource(g, id, { leave: current.filter((_, i) => i !== index) }));
+  }
+
+  function addHoliday(range: DateRange) {
+    store.commit((g) => updateSettings(g, { holidays: [...g.settings.holidays, range] }));
+  }
+  function removeHoliday(index: number) {
+    store.commit((g) =>
+      updateSettings(g, { holidays: g.settings.holidays.filter((_, i) => i !== index) }),
+    );
   }
 
   /** Commit a lock depth: a non-negative integer (0 = unlocked). */
@@ -100,6 +116,15 @@ export function SettingsView() {
                 />
               </label>
             </div>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-card-title">Holidays</h2>
+            <p className="settings-note">
+              Non-working dates for everyone (public holidays, office
+              closures) — on top of the weekends the scheduler already skips.
+            </p>
+            <DateRangeEditor ranges={s.holidays} onAdd={addHoliday} onRemove={removeHoliday} />
           </section>
 
           <section className="settings-card">
@@ -153,8 +178,8 @@ export function SettingsView() {
               {s.resources.length === 0
                 ? '1 full-time track'
                 : `${s.resources.length} resource${s.resources.length === 1 ? '' : 's'}`}{' '}
-              · durations ÷ speed, then ÷ each resource's FTE. Weekends are
-              skipped.
+              · durations ÷ speed, then ÷ each resource's FTE. Weekends,
+              holidays, and a resource's own leave are all skipped.
             </p>
           </section>
 
@@ -206,33 +231,44 @@ export function SettingsView() {
               <div className="resource-list">
                 {s.resources.map((r) => (
                   <div className="resource-row" key={r.id}>
-                    <input
-                      className="meta-input resource-name"
-                      type="text"
-                      placeholder="Name"
-                      value={r.name}
-                      onChange={(e) => renameResource(r.id, e.target.value)}
-                      onBlur={() => store.breakCoalescing()}
-                    />
-                    <label className="resource-fte">
-                      <span className="meta-label">FTE</span>
+                    <div className="resource-row-main">
                       <input
-                        className="meta-input"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        value={r.fte}
-                        onChange={(e) => setResourceFte(r.id, e.target.value)}
+                        className="meta-input resource-name"
+                        type="text"
+                        placeholder="Name"
+                        value={r.name}
+                        onChange={(e) => renameResource(r.id, e.target.value)}
                         onBlur={() => store.breakCoalescing()}
                       />
-                    </label>
-                    <button
-                      className="resource-remove"
-                      title="Remove this resource"
-                      onClick={() => dropResource(r.id)}
-                    >
-                      ×
-                    </button>
+                      <label className="resource-fte">
+                        <span className="meta-label">FTE</span>
+                        <input
+                          className="meta-input"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={r.fte}
+                          onChange={(e) => setResourceFte(r.id, e.target.value)}
+                          onBlur={() => store.breakCoalescing()}
+                        />
+                      </label>
+                      <button
+                        className="resource-remove"
+                        title="Remove this resource"
+                        onClick={() => dropResource(r.id)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="resource-leave">
+                      <span className="meta-label">Leave</span>
+                      <DateRangeEditor
+                        compact
+                        ranges={r.leave}
+                        onAdd={(range) => addResourceLeave(r.id, r.leave, range)}
+                        onRemove={(i) => removeResourceLeave(r.id, r.leave, i)}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

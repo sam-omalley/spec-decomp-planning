@@ -98,6 +98,13 @@ export interface Edge {
   order?: number;
 }
 
+/** A closed date range (ISO `YYYY-MM-DD`, inclusive both ends) — a project
+ *  holiday or a resource's leave. */
+export interface DateRange {
+  start: string;
+  end: string;
+}
+
 /**
  * A team member the plan can be resourced against. Capacity is expressed as
  * a set of resources (replacing the old anonymous `parallelTracks` count):
@@ -111,6 +118,9 @@ export interface Resource {
   name: string;
   /** Full-time-equivalent capacity (> 0; 1 = full time, 0.8 = four days). */
   fte: number;
+  /** Individual time off; only removes capacity from this resource's own
+   *  scheduling track (see `scheduleProject` in `schedule.ts`). */
+  leave: DateRange[];
 }
 
 /**
@@ -133,6 +143,9 @@ export interface ProjectSettings {
   resources: Resource[];
   /** Capacity: global per-track speed multiplier (>0; scales durations). */
   speedMultiplier: number;
+  /** Project-wide non-working dates (public holidays, office closures) —
+   *  affect every track, unlike a `Resource`'s individual `leave`. */
+  holidays: DateRange[];
   /**
    * Editing lock: how many top levels of the spec tree are frozen against
    * accidental edits (0 = unlocked). Roots are depth 0, so a value of N
