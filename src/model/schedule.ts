@@ -140,6 +140,20 @@ function makeCalendar(startIso: string, holidays: readonly DateRange[]) {
 
 type Calendar = ReturnType<typeof makeCalendar>;
 
+/**
+ * Working-day span from `fromIso` to `toIso` (skips weekends and
+ * `holidays`), 0 if `toIso` is on/before `fromIso`. Used by baseline drift
+ * (#131) to phrase a schedule slip in the same working-day unit
+ * `durationEstimate` already uses, rather than raw calendar days.
+ */
+export function workingDaysBetween(
+  fromIso: string,
+  toIso: string,
+  holidays: readonly DateRange[],
+): number {
+  return makeCalendar(fromIso, holidays).offsetOf(toIso);
+}
+
 /** Next working-day index at/after `idx` that isn't in `leave`. */
 function skipLeave(cal: Calendar, idx: number, leave: readonly DateRange[]): number {
   let i = idx;

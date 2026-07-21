@@ -6,9 +6,10 @@
  * here — all geometry is fraction-based and unit-testable.
  */
 
-import type { ProjectGraph } from '../model/types.ts';
+import type { Baseline, ProjectGraph } from '../model/types.ts';
 import { childrenOf, groupRootsOf } from '../model/graph.ts';
 import { scheduleProject } from '../model/schedule.ts';
+import { graphOfBaseline } from '../model/baselineDrift.ts';
 import { rootGroupColor } from './colors.ts';
 
 export interface TimelineRow {
@@ -38,6 +39,11 @@ export interface TimelineRow {
    *  moving the project's projected finish. Present only when there's slack
    *  to show (see `ScheduledGroup.slackUntil` in `schedule.ts`). */
   slackEndFrac?: number;
+  /** This unit's span in the selected baseline (#131), on the same [0,1]
+   *  axis as `startFrac`/`endFrac` — present only when a baseline is
+   *  selected and this unit existed in it (drawn as a ghost bar). */
+  baselineStartFrac?: number;
+  baselineEndFrac?: number;
 }
 
 export interface TimelineMarker {
@@ -147,8 +153,17 @@ export function buildTimeline(
   /** "Today" — forwarded to the scheduler so projected bars don't start in
    *  the past. Defaults to `startDate` (no-op) for deterministic tests. */
   now: string = graph.settings.startDate,
+  /** Selected baseline (#131) to draw as a ghost bar behind each current
+   *  bar, or null/absent for none. */
+  baseline?: Baseline | null,
 ): TimelineModel {
   const schedule = scheduleProject(graph, now);
+  // The baseline's own projection is re-run as of its own capture-time
+  // "now" (`asOfDate`), never the live `now` — see the `Baseline` doc
+  // comment in types.ts for why the two must not be conflated.
+  const baselineSchedule = baseline
+    ? scheduleProject(graphOfBaseline(baseline), baseline.asOfDate)
+    : null;
 
   // Groups in pre-order, with depth, that actually got scheduled.
   const ordered: { id: string; depth: number }[] = [];
@@ -167,6 +182,13 @@ export function buildTimeline(
     const g = schedule.groups.get(id)!;
     if (g.start < rangeStart) rangeStart = g.start;
     if (g.finish > rangeEnd) rangeEnd = g.finish;
+    // A ghost bar's span must land inside [0,1] too, same as the markers
+    // extend the range below.
+    const bg = baselineSchedule?.groups.get(id);
+    if (bg) {
+      if (bg.start < rangeStart) rangeStart = bg.start;
+      if (bg.finish > rangeEnd) rangeEnd = bg.finish;
+    }
   }
   const target = graph.settings.targetDate;
   // Extend the range so every marker below (planned start, now, target)
@@ -203,6 +225,10 @@ export function buildTimeline(
         ? { stretchNote: stretchNote(durationEstimate, g.stretch) }
         : {}),
       ...(g.slackUntil ? { slackEndFrac: frac(g.slackUntil) } : {}),
+      ...(() => {
+        const bg = baselineSchedule?.groups.get(id);
+        return bg ? { baselineStartFrac: frac(bg.start), baselineEndFrac: frac(bg.finish) } : {};
+      })(),
     };
   });
 

@@ -8,6 +8,8 @@ import { useMemo, useState } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
 import { scheduleProject } from '../model/schedule.ts';
+import { computeDrift } from '../model/baselineDrift.ts';
+import type { Baseline } from '../model/types.ts';
 import {
   burnUp,
   calendarDaysBetween,
@@ -46,6 +48,8 @@ const HELP = {
     'Cumulative completed scope (working days) stepping up at each unit’s actual finish, against the constant total scope. The ideal line runs from the start to the projected finish; 🎯 marks the target date.',
   estimateVsActual:
     'For each completed unit: estimate is its duration estimate; actual is the elapsed time between its actual start and finish, in 24h days with weekend time removed. Variance = actual − estimate (+ over, − under).',
+  baselineDrift:
+    'Re-runs the projection against a captured baseline and diffs the two: units added or removed since capture, estimates that changed on units still in the plan, and units whose projected/actual start moved later — the same things a steering conversation asks about.',
 } as const;
 
 interface MetricsViewProps {
@@ -57,9 +61,12 @@ interface MetricsViewProps {
    *  burn-up) use it; estimate-vs-actual is completed history and stays on
    *  the real graph regardless. */
   scenario?: ScenarioPatch | null;
+  /** Selected baseline (#131) to diff against, or null/absent for none —
+   *  shared with TimelineView via App.tsx. */
+  baseline?: Baseline | null;
 }
 
-export function MetricsView({ onReveal, scenario = null }: MetricsViewProps = {}) {
+export function MetricsView({ onReveal, scenario = null, baseline = null }: MetricsViewProps = {}) {
   const graph = useProjectGraph();
   const now = todayIso();
   const effectiveGraph = useMemo(() => applyScenario(graph, scenario), [graph, scenario]);
@@ -70,6 +77,10 @@ export function MetricsView({ onReveal, scenario = null }: MetricsViewProps = {}
   );
   const variance = useMemo(() => estimateVsActual(graph), [graph]);
   const burn = useMemo(() => burnUp(effectiveGraph, now, schedule), [effectiveGraph, now, schedule]);
+  const drift = useMemo(
+    () => (baseline ? computeDrift(effectiveGraph, baseline, now) : null),
+    [effectiveGraph, baseline, now],
+  );
 
   // Assignee filter for the estimate-vs-actual panel (#50). Options are the
   // assignees that actually have completed units, in team order + Unassigned.
@@ -135,6 +146,8 @@ export function MetricsView({ onReveal, scenario = null }: MetricsViewProps = {}
           helpAlign="end"
         />
       </section>
+
+      {drift && <BaselineDriftPanel drift={drift} onReveal={onReveal} />}
 
       {summary.criticalPath.length > 0 && (
         <section className="metric-panel">
@@ -230,6 +243,106 @@ function Card({
       <div className="metric-card-value">{value}</div>
       {sub && <div className="metric-card-sub">{sub}</div>}
     </div>
+  );
+}
+
+function BaselineDriftPanel({
+  drift,
+  onReveal,
+}: {
+  drift: ReturnType<typeof computeDrift>;
+  onReveal?: (id: string) => void;
+}) {
+  const capturedDate = new Date(drift.capturedAt).toLocaleDateString();
+  const delta = drift.finishDeltaDays;
+  const deltaText =
+    delta === null
+      ? '—'
+      : delta === 0
+        ? 'on schedule'
+        : `${Math.abs(delta)}d ${delta > 0 ? 'later' : 'earlier'}`;
+  const noDecomposition =
+    drift.unitsAdded.length === 0 &&
+    drift.unitsRemoved.length === 0 &&
+    drift.estimateChanges.length === 0 &&
+    drift.lateStarts.length === 0;
+
+  function names(refs: { id: string; title: string }[]) {
+    return refs.map((r) => r.title).join(', ');
+  }
+
+  return (
+    <section className="metric-panel">
+      <h3>
+        vs. baseline “{drift.baselineLabel || 'Untitled'}” — captured {capturedDate}{' '}
+        <InfoDot text={HELP.baselineDrift} />
+      </h3>
+      <section className="metric-cards">
+        <Card label="Baseline finish" value={drift.baselineFinish ?? '—'} />
+        <Card label="Current finish" value={drift.currentFinish ?? '—'} />
+        <Card
+          label="Delta"
+          value={deltaText}
+          tone={delta === null || delta === 0 ? undefined : delta > 0 ? 'bad' : 'good'}
+        />
+      </section>
+      {noDecomposition ? (
+        <p className="metric-hint">No structural changes since capture.</p>
+      ) : (
+        <ul className="drift-list">
+          {drift.unitsAdded.length > 0 && (
+            <li>
+              <strong>+{drift.unitsAdded.length}</strong> unit{drift.unitsAdded.length === 1 ? '' : 's'}{' '}
+              added: {names(drift.unitsAdded)}
+            </li>
+          )}
+          {drift.unitsRemoved.length > 0 && (
+            <li>
+              <strong>−{drift.unitsRemoved.length}</strong> unit
+              {drift.unitsRemoved.length === 1 ? '' : 's'} removed: {names(drift.unitsRemoved)}
+            </li>
+          )}
+          {drift.estimateChanges.length > 0 && (
+            <li>
+              <strong>{drift.estimateChanges.length}</strong> estimate
+              {drift.estimateChanges.length === 1 ? '' : 's'} revised:{' '}
+              {drift.estimateChanges.map((c, i) => (
+                <span key={c.id}>
+                  {i > 0 && ', '}
+                  <button
+                    type="button"
+                    className={onReveal ? 'drift-link' : undefined}
+                    onClick={onReveal ? () => onReveal(c.id) : undefined}
+                  >
+                    {c.title}
+                  </button>{' '}
+                  ({c.before ?? '—'}d → {c.after ?? '—'}d)
+                </span>
+              ))}
+            </li>
+          )}
+          {drift.lateStarts.length > 0 && (
+            <li>
+              <strong>{drift.lateStarts.length}</strong> unit{drift.lateStarts.length === 1 ? '' : 's'}{' '}
+              started late:{' '}
+              {drift.lateStarts.map((l, i) => (
+                <span key={l.id}>
+                  {i > 0 && ', '}
+                  <button
+                    type="button"
+                    className={onReveal ? 'drift-link' : undefined}
+                    onClick={onReveal ? () => onReveal(l.id) : undefined}
+                  >
+                    {l.title}
+                  </button>{' '}
+                  (+{l.deltaDays}d)
+                </span>
+              ))}
+            </li>
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -34,6 +34,10 @@
  * pure no-op for the scheduler, so older files behave identically until
  * exceptions are added. No data loss.
  *
+ * v7 → v8: baselines. Settings gain `baselines` (named graph snapshots for
+ * drift comparison, see `Baseline` in types.ts), backfilled to `[]` — a
+ * pure no-op until one is captured. No data loss.
+ *
  * Every mutation in graph.ts enforces the 'contains'/'assigned_to'
  * invariants (see graph.ts's top comment), but the file/autosave path is
  * the one entrance that bypasses them — a hand-edited file, a bug in a
@@ -46,6 +50,7 @@
  */
 
 import type {
+  Baseline,
   DateRange,
   Edge,
   EdgeType,
@@ -56,7 +61,7 @@ import type {
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 7;
+export const FILE_VERSION = 8;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -64,7 +69,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -290,7 +295,49 @@ function normalizeSettings(provided: unknown): ProjectSettings {
     holidays: normalizeRanges(p.holidays),
     specLockDepth: lockDepth(p.specLockDepth, base.specLockDepth),
     planLockDepth: lockDepth(p.planLockDepth, base.planLockDepth),
+    baselines: normalizeBaselines(p.baselines),
   };
+}
+
+/**
+ * Sanitises a persisted baselines array; drops entries that aren't valid
+ * rather than failing the whole file — a baseline is a best-effort
+ * convenience snapshot, never load-bearing for the plan itself.
+ */
+function normalizeBaselines(provided: unknown): Baseline[] {
+  if (!Array.isArray(provided)) return [];
+  const out: Baseline[] = [];
+  for (const item of provided) {
+    if (typeof item !== 'object' || item === null) continue;
+    const b = item as Record<string, unknown>;
+    if (typeof b.id !== 'string' || b.id === '') continue;
+    if (typeof b.label !== 'string' || b.label.trim() === '') continue;
+    if (typeof b.capturedAt !== 'string') continue;
+    if (typeof b.graph !== 'object' || b.graph === null) continue;
+    const g = b.graph as Record<string, unknown>;
+    if (typeof g.nodes !== 'object' || g.nodes === null) continue;
+    if (typeof g.edges !== 'object' || g.edges === null) continue;
+    // A baseline's own settings can never carry baselines of its own (see
+    // the `Baseline` doc comment in types.ts) — drop the field even if a
+    // corrupt/foreign file smuggled one in.
+    const { baselines: _nested, ...settings } = normalizeSettings(g.settings);
+    out.push({
+      id: b.id,
+      label: b.label,
+      capturedAt: b.capturedAt,
+      // Best-effort fallback for a file predating asOfDate — approximates
+      // it from the capture timestamp rather than dropping the baseline.
+      asOfDate: typeof b.asOfDate === 'string' ? b.asOfDate : b.capturedAt.slice(0, 10),
+      graph: {
+        nodes: g.nodes as Record<string, WorkNode>,
+        edges: g.edges as Record<string, Edge>,
+        rootOrder: Array.isArray(g.rootOrder) ? (g.rootOrder as string[]) : [],
+        groupRootOrder: Array.isArray(g.groupRootOrder) ? (g.groupRootOrder as string[]) : [],
+        settings,
+      },
+    });
+  }
+  return out;
 }
 
 /** Rewrites a v1/v2 payload (plans, epics, belongs_to_epic) in place. */

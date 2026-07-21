@@ -18,6 +18,7 @@ import { MetricsView } from './ui/MetricsView.tsx';
 import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
 import { ConcernsView } from './ui/ConcernsView.tsx';
 import { CoverageView } from './ui/CoverageView.tsx';
+import { BaselineSelector } from './ui/BaselineSelector.tsx';
 import { ScenarioPanel } from './ui/ScenarioPanel.tsx';
 import type { ScenarioPatch } from './ui/scenario.ts';
 import { SettingsView } from './ui/SettingsView.tsx';
@@ -64,6 +65,10 @@ export function App() {
   // What-if scenario (team/speed override) for Reporting's Timeline/Metrics
   // only — ephemeral, like the view state above; never touches the graph.
   const [scenario, setScenario] = useState<ScenarioPatch | null>(null);
+  // Selected baseline (#131) for the same two views — which captured
+  // snapshot to diff against; view state only, the baselines themselves
+  // are persisted graph settings (see SettingsView).
+  const [selectedBaselineId, setSelectedBaselineId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // A prior autosave that failed to load (main.tsx backs it up rather than
   // discarding it) shows a recovery banner until downloaded or dismissed.
@@ -208,6 +213,14 @@ export function App() {
     if (selectedId !== null && !graph.nodes[selectedId]) setSelectedId(null);
   }, [graph, selectedId]);
 
+  // Same healing for the selected baseline (deleted, or undone away).
+  useEffect(() => {
+    if (selectedBaselineId !== null && !graph.settings.baselines.some((b) => b.id === selectedBaselineId)) {
+      setSelectedBaselineId(null);
+    }
+  }, [graph, selectedBaselineId]);
+  const selectedBaseline = graph.settings.baselines.find((b) => b.id === selectedBaselineId) ?? null;
+
   // Mirror the navigation state into the location hash. The first run
   // normalises the URL without adding history (replaceState); later changes
   // (tab clicks, reveal) push an entry so Back returns to the prior view.
@@ -320,7 +333,14 @@ export function App() {
           />
         )}
         {section === 'reporting' && (reportMode === 'timeline' || reportMode === 'metrics') && (
-          <ScenarioPanel value={scenario} onChange={setScenario} baseSettings={graph.settings} />
+          <>
+            <ScenarioPanel value={scenario} onChange={setScenario} baseSettings={graph.settings} />
+            <BaselineSelector
+              baselines={graph.settings.baselines}
+              value={selectedBaselineId}
+              onChange={setSelectedBaselineId}
+            />
+          </>
         )}
         <span className="app-count">
           {itemCount} item{itemCount === 1 ? '' : 's'}
@@ -451,10 +471,11 @@ export function App() {
             onSelect={setSelectedId}
             onReveal={reveal}
             scenario={scenario}
+            baseline={selectedBaseline}
           />
         )}
         {section === 'reporting' && reportMode === 'metrics' && (
-          <MetricsView onReveal={reveal} scenario={scenario} />
+          <MetricsView onReveal={reveal} scenario={scenario} baseline={selectedBaseline} />
         )}
         {section === 'reporting' && reportMode === 'assignees' && <AssigneeMetricsView />}
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}

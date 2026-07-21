@@ -19,8 +19,11 @@
 
 import {
   addResource,
+  captureBaseline,
   createId,
+  deleteBaseline,
   removeResource,
+  renameBaseline,
   updateResource,
   updateSettings,
 } from '../model/graph.ts';
@@ -95,6 +98,18 @@ export function SettingsView() {
     const value = Number(raw);
     if (!Number.isInteger(value) || value < 0) return;
     commit({ [field]: value }, field);
+  }
+
+  function captureNewBaseline() {
+    const label = window.prompt('Name this baseline', new Date().toLocaleDateString());
+    if (label === null || label.trim() === '') return; // cancelled or blank
+    store.commit((g) => captureBaseline(g, label));
+  }
+  function renameBaselineLabel(id: string, label: string) {
+    store.commit((g) => renameBaseline(g, id, label), { coalesce: `baseline-label:${id}` });
+  }
+  function dropBaseline(id: string) {
+    store.commit((g) => deleteBaseline(g, id));
   }
 
   return (
@@ -289,6 +304,45 @@ export function SettingsView() {
             )}
             <button className="resource-add" onClick={addTeamResource}>
               + Add resource
+            </button>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-card-title">Baselines</h2>
+            <p className="settings-note">
+              Named snapshots for drift comparison — capture one, then see what
+              changed against it later in Timeline and Metrics.
+            </p>
+            {s.baselines.length === 0 ? (
+              <p className="settings-note">No baselines captured yet.</p>
+            ) : (
+              <div className="baseline-list">
+                {s.baselines.map((b) => (
+                  <div className="baseline-row" key={b.id}>
+                    <input
+                      className="meta-input baseline-label"
+                      type="text"
+                      placeholder="Untitled"
+                      value={b.label}
+                      onChange={(e) => renameBaselineLabel(b.id, e.target.value)}
+                      onBlur={() => store.breakCoalescing()}
+                    />
+                    <span className="baseline-date" title={b.capturedAt}>
+                      {new Date(b.capturedAt).toLocaleDateString()}
+                    </span>
+                    <button
+                      className="baseline-remove"
+                      title="Delete this baseline"
+                      onClick={() => dropBaseline(b.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="baseline-add" onClick={captureNewBaseline}>
+              + Capture baseline
             </button>
           </section>
         </div>

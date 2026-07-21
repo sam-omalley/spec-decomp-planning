@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  captureBaseline,
   createGroup,
   emptyGraph,
   setEstimate,
@@ -186,6 +187,52 @@ describe('buildTimeline', () => {
     g = setEstimate(g, 'u1', { durationEstimate: 2 });
     const t = buildTimeline(g);
     assert.equal(t.rows[0]!.stretchNote, '2d estimate ÷ 0.8× speed = 2.5 working days');
+  });
+
+  describe('baseline ghost bars (#131)', () => {
+    it('adds baseline fracs only for a unit that existed in the baseline', () => {
+      let g = fixture();
+      g = captureBaseline(g, 'v1', '2024-01-01');
+      const baseline = g.settings.baselines[0]!;
+      g = setEstimate(g, 'e1', { durationEstimate: 5 }); // e1 now runs longer
+      const withoutBaseline = buildTimeline(g);
+      assert.equal(withoutBaseline.rows.find((r) => r.id === 'e1')!.baselineStartFrac, undefined);
+
+      const withBaseline = buildTimeline(g, undefined, baseline);
+      const e1 = withBaseline.rows.find((r) => r.id === 'e1')!;
+      assert.notEqual(e1.baselineStartFrac, undefined);
+      assert.notEqual(e1.baselineEndFrac, undefined);
+      // The baseline's shorter span ends before the current (longer) one.
+      assert.ok(e1.baselineEndFrac! < e1.endFrac);
+    });
+
+    it('omits baseline fracs for a unit added after capture', () => {
+      let g = fixture();
+      g = captureBaseline(g, 'v1', '2024-01-01');
+      const baseline = g.settings.baselines[0]!;
+      g = createGroup(g, { id: 'e3', title: 'Epic 3' }, 'block');
+      g = setEstimate(g, 'e3', { durationEstimate: 1 });
+      const t = buildTimeline(g, undefined, baseline);
+      const e3 = t.rows.find((r) => r.id === 'e3')!;
+      assert.equal(e3.baselineStartFrac, undefined);
+      assert.equal(e3.baselineEndFrac, undefined);
+    });
+
+    it('extends the date range so a baseline span outside the current one still lands correctly', () => {
+      let g = fixture(); // block > e1 (2d, Jan1..Jan2), e2 (2d, queued Jan3..Jan4)
+      g = captureBaseline(g, 'v1', '2024-01-01');
+      const baseline = g.settings.baselines[0]!;
+      // Shrink both units so the *current* schedule's own range (Jan1..Jan2)
+      // is narrower than what the baseline covered (Jan1..Jan4) — without
+      // extending the range for baseline dates, e2's ghost bar would clip
+      // to the edge instead of landing at its real relative position.
+      g = setEstimate(g, 'e1', { durationEstimate: 1 });
+      g = setEstimate(g, 'e2', { durationEstimate: 1 });
+      const t = buildTimeline(g, undefined, baseline);
+      assert.ok(t.rangeEnd >= '2024-01-04'); // the baseline's e2 finish
+      const e2 = t.rows.find((r) => r.id === 'e2')!;
+      assert.ok(e2.baselineEndFrac! > e2.endFrac); // baseline ran later than the now-shrunk current
+    });
   });
 });
 
