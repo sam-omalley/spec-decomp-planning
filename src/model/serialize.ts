@@ -33,6 +33,16 @@
  * off). Both backfilled to `[]` — an empty calendar-exception list is a
  * pure no-op for the scheduler, so older files behave identically until
  * exceptions are added. No data loss.
+ *
+ * Every mutation in graph.ts enforces the 'contains'/'assigned_to'
+ * invariants (see graph.ts's top comment), but the file/autosave path is
+ * the one entrance that bypasses them — a hand-edited file, a bug in a
+ * future migration, or a partially-written autosave could carry a
+ * 'contains' cycle, a cross-side 'contains' edge, a node with two
+ * parents, or a work node with two assignments. `validateGraph` repairs
+ * those deterministically (never silently drops the whole file) so a
+ * corrupt structure can't hang the unbounded parent-walks in graph.ts /
+ * schedule.ts.
  */
 
 import type {
@@ -64,6 +74,81 @@ interface LegacyGraph {
   rootOrder?: unknown;
   groupRootOrder?: unknown;
   settings?: unknown;
+}
+
+/** One structural violation `validateGraph` found and repaired. */
+export interface GraphRepair {
+  edgeId: string;
+  edgeType: EdgeType;
+  reason: 'duplicate-parent' | 'contains-cycle' | 'cross-side-contains' | 'duplicate-assignment';
+}
+
+/**
+ * Repairs the structural invariants graph.ts enforces on every in-app
+ * mutation, for graphs that arrived by a path that skips it (file load,
+ * autosave). Mutates `edges` in place, dropping violations in a
+ * deterministic order (by edge id) rather than rejecting the whole file.
+ * Returns the repairs made, empty for an already-valid graph.
+ */
+function validateGraph(
+  nodes: Record<string, WorkNode>,
+  edges: Record<string, Edge>,
+): GraphRepair[] {
+  const repairs: GraphRepair[] = [];
+  const parentByChild = new Map<string, string>();
+
+  const containsIds = Object.keys(edges)
+    .filter((id) => edges[id]!.type === 'contains')
+    .sort();
+  for (const id of containsIds) {
+    const edge = edges[id];
+    if (!edge) continue;
+    const from = nodes[edge.from];
+    const to = nodes[edge.to];
+    if (!from || !to) continue; // caught separately as a missing-node error
+
+    if ((from.type === 'group') !== (to.type === 'group')) {
+      delete edges[id];
+      repairs.push({ edgeId: id, edgeType: 'contains', reason: 'cross-side-contains' });
+      continue;
+    }
+    if (parentByChild.has(edge.to)) {
+      delete edges[id];
+      repairs.push({ edgeId: id, edgeType: 'contains', reason: 'duplicate-parent' });
+      continue;
+    }
+    // Would this edge close a cycle? True if `to` is already an ancestor
+    // of `from` in the forest accepted so far (including from === to).
+    let closesCycle = edge.from === edge.to;
+    let cur: string | undefined = edge.from;
+    while (!closesCycle && cur !== undefined) {
+      if (cur === edge.to) closesCycle = true;
+      cur = parentByChild.get(cur);
+    }
+    if (closesCycle) {
+      delete edges[id];
+      repairs.push({ edgeId: id, edgeType: 'contains', reason: 'contains-cycle' });
+      continue;
+    }
+    parentByChild.set(edge.to, edge.from);
+  }
+
+  const assignedFrom = new Set<string>();
+  const assignIds = Object.keys(edges)
+    .filter((id) => edges[id]!.type === 'assigned_to')
+    .sort();
+  for (const id of assignIds) {
+    const edge = edges[id];
+    if (!edge) continue;
+    if (assignedFrom.has(edge.from)) {
+      delete edges[id];
+      repairs.push({ edgeId: id, edgeType: 'assigned_to', reason: 'duplicate-assignment' });
+      continue;
+    }
+    assignedFrom.add(edge.from);
+  }
+
+  return repairs;
 }
 
 export function serializeProject(graph: ProjectGraph): string {
@@ -276,7 +361,18 @@ function migrateLegacy(legacy: LegacyGraph): void {
   if (planIds.length > 0) legacy.groupRootOrder = undefined;
 }
 
-export function deserializeProject(text: string): ProjectGraph {
+export interface DeserializeResult {
+  graph: ProjectGraph;
+  /** Structural violations `validateGraph` dropped to make the file loadable. */
+  repairs: GraphRepair[];
+}
+
+/**
+ * Parses and migrates a project file, then repairs any structural
+ * invariant violation (see `validateGraph`) rather than rejecting the
+ * file outright. Reports what it repaired so a caller can tell the user.
+ */
+export function deserializeProjectWithReport(text: string): DeserializeResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -315,16 +411,26 @@ export function deserializeProject(text: string): ProjectGraph {
       throw new GraphError(`Project file is corrupt: edge ${edge.id} references a missing node`);
     }
   }
+
+  const repairs = validateGraph(graph.nodes, graph.edges);
+
   return {
-    nodes: graph.nodes,
-    edges: graph.edges as Record<string, Edge>,
-    settings: normalizeSettings(graph.settings),
-    rootOrder: reconcileRootOrder(graph.nodes, graph.edges, graph.rootOrder, 'work'),
-    groupRootOrder: reconcileRootOrder(
-      graph.nodes,
-      graph.edges,
-      graph.groupRootOrder,
-      'group',
-    ),
+    graph: {
+      nodes: graph.nodes,
+      edges: graph.edges as Record<string, Edge>,
+      settings: normalizeSettings(graph.settings),
+      rootOrder: reconcileRootOrder(graph.nodes, graph.edges, graph.rootOrder, 'work'),
+      groupRootOrder: reconcileRootOrder(
+        graph.nodes,
+        graph.edges,
+        graph.groupRootOrder,
+        'group',
+      ),
+    },
+    repairs,
   };
+}
+
+export function deserializeProject(text: string): ProjectGraph {
+  return deserializeProjectWithReport(text).graph;
 }

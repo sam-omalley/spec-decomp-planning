@@ -255,8 +255,12 @@ function enclosingUnit(
   unitSet: Set<string>,
 ): string | null {
   let cur: string | null = id;
-  while (cur !== null) {
+  // See isInSubtreeOf in graph.ts: a visited set turns a residual
+  // 'contains' cycle into a wrong answer instead of a hang.
+  const visited = new Set<string>();
+  while (cur !== null && !visited.has(cur)) {
     if (unitSet.has(cur)) return cur;
+    visited.add(cur);
     cur = parentOf(graph, cur);
   }
   return null;
