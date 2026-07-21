@@ -11,8 +11,13 @@ describe('shortcutsFor', () => {
     assert.deepEqual(headings('spec', 'outline', 'map'), ['Outliner', 'App']);
   });
 
-  it('Planning outline: Outliner + Details card + App', () => {
-    assert.deepEqual(headings('planning', 'outline', 'map'), ['Outliner', 'Details card', 'App']);
+  it('Planning outline: Outliner + Details card + Assign + App', () => {
+    assert.deepEqual(headings('planning', 'outline', 'map'), [
+      'Outliner',
+      'Details card',
+      'Assign',
+      'App',
+    ]);
   });
 
   it('Planning table: Table + App, no outliner shortcuts', () => {

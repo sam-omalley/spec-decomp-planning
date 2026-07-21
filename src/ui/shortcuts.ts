@@ -53,6 +53,21 @@ const DETAILS_CARD_GROUP: ShortcutGroup = {
   ],
 };
 
+const ASSIGN_GROUP: ShortcutGroup = {
+  heading: 'Assign',
+  entries: [
+    {
+      keys: 'a',
+      description:
+        'Spec row(s) selected: pick a group to assign into. Group row selected: ' +
+        'assign the current spec selection into it',
+    },
+    { keys: '↑ / ↓', description: 'Move through the group picker' },
+    { keys: 'Enter', description: 'Confirm the highlighted group' },
+    { keys: 'Esc', description: 'Cancel the group picker' },
+  ],
+};
+
 const TABLE_GROUP: ShortcutGroup = {
   heading: 'Table',
   entries: [
@@ -77,7 +92,7 @@ export function shortcutsFor(
   if (section === 'spec') {
     groups.push(OUTLINER_GROUP);
   } else if (section === 'planning' && planMode === 'outline') {
-    groups.push(OUTLINER_GROUP, DETAILS_CARD_GROUP);
+    groups.push(OUTLINER_GROUP, DETAILS_CARD_GROUP, ASSIGN_GROUP);
   } else if (section === 'planning' && planMode === 'table') {
     groups.push(TABLE_GROUP);
   } else if (section === 'graph') {
