@@ -24,6 +24,7 @@ import { SettingsView } from './ui/SettingsView.tsx';
 import { ShortcutCheatsheet } from './ui/ShortcutCheatsheet.tsx';
 import { shortcutsFor } from './ui/shortcuts.ts';
 import { TimelineView } from './ui/TimelineView.tsx';
+import { FilterFacets, type FacetValue } from './ui/FilterFacets.tsx';
 import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
 import { hashFor, parseHash, type PlanMode, type ReportMode, type Section } from './ui/route.ts';
 
@@ -53,6 +54,9 @@ export function App() {
   // Global filter/search — view state only; never enters the graph, undo,
   // or autosave. Shared across the Spec / Planning / Graph tabs.
   const [filterText, setFilterText] = useState('');
+  // Facets (#129) — same ephemeral rules as filterText, just disclosed
+  // behind a picker instead of always-on so the header doesn't grow.
+  const [facets, setFacets] = useState<FacetValue>({ statuses: [], priorities: [], tags: [] });
   // Per-side depth caps (undefined = all levels); ephemeral view state,
   // like planMode — never serialized.
   const [specMaxDepth, setSpecMaxDepth] = useState<number | undefined>(undefined);
@@ -73,17 +77,42 @@ export function App() {
     setLoadRepairs(takePendingLoadRepairs());
   }, []);
 
-  const filter: FilterState = useMemo(() => ({ text: filterText }), [filterText]);
-  const filterActive = isFilterActive(filter);
   // Views the filter applies to; others (Markdown, Reporting) are unchanged.
   const searchable =
     section === 'spec' ||
     (section === 'planning' && planMode !== 'markdown') ||
     section === 'graph';
+  // Status only means anything on the plan side (CLAUDE.md: it's a
+  // group-only field, never surfaced on the spec side) — Planning and
+  // Graph both show group nodes, Spec never does. Scoped out of the
+  // predicate itself (not just the picker) so a status facet left checked
+  // while switching to Spec goes inert rather than silently hiding
+  // everything (spec nodes never carry a real status).
+  const showStatusFacet = section === 'planning' || section === 'graph';
+  const filter: FilterState = useMemo(
+    () => ({
+      text: filterText,
+      statuses: showStatusFacet ? facets.statuses : undefined,
+      priorities: facets.priorities,
+      tags: facets.tags,
+    }),
+    [filterText, facets, showStatusFacet],
+  );
+  const filterActive = isFilterActive(filter);
+  const tagOptions = useMemo(
+    () => Array.from(new Set(Object.values(graph.nodes).flatMap((n) => n.tags))).sort(),
+    [graph],
+  );
   const matchCount = useMemo(() => {
     if (!filterActive || !searchable) return 0;
     return Object.values(graph.nodes).filter((n) => {
-      if (!matchesFilter(n, filter)) return false;
+      // Status is group-only (see showStatusFacet above) — a work node's
+      // status is never surfaced/edited, so exclude it from a work node's
+      // match check the same way PlanningView's spec pane and GraphView's
+      // map do (#129), rather than let it silently zero out every work
+      // node's count when a status facet is active.
+      const effective = n.type === 'group' ? filter : { ...filter, statuses: undefined };
+      if (!matchesFilter(n, effective)) return false;
       // Spec shows only work nodes; the Planning table shows only groups.
       if (section === 'spec') return n.type !== 'group';
       if (section === 'planning' && planMode === 'table') return n.type === 'group';
@@ -317,6 +346,12 @@ export function App() {
                 {matchCount} match{matchCount === 1 ? '' : 'es'}
               </span>
             )}
+            <FilterFacets
+              value={facets}
+              onChange={setFacets}
+              showStatus={showStatusFacet}
+              tagOptions={tagOptions}
+            />
           </div>
         )}
         <div className="app-spacer" />

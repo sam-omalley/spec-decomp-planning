@@ -62,12 +62,16 @@ export function PlanningView({
   const [specDropping, setSpecDropping] = useState(false);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
 
-  const filterActive = isFilterActive(filter);
+  // Status is a group-only field (CLAUDE.md), so the spec pane strips it
+  // out of the shared filter — otherwise every spec row would fail a
+  // status facet meant for the delivery plan (#129).
+  const specFilter: FilterState = { ...filter, statuses: undefined };
+  const filterActive = isFilterActive(specFilter);
   const specRows = visibleRows(
     graph,
     NO_COLLAPSE,
     'work',
-    filterActive ? (id) => matchesFilter(graph.nodes[id]!, filter) : undefined,
+    filterActive ? (id) => matchesFilter(graph.nodes[id]!, specFilter) : undefined,
   );
   const uncovered = useMemo(() => uncoveredWorkIds(graph), [graph]);
   const shownSpecRows = onlyUnassigned
