@@ -15,6 +15,7 @@ import {
   emptyGraph,
   groupOf,
   groupRootsOf,
+  isInSubtreeOf,
   membersOfGroup,
   moveNode,
   parentOf,
@@ -29,7 +30,7 @@ import {
   updateResource,
   updateSettings,
 } from './graph.ts';
-import { deserializeProject, serializeProject } from './serialize.ts';
+import { deserializeProject, deserializeProjectWithReport, serializeProject } from './serialize.ts';
 import type { ProjectGraph } from './types.ts';
 
 /** auth ─┬─ login ─┬─ password
@@ -466,6 +467,124 @@ describe('serialization', () => {
     assert.equal(restored.settings.hoursPerWeek, 30); // kept
     assert.equal(restored.settings.speedMultiplier, 1); // garbage → default
     assert.deepEqual(restored.settings.resources, []); // missing → default
+  });
+});
+
+describe('serialization — validateGraph repairs (#128)', () => {
+  // Every mutation in graph.ts enforces the 'contains'/'assigned_to'
+  // invariants, so the only way to get a violating shape past the type
+  // system is a hand-built file — exactly the corrupt-file scenario
+  // validateGraph exists to repair on load.
+  function rawNode(id: string, type: 'task' | 'group') {
+    return {
+      id,
+      title: id,
+      description: '',
+      type,
+      status: 'not_started',
+      priority: 'medium',
+      effort: null,
+      tags: [],
+      notes: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      modifiedAt: '2026-01-01T00:00:00.000Z',
+    };
+  }
+
+  function rawFile(
+    nodes: Record<string, unknown>,
+    edges: Record<string, unknown>,
+  ): string {
+    return JSON.stringify({
+      version: 7,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: { nodes, edges, rootOrder: [], groupRootOrder: [] },
+    });
+  }
+
+  it('drops the edge that closes a contains cycle, deterministically by edge id', () => {
+    const text = rawFile(
+      { a: rawNode('a', 'task'), b: rawNode('b', 'task') },
+      {
+        e1: { id: 'e1', type: 'contains', from: 'a', to: 'b', order: 0 },
+        e2: { id: 'e2', type: 'contains', from: 'b', to: 'a', order: 0 }, // closes the cycle
+      },
+    );
+    const { graph, repairs } = deserializeProjectWithReport(text);
+    assert.deepEqual(repairs, [{ edgeId: 'e2', edgeType: 'contains', reason: 'contains-cycle' }]);
+    assert.equal(parentOf(graph, 'b'), 'a');
+    assert.equal(parentOf(graph, 'a'), null);
+    assert.deepEqual(rootsOf(graph), ['a']);
+  });
+
+  it('drops a contains edge that crosses sides (group containing a work node)', () => {
+    const text = rawFile(
+      { g1: rawNode('g1', 'group'), t1: rawNode('t1', 'task') },
+      { e1: { id: 'e1', type: 'contains', from: 'g1', to: 't1', order: 0 } },
+    );
+    const { graph, repairs } = deserializeProjectWithReport(text);
+    assert.deepEqual(repairs, [
+      { edgeId: 'e1', edgeType: 'contains', reason: 'cross-side-contains' },
+    ]);
+    assert.equal(parentOf(graph, 't1'), null);
+    assert.deepEqual(rootsOf(graph), ['t1']);
+    assert.deepEqual(groupRootsOf(graph), ['g1']);
+  });
+
+  it('drops the later contains edge that would give a node a second parent', () => {
+    const text = rawFile(
+      { p1: rawNode('p1', 'group'), p2: rawNode('p2', 'group'), c: rawNode('c', 'group') },
+      {
+        e1: { id: 'e1', type: 'contains', from: 'p1', to: 'c', order: 0 },
+        e2: { id: 'e2', type: 'contains', from: 'p2', to: 'c', order: 0 },
+      },
+    );
+    const { graph, repairs } = deserializeProjectWithReport(text);
+    assert.deepEqual(repairs, [
+      { edgeId: 'e2', edgeType: 'contains', reason: 'duplicate-parent' },
+    ]);
+    assert.equal(parentOf(graph, 'c'), 'p1');
+  });
+
+  it('keeps the first assigned_to per work node and drops the rest', () => {
+    const text = rawFile(
+      { w: rawNode('w', 'task'), g1: rawNode('g1', 'group'), g2: rawNode('g2', 'group') },
+      {
+        e1: { id: 'e1', type: 'assigned_to', from: 'w', to: 'g1' },
+        e2: { id: 'e2', type: 'assigned_to', from: 'w', to: 'g2' },
+      },
+    );
+    const { graph, repairs } = deserializeProjectWithReport(text);
+    assert.deepEqual(repairs, [
+      { edgeId: 'e2', edgeType: 'assigned_to', reason: 'duplicate-assignment' },
+    ]);
+    assert.equal(groupOf(graph, 'w'), 'g1');
+  });
+
+  it('reports no repairs for an already-valid graph', () => {
+    const g = planned();
+    const { repairs } = deserializeProjectWithReport(serializeProject(g));
+    assert.deepEqual(repairs, []);
+  });
+});
+
+describe('graph traversals — tolerate a residual contains cycle (#128)', () => {
+  it('isInSubtreeOf terminates instead of hanging on a cycle bypassing addEdge', () => {
+    let g = emptyGraph();
+    g = createNode(g, { id: 'a', title: 'A' });
+    g = createNode(g, { id: 'b', title: 'B' }, 'a'); // a contains b, via the real mutation
+    // Simulate corruption that skipped graph.ts's cycle guard (e.g. a file
+    // loaded before validateGraph existed): inject a second contains edge
+    // the other way round, directly into the edge map.
+    g = {
+      ...g,
+      edges: {
+        ...g.edges,
+        bad: { id: 'bad', type: 'contains', from: 'b', to: 'a', order: 0 },
+      },
+    };
+    assert.equal(isInSubtreeOf(g, 'a', 'ghost'), false);
+    assert.equal(isInSubtreeOf(g, 'b', 'ghost'), false);
   });
 });
 

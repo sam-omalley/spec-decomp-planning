@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraphError } from './model/graph.ts';
-import { deserializeProject, serializeProject } from './model/serialize.ts';
+import {
+  deserializeProjectWithReport,
+  serializeProject,
+  type GraphRepair,
+} from './model/serialize.ts';
 import { clearUnrecoveredText, loadUnrecoveredText } from './persist/persistence.ts';
+import { takePendingLoadRepairs } from './persist/loadReport.ts';
 import { store, useProjectGraph } from './store/appStore.ts';
 import { GraphView, type GraphMode } from './ui/GraphView.tsx';
 import { HeaderMenu } from './ui/HeaderMenu.tsx';
@@ -59,9 +64,13 @@ export function App() {
   // A prior autosave that failed to load (main.tsx backs it up rather than
   // discarding it) shows a recovery banner until downloaded or dismissed.
   const [backupText, setBackupText] = useState<string | null>(null);
+  // Structural repairs validateGraph made to load a corrupt file/autosave
+  // (see serialize.ts) — shown once, then dismissed.
+  const [loadRepairs, setLoadRepairs] = useState<GraphRepair[] | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   useEffect(() => {
     void loadUnrecoveredText().then((text) => setBackupText(text ?? null));
+    setLoadRepairs(takePendingLoadRepairs());
   }, []);
 
   const filter: FilterState = useMemo(() => ({ text: filterText }), [filterText]);
@@ -124,7 +133,7 @@ export function App() {
 
   async function importProject(file: File) {
     try {
-      const imported = deserializeProject(await file.text());
+      const { graph: imported, repairs } = deserializeProjectWithReport(await file.text());
       const hasData = Object.keys(store.getState().nodes).length > 0;
       if (
         hasData &&
@@ -137,6 +146,7 @@ export function App() {
       }
       store.reset(imported);
       setSelectedId(null);
+      setLoadRepairs(repairs.length > 0 ? repairs : null);
     } catch (error) {
       window.alert(
         error instanceof GraphError
@@ -360,6 +370,14 @@ export function App() {
           instead.
           <button onClick={downloadBackup}>Recover backup…</button>
           <button onClick={discardBackup}>Discard</button>
+        </div>
+      )}
+      {loadRepairs && (
+        <div className="app-banner" role="alert">
+          This file was repaired on load: {loadRepairs.length}{' '}
+          {loadRepairs.length === 1 ? 'edge was' : 'edges were'} dropped to fix an invalid
+          structure (a cycle, a double parent, or a double assignment).
+          <button onClick={() => setLoadRepairs(null)}>Dismiss</button>
         </div>
       )}
       <main className={`app-main${section === 'spec' ? '' : ' app-main-wide'}`}>

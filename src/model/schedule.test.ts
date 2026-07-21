@@ -337,6 +337,32 @@ describe('scheduleProject — cycles & containers', () => {
     assert.equal(block.start, '2024-01-01');
     assert.equal(block.finish, '2024-01-04');
   });
+
+  it('does not hang when a dependency endpoint sits above a residual contains cycle (#128)', () => {
+    let g = base();
+    g = group(g, 'd', 1); // a real scheduling unit, reachable from a root
+    // Two containers that only reference each other — orphaned (not in
+    // groupRootOrder), so schedulingUnits' root-driven walk never visits
+    // them. This isolates the test to enclosingUnit's own parent walk,
+    // which the dependency-adjacency scan below reaches directly regardless
+    // of root reachability.
+    g = createGroup(g, { id: 'c1', title: 'c1' });
+    g = createGroup(g, { id: 'c2', title: 'c2' });
+    g = { ...g, groupRootOrder: g.groupRootOrder.filter((id) => id !== 'c1' && id !== 'c2') };
+    // Simulate corruption that skipped graph.ts's cycle guard: two
+    // 'contains' edges pointing at each other, bypassing addEdge.
+    g = {
+      ...g,
+      edges: {
+        ...g.edges,
+        bad1: { id: 'bad1', type: 'contains', from: 'c1', to: 'c2', order: 0 },
+        bad2: { id: 'bad2', type: 'contains', from: 'c2', to: 'c1', order: 0 },
+      },
+    };
+    g = addEdge(g, { type: 'depends_on', from: 'c1', to: 'd' });
+    const s = scheduleProject(g); // must return, not spin walking the cycle
+    assert.ok(s.groups.get('d'));
+  });
 });
 
 describe('scheduleProject — actuals blend over projection', () => {

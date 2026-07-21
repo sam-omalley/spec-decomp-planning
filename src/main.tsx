@@ -2,13 +2,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { store } from './store/appStore.ts';
-import { deserializeProject, serializeProject } from './model/serialize.ts';
+import { deserializeProjectWithReport, serializeProject } from './model/serialize.ts';
 import {
   createAutosaver,
   loadProjectText,
   saveProjectText,
   saveUnrecoveredText,
 } from './persist/persistence.ts';
+import { setPendingLoadRepairs } from './persist/loadReport.ts';
 import './styles.css';
 
 async function init(): Promise<void> {
@@ -18,7 +19,9 @@ async function init(): Promise<void> {
     const text = await loadProjectText();
     if (text !== undefined) {
       try {
-        store.reset(deserializeProject(text));
+        const { graph, repairs } = deserializeProjectWithReport(text);
+        setPendingLoadRepairs(repairs);
+        store.reset(graph);
       } catch (parseError) {
         // The autosave exists but couldn't be read (corrupt, or from an
         // unsupported version). Never silently discard it: back it up under

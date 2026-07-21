@@ -227,8 +227,14 @@ export function isInSubtreeOf(
   maybeAncestor: string,
 ): boolean {
   let current: string | null = id;
-  while (current !== null) {
+  // A well-formed graph never has a 'contains' cycle (every mutation here
+  // rejects one), but a file loaded from disk might if it predates
+  // validateGraph's repair pass — a visited set keeps this a wrong answer
+  // instead of an infinite loop.
+  const visited = new Set<string>();
+  while (current !== null && !visited.has(current)) {
     if (current === maybeAncestor) return true;
+    visited.add(current);
     current = parentOf(graph, current);
   }
   return false;
