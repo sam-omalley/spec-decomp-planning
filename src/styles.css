@@ -1451,6 +1451,59 @@ body {
   border-color: var(--muted);
 }
 
+/* Baselines (#131) — named graph snapshots for drift comparison, styled
+   like the Team roster above. */
+.baseline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.baseline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.baseline-label {
+  flex: 1;
+}
+.baseline-date {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.baseline-remove {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.baseline-remove:hover {
+  color: #d1495b;
+  border-color: #d1495b;
+}
+.baseline-add {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+.baseline-add:hover {
+  border-color: var(--muted);
+}
+
 /* Date-range editor (project holidays / a resource's leave) — chips plus a
    two-date add row, styled like the Keys chip editor. */
 .date-range-editor {
@@ -1643,6 +1696,15 @@ body {
   stroke: var(--muted);
   stroke-width: 1;
 }
+/* Baseline ghost bar (#131): offset below the current bar (never
+   overlapping it) with a dashed outline and no fill — position + stroke
+   style are the cue, not colour, same principle as the slack indicator. */
+.tl-ghost {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
 .tl-legend {
   display: flex;
   align-items: center;
@@ -1670,6 +1732,10 @@ body {
     var(--muted) 2px,
     var(--muted) 3px
   );
+  border: 1.5px dashed var(--muted);
+}
+.tl-legend-baseline {
+  background: none;
   border: 1.5px dashed var(--muted);
 }
 .tl-legend-markers {
@@ -1796,6 +1862,28 @@ body {
 .metric-hint {
   color: var(--muted);
   font-size: 13px;
+}
+
+/* Baseline drift decomposition (#131) — a plain list, one bucket per row;
+   each bucket's own bold count + label is the cue, not colour, per the
+   colour-vision constraint. */
+.drift-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.drift-link {
+  font: inherit;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* ------------------------------ concerns view ------------------------------ */
