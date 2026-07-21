@@ -7,9 +7,11 @@ import {
   addResource,
   assignResource,
   assignToGroup,
+  captureBaseline,
   childrenOf,
   createGroup,
   createNode,
+  deleteBaseline,
   deleteNode,
   edgeBetween,
   emptyGraph,
@@ -22,6 +24,7 @@ import {
   removeExternalRef,
   removeFromGroup,
   removeResource,
+  renameBaseline,
   rootsOf,
   setActualDates,
   setEstimate,
@@ -417,6 +420,55 @@ describe('serialization', () => {
     assert.deepEqual(g.settings.holidays, [{ start: '2026-12-25', end: '2026-12-26' }]);
   });
 
+  it('migrates a v7 file by backfilling baselines to empty (#131)', () => {
+    const v7 = {
+      version: 7,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerWeek: 38, speedMultiplier: 1, specLockDepth: 0, planLockDepth: 0,
+          resources: [], holidays: [], // no `baselines` yet
+        },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(v7));
+    assert.deepEqual(g.settings.baselines, []);
+  });
+
+  it('round-trips a captured baseline through serialize/deserialize', () => {
+    let g = fixture();
+    g = setEstimate(g, 'login', { durationEstimate: 5 });
+    g = captureBaseline(g, 'v1');
+    const restored = deserializeProject(serializeProject(g));
+    assert.deepEqual(restored, g);
+  });
+
+  it('drops a baseline with a missing id/label/graph rather than the whole file', () => {
+    const file = {
+      version: 8,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerWeek: 38, speedMultiplier: 1, specLockDepth: 0, planLockDepth: 0,
+          resources: [], holidays: [],
+          baselines: [
+            { id: 'b1', label: 'ok', capturedAt: '2026-01-01T00:00:00.000Z', graph: { nodes: {}, edges: {} } },
+            { id: '', label: 'no id', capturedAt: '2026-01-01T00:00:00.000Z', graph: { nodes: {}, edges: {} } },
+            { id: 'b3', label: '', capturedAt: '2026-01-01T00:00:00.000Z', graph: { nodes: {}, edges: {} } },
+            { id: 'b4', label: 'no graph', capturedAt: '2026-01-01T00:00:00.000Z' },
+          ],
+        },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(file));
+    assert.equal(g.settings.baselines.length, 1);
+    assert.equal(g.settings.baselines[0]!.id, 'b1');
+  });
+
   it('migrates a v5 file to resourcing (parallelTracks → team, hours/day → hours/week)', () => {
     // A v5-shaped settings blob: the old capacity/conversion fields.
     const v5 = {
@@ -705,5 +757,52 @@ describe('external refs and settings', () => {
     assert.equal(g.settings.resources.length, 1);
     assert.equal(g.nodes['login']!.resourceId, null);
     assert.throws(() => removeResource(g, 'r1'), /No resource/);
+  });
+});
+
+describe('baselines (#131)', () => {
+  it('captures a snapshot by reference, immune to later edits', () => {
+    let g = fixture();
+    g = setEstimate(g, 'login', { durationEstimate: 3 });
+    g = captureBaseline(g, ' Sprint 1 kickoff ');
+    assert.equal(g.settings.baselines.length, 1);
+    const baseline = g.settings.baselines[0]!;
+    assert.equal(baseline.label, 'Sprint 1 kickoff'); // trimmed
+    assert.ok(baseline.id);
+    assert.ok(baseline.capturedAt);
+    assert.equal(baseline.graph.nodes['login']!.durationEstimate, 3);
+
+    // Later edits never touch the captured snapshot (structural sharing).
+    g = setEstimate(g, 'login', { durationEstimate: 8 });
+    assert.equal(g.nodes['login']!.durationEstimate, 8);
+    assert.equal(g.settings.baselines[0]!.graph.nodes['login']!.durationEstimate, 3);
+  });
+
+  it("a baseline's own settings never carry baselines of their own", () => {
+    let g = fixture();
+    g = captureBaseline(g, 'first');
+    assert.deepEqual((g.settings.baselines[0]!.graph.settings as { baselines?: unknown }).baselines, undefined);
+  });
+
+  it('rejects a blank label', () => {
+    const g = fixture();
+    assert.throws(() => captureBaseline(g, '   '), /label/);
+  });
+
+  it('renames and deletes a baseline', () => {
+    let g = fixture();
+    g = captureBaseline(g, 'v1');
+    const id = g.settings.baselines[0]!.id;
+    g = renameBaseline(g, id, 'v1 — revised');
+    assert.equal(g.settings.baselines[0]!.label, 'v1 — revised');
+    assert.throws(() => renameBaseline(g, 'ghost', 'x'), /No baseline/);
+    // Renaming backs a live text field — blank mid-edit is allowed, same
+    // as a node title (only capture requires a non-blank label upfront).
+    g = renameBaseline(g, id, '');
+    assert.equal(g.settings.baselines[0]!.label, '');
+
+    g = deleteBaseline(g, id);
+    assert.deepEqual(g.settings.baselines, []);
+    assert.throws(() => deleteBaseline(g, id), /No baseline/);
   });
 });

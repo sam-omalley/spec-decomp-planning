@@ -17,6 +17,7 @@
  */
 
 import type {
+  Baseline,
   DateRange,
   Edge,
   EdgeType,
@@ -52,6 +53,7 @@ export function defaultSettings(): ProjectSettings {
     holidays: [],
     specLockDepth: 0,
     planLockDepth: 0,
+    baselines: [],
   };
 }
 
@@ -726,6 +728,9 @@ export function updateSettings(
     validateRanges(r.leave, 'resource leave');
   }
   validateRanges(settings.holidays, 'holidays');
+  if (!Array.isArray(settings.baselines)) {
+    throw new GraphError('baselines must be an array');
+  }
   if (!Number.isInteger(settings.specLockDepth) || settings.specLockDepth < 0) {
     throw new GraphError('specLockDepth must be a non-negative integer');
   }
@@ -804,4 +809,60 @@ export function assignResource(
     throw new GraphError(`No resource with id ${resourceId}`);
   }
   return putNode(graph, { ...node, resourceId });
+}
+
+/* -------------------------------- baselines -------------------------------- */
+
+/**
+ * Captures a named snapshot of the current graph for later drift comparison
+ * (`src/model/baselineDrift.ts`). Nodes/edges/root orders are stored by
+ * reference — safe because every mutation replaces rather than mutates its
+ * records, the same structural-sharing guarantee undo relies on. `asOfDate`
+ * is the project-time "today" at capture (see the `Baseline` doc comment
+ * in types.ts) — the caller's `now`, defaulting to `todayIso()`.
+ */
+export function captureBaseline(
+  graph: ProjectGraph,
+  label: string,
+  asOfDate: string = todayIso(),
+): ProjectGraph {
+  const trimmed = label.trim();
+  if (trimmed === '') throw new GraphError('Baseline needs a label');
+  const { baselines: _baselines, ...settingsWithoutBaselines } = graph.settings;
+  const baseline: Baseline = {
+    id: createId(),
+    label: trimmed,
+    capturedAt: nowIso(),
+    asOfDate,
+    graph: {
+      nodes: graph.nodes,
+      edges: graph.edges,
+      rootOrder: graph.rootOrder,
+      groupRootOrder: graph.groupRootOrder,
+      settings: settingsWithoutBaselines,
+    },
+  };
+  return updateSettings(graph, { baselines: [...graph.settings.baselines, baseline] });
+}
+
+/**
+ * Renames a baseline. Unlike `captureBaseline`'s one-off label, this backs
+ * a live text field — allowed to be blank mid-edit, same as a node title.
+ */
+export function renameBaseline(graph: ProjectGraph, id: string, label: string): ProjectGraph {
+  if (!graph.settings.baselines.some((b) => b.id === id)) {
+    throw new GraphError(`No baseline with id ${id}`);
+  }
+  return updateSettings(graph, {
+    baselines: graph.settings.baselines.map((b) => (b.id === id ? { ...b, label } : b)),
+  });
+}
+
+export function deleteBaseline(graph: ProjectGraph, id: string): ProjectGraph {
+  if (!graph.settings.baselines.some((b) => b.id === id)) {
+    throw new GraphError(`No baseline with id ${id}`);
+  }
+  return updateSettings(graph, {
+    baselines: graph.settings.baselines.filter((b) => b.id !== id),
+  });
 }

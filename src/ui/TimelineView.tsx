@@ -22,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
+import type { Baseline } from '../model/types.ts';
 import { buildTimeline, dateAtFrac, groupMarkersByDate } from './timelineLayout.ts';
 import type { TimelineMarker } from './timelineLayout.ts';
 import { InfoDot } from './InfoDot.tsx';
@@ -49,6 +50,9 @@ interface TimelineViewProps {
    *  projection — see `scenario.ts`. Shared with MetricsView via App.tsx so
    *  switching Reporting sub-tabs keeps the same scenario active. */
   scenario?: ScenarioPatch | null;
+  /** Selected baseline (#131) drawn as a ghost bar behind each current bar,
+   *  or null/absent for none. Shared with MetricsView via App.tsx. */
+  baseline?: Baseline | null;
 }
 
 const LABEL_W = 220;
@@ -73,11 +77,20 @@ function clampView(start: number, end: number): ViewWindow {
   return { start, end };
 }
 
-export function TimelineView({ selectedId, onSelect, onReveal, scenario = null }: TimelineViewProps) {
+export function TimelineView({
+  selectedId,
+  onSelect,
+  onReveal,
+  scenario = null,
+  baseline = null,
+}: TimelineViewProps) {
   const graph = useProjectGraph();
   const now = todayIso();
   const effectiveGraph = useMemo(() => applyScenario(graph, scenario), [graph, scenario]);
-  const model = useMemo(() => buildTimeline(effectiveGraph, now), [effectiveGraph, now]);
+  const model = useMemo(
+    () => buildTimeline(effectiveGraph, now, baseline),
+    [effectiveGraph, now, baseline],
+  );
   // Hover crosshair: the fraction under the cursor, or null when the mouse
   // isn't over the chart area (outside the row-label gutter, on either side).
   const [hoverFrac, setHoverFrac] = useState<number | null>(null);
@@ -210,6 +223,12 @@ export function TimelineView({ selectedId, onSelect, onReveal, scenario = null }
           Slack — how far a bar could slip without delaying the project
         </div>
       )}
+      {baseline && (
+        <div className="tl-legend">
+          <span className="tl-legend-swatch tl-legend-baseline" />
+          Ghost bar — this unit's span in “{baseline.label || 'Untitled'}”
+        </div>
+      )}
       <div className="tl-legend tl-legend-markers">
         {(Object.keys(MARKER_INFO) as TimelineMarker['kind'][]).map((kind) => (
           <span key={kind}>
@@ -317,6 +336,7 @@ export function TimelineView({ selectedId, onSelect, onReveal, scenario = null }
               (row.source === 'actual' ? ' tl-bar-actual' : '') +
               (row.critical ? ' tl-bar-critical' : '') +
               (selected ? ' tl-bar-selected' : '');
+            const hasBaseline = row.baselineStartFrac !== undefined && row.baselineEndFrac !== undefined;
             const title = (
               <title>
                 {row.title}: {row.start} → {row.finish}
@@ -326,10 +346,26 @@ export function TimelineView({ selectedId, onSelect, onReveal, scenario = null }
                 {row.slackEndFrac !== undefined
                   ? ` · could slip to ${dateAtFrac(model, row.slackEndFrac)} without delaying the project`
                   : ''}
+                {hasBaseline
+                  ? ` · baseline: ${dateAtFrac(model, row.baselineStartFrac!)} → ${dateAtFrac(model, row.baselineEndFrac!)}`
+                  : ''}
               </title>
             );
+            // Ghost bar (#131): the same unit's span in the selected baseline,
+            // offset into the row's own bottom margin (never overlapping the
+            // current bar) and drawn as a dashed outline rather than a fill —
+            // position + stroke style carry the meaning, not colour.
+            const ghostY = y + ROW_H - 6;
+            const ghostH = 4;
+            const gx = hasBaseline ? x(row.baselineStartFrac!) : 0;
+            const gw = hasBaseline ? Math.max(3, x(row.baselineEndFrac!) - gx) : 0;
             return (
               <g key={row.id}>
+                {hasBaseline && (
+                  <rect x={gx} y={ghostY} width={gw} height={ghostH} rx={2} className="tl-ghost">
+                    {title}
+                  </rect>
+                )}
                 {row.slackEndFrac !== undefined && (
                   <rect
                     x={bx + bw}

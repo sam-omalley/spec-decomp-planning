@@ -124,6 +124,43 @@ export interface Resource {
 }
 
 /**
+ * A named snapshot of the graph, captured for baseline-vs-current drift
+ * comparison (`src/model/baselineDrift.ts`). Carries just enough to re-run
+ * the scheduler (`scheduleProject`) against the moment it was captured:
+ * nodes/edges/root orders are stored by reference (mutations never touch
+ * old records, so this is free — same structural-sharing rule as undo).
+ * `settings` deliberately excludes `baselines` itself: a baseline's own
+ * settings can never need to carry ITS baselines, which would otherwise
+ * nest without bound as more snapshots are captured over a project's life.
+ */
+export interface Baseline {
+  id: string;
+  label: string;
+  /** ISO datetime the snapshot was captured — an audit timestamp only. */
+  capturedAt: string;
+  /**
+   * The project-time "today" (ISO date) in effect when captured — the
+   * scheduler's `now` floor to use when re-running *this baseline's own*
+   * projection. Distinct from `capturedAt`: that's a real wall-clock
+   * timestamp, while `settings.startDate` (and the day a not-yet-started
+   * unit can't be scheduled before) lives on the project's own timeline.
+   * Re-deriving the baseline's schedule with *today's* real date instead
+   * would float every one of its still-projected units forward to whenever
+   * it's later viewed, corrupting the very comparison a baseline exists
+   * for. Reconstruct with `graphOfBaseline` (`baselineDrift.ts`) and
+   * schedule with this as `now`, never `capturedAt`.
+   */
+  asOfDate: string;
+  graph: {
+    nodes: Record<string, WorkNode>;
+    edges: Record<string, Edge>;
+    rootOrder: string[];
+    groupRootOrder: string[];
+    settings: Omit<ProjectSettings, 'baselines'>;
+  };
+}
+
+/**
  * Project-scoped scheduling configuration. Lives inside the graph so it
  * rides the existing store/undo/serialize/autosave path unchanged.
  */
@@ -155,6 +192,8 @@ export interface ProjectSettings {
   specLockDepth: number;
   /** Editing lock for the plan (group) tree; see specLockDepth. */
   planLockDepth: number;
+  /** Named snapshots for drift comparison; see `Baseline`. */
+  baselines: Baseline[];
 }
 
 export interface ProjectGraph {
