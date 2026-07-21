@@ -188,6 +188,76 @@ body {
   background: var(--accent-soft);
 }
 
+/* Facet picker (#129) — disclosed next to the search input, same popover
+   shape as .header-menu but anchored left (it doesn't sit at the header's
+   far edge) and its content stays open on inner clicks (checkboxes). */
+.filter-facets {
+  position: relative;
+}
+
+.filter-facets-trigger[aria-expanded='true'] {
+  background: var(--accent-soft);
+}
+
+.filter-facets-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  padding: 10px;
+}
+
+.filter-facets-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.filter-facets-group legend {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  padding: 0 0 2px;
+}
+
+.filter-facets-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.filter-facets-clear {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.filter-facets-clear:hover {
+  background: var(--accent-soft);
+}
+
 /* Recovery banner for an autosave that failed to load (main.tsx backs it up
    instead of discarding it) — amber, matching the concern-medium tone. */
 .app-banner {

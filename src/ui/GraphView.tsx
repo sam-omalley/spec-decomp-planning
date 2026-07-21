@@ -258,7 +258,11 @@ export function GraphView({
   const textMatch = useCallback(
     (id: string): boolean => {
       const node = graph.nodes[id];
-      return node ? matchesFilter(node, filter) : false;
+      if (!node) return false;
+      // Status is a group-only field (CLAUDE.md) — a work node's status is
+      // never surfaced/edited, so a status facet shouldn't dim every work
+      // node in the map; matches PlanningView's spec-pane carve-out (#129).
+      return matchesFilter(node, node.type === 'group' ? filter : { ...filter, statuses: undefined });
     },
     [graph, filter],
   );
