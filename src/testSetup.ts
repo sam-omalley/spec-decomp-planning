@@ -28,10 +28,16 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { registerHooks } from 'node:module';
 
 try {
   const { transformSync } = await import('esbuild');
+  // Dynamic, not a static `import { registerHooks } from 'node:module'` —
+  // registerHooks only exists on Node 22.15+, and a static import of a
+  // missing named export throws at module-load time, outside this
+  // try/catch. Dynamic-importing the whole module keeps the "missing
+  // component-test tooling degrades to a no-op" property intact on older
+  // Node too, not just when esbuild/jsdom aren't installed.
+  const { registerHooks } = await import('node:module');
 
   registerHooks({
     load(url, context, nextLoad) {
@@ -55,9 +61,9 @@ try {
   });
   const { window } = dom;
 
-  // Copies every enumerable property jsdom's Window has that Node's
-  // global object doesn't already define (matches jsdom's own documented
-  // recipe for wiring itself into a non-browser test runner).
+  // Copies every property (enumerable or not) jsdom's Window has that
+  // Node's global object doesn't already define (matches jsdom's own
+  // documented recipe for wiring itself into a non-browser test runner).
   const copyProps = (src: object, target: object): void => {
     const props = Object.getOwnPropertyNames(src).filter((prop) => !(prop in target));
     for (const prop of props) {

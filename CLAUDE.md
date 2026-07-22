@@ -348,7 +348,16 @@ nothing rolls up from assigned spec items.
   the whole suite, `testSetup.ts` dynamic-`import`s esbuild/jsdom inside a
   `try`/`catch` and is a no-op if they're missing, so the domain suite
   still runs with no `npm install` exactly as before — only
-  adding/running an actual component test needs it.
+  adding/running an actual component test needs it. That property is
+  every component test file's responsibility too, not just
+  `testSetup.ts`'s: a component test file dynamic-`import`s react,
+  Testing Library, `appStore.ts` (it pulls in `react` unconditionally for
+  its `useSyncExternalStore` binding), and the component itself inside
+  its own `try`/`catch`, then registers its `describe` block with
+  `{ skip: '…' }` when any are missing — `describe`'s callback (and so
+  every `it` inside it) never runs when skipped, so a dep-less run never
+  throws on the file's own imports (`Outliner.detailsCoalescing.test.ts`
+  is the reference example).
   `@testing-library/react` + `@testing-library/user-event` are the
   devDependencies for that; call `cleanup()` in an explicit `afterEach`
   per file (no Jest/Vitest globals here for Testing Library to

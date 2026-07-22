@@ -18,28 +18,71 @@
  *
  * No JSX: Node's `--experimental-strip-types` strips TypeScript syntax but
  * doesn't transform JSX, so elements are built with `React.createElement`.
+ *
+ * react/@testing-library/react, the .tsx Outliner import, and even the
+ * `store` import are all loaded dynamically inside a try/catch (`store`
+ * pulls in `appStore.ts`, which imports `react` unconditionally for its
+ * `useSyncExternalStore` binding, so a plain static import of it fails the
+ * same way) — then the whole suite is registered with `skip` if any are
+ * unavailable. `describe`'s callback never runs when skipped, so this
+ * never throws on a load-hook-less/deps-less run. Without this, a dep-less
+ * `npm test` (the domain suite's "no `npm install` needed" property, see
+ * testSetup.ts) would exit red on this one file's unguarded static
+ * imports even though every domain test passed.
  */
 
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createElement, useState } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createNode, emptyGraph } from '../model/graph.ts';
-import { store } from '../store/appStore.ts';
-import { Outliner } from './Outliner.tsx';
 
-function Harness() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  return createElement(Outliner, { side: 'work', selectedId, onSelect: setSelectedId });
+let deps:
+  | {
+      createElement: typeof import('react').createElement;
+      useState: typeof import('react').useState;
+      cleanup: typeof import('@testing-library/react').cleanup;
+      fireEvent: typeof import('@testing-library/react').fireEvent;
+      render: typeof import('@testing-library/react').render;
+      screen: typeof import('@testing-library/react').screen;
+      Outliner: typeof import('./Outliner.tsx').Outliner;
+      store: typeof import('../store/appStore.ts').store;
+    }
+  | undefined;
+
+try {
+  const [react, testingLibrary, outlinerModule, appStoreModule] = await Promise.all([
+    import('react'),
+    import('@testing-library/react'),
+    import('./Outliner.tsx'),
+    import('../store/appStore.ts'),
+  ]);
+  deps = {
+    createElement: react.createElement,
+    useState: react.useState,
+    cleanup: testingLibrary.cleanup,
+    fireEvent: testingLibrary.fireEvent,
+    render: testingLibrary.render,
+    screen: testingLibrary.screen,
+    Outliner: outlinerModule.Outliner,
+    store: appStoreModule.store,
+  };
+} catch {
+  deps = undefined;
 }
 
-function seed(): void {
-  let g = emptyGraph();
-  g = createNode(g, { id: 'n1', title: 'Node 1' });
-  store.reset(g);
-}
+describe('Outliner — details card coalescing (#136)', { skip: deps ? false : 'component-test deps not installed' }, () => {
+  const { createElement, useState, cleanup, fireEvent, render, screen, Outliner, store } = deps!;
 
-describe('Outliner — details card coalescing (#136)', () => {
+  function Harness() {
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    return createElement(Outliner, { side: 'work', selectedId, onSelect: setSelectedId });
+  }
+
+  function seed(): void {
+    let g = emptyGraph();
+    g = createNode(g, { id: 'n1', title: 'Node 1' });
+    store.reset(g);
+  }
+
   afterEach(() => {
     cleanup();
   });
