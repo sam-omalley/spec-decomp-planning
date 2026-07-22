@@ -56,6 +56,24 @@ body {
   caret-color: auto;
 }
 
+/* Second header row (#142): the active section's sub-nav (Outline/Table/
+   Markdown, Map/Dependency, or the five Reporting tabs) plus, for Timeline/
+   Metrics, the What-if and baseline pickers — split out from .app-header so
+   Reporting's controls don't crowd the primary nav into a single packed row.
+   Only rendered for sections that actually have a sub-nav (Spec/Settings
+   render nothing here), so it costs no space elsewhere. */
+.app-subheader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  /* Toolbar chrome, same rule as .app-header. */
+  user-select: none;
+  caret-color: transparent;
+}
+
 .app-header h1 {
   font-size: 15px;
   font-weight: 600;
