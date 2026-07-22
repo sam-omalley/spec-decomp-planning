@@ -20,20 +20,33 @@
  * doesn't transform JSX, so elements are built with `React.createElement`.
  *
  * react/@testing-library/react, the .tsx Outliner import, and even the
- * `store` import are all loaded dynamically inside a try/catch (`store`
- * pulls in `appStore.ts`, which imports `react` unconditionally for its
+ * `store` import are all loaded dynamically (`store` pulls in
+ * `appStore.ts`, which imports `react` unconditionally for its
  * `useSyncExternalStore` binding, so a plain static import of it fails the
- * same way) — then the whole suite is registered with `skip` if any are
- * unavailable. `describe`'s callback never runs when skipped, so this
- * never throws on a load-hook-less/deps-less run. Without this, a dep-less
- * `npm test` (the domain suite's "no `npm install` needed" property, see
- * testSetup.ts) would exit red on this one file's unguarded static
- * imports even though every domain test passed.
+ * same way) — then the whole suite is registered with `skip` if `react`
+ * itself isn't resolvable. `describe`'s callback never runs when skipped,
+ * so this never throws on a load-hook-less/deps-less run. Without this, a
+ * dep-less `npm test` (the domain suite's "no `npm install` needed"
+ * property, see testSetup.ts) would exit red on this one file's unguarded
+ * static imports even though every domain test passed.
+ *
+ * Only the `react` probe is inside a try/catch — it's the sentinel for
+ * "are component-test deps installed at all". The rest load unguarded
+ * once that succeeds, so a genuine runtime failure in Outliner.tsx or
+ * appStore.ts (as opposed to deps simply being absent) throws and fails
+ * the file loudly instead of being swallowed as "deps not installed".
  */
 
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createNode, emptyGraph } from '../model/graph.ts';
+
+let reactInstalled = true;
+try {
+  await import('react');
+} catch {
+  reactInstalled = false;
+}
 
 let deps:
   | {
@@ -48,7 +61,7 @@ let deps:
     }
   | undefined;
 
-try {
+if (reactInstalled) {
   const [react, testingLibrary, outlinerModule, appStoreModule] = await Promise.all([
     import('react'),
     import('@testing-library/react'),
@@ -65,8 +78,6 @@ try {
     Outliner: outlinerModule.Outliner,
     store: appStoreModule.store,
   };
-} catch {
-  deps = undefined;
 }
 
 describe('Outliner — details card coalescing (#136)', { skip: deps ? false : 'component-test deps not installed' }, () => {
