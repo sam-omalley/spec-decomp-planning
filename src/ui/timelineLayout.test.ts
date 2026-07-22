@@ -86,6 +86,25 @@ describe('buildTimeline', () => {
     assert.equal(target.frac, 1);
   });
 
+  it('has no P80 marker or hasUncertainty when no unit has a duration range (#133)', () => {
+    const t = buildTimeline(fixture());
+    assert.equal(t.hasUncertainty, false);
+    assert.equal(t.markers.some((m) => m.kind === 'p80'), false);
+  });
+
+  it('emits a P80 whisker marker once a unit has an uncertainty range (#133)', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, { startDate: '2024-01-01' });
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = setEstimate(g, 'a', { durationEstimate: 2, durationOptimistic: 1, durationPessimistic: 10 });
+    const t = buildTimeline(g);
+    assert.equal(t.hasUncertainty, true);
+    const p80 = t.markers.find((m) => m.kind === 'p80')!;
+    assert.ok(p80);
+    const finish = t.markers.find((m) => m.kind === 'finish')!;
+    assert.ok(p80.date >= finish.date); // P80 can only push the finish later, never earlier
+  });
+
   it('emits a planned-start marker at the settings start date (#85)', () => {
     const t = buildTimeline(fixture());
     const start = t.markers.find((m) => m.kind === 'start')!;

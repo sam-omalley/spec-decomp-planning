@@ -312,6 +312,13 @@ export function scheduleProject(
    *  Defaults to `startDate` (a no-op clamp) so pure callers stay
    *  deterministic; the app passes the real current date. */
   now: string = graph.settings.startDate,
+  /** Per-unit raw duration (working days, pre speed/FTE) to use instead of
+   *  `node.durationEstimate` — the sampled projection's (#133) hook for
+   *  re-running this same placement logic with a duration drawn from each
+   *  unit's uncertainty range. Absent/missing entries fall back to the
+   *  node's own estimate, so an empty map reproduces today's deterministic
+   *  schedule exactly (see `src/model/uncertainty.ts`). */
+  durationOverrides?: ReadonlyMap<string, number>,
 ): Schedule {
   const { settings } = graph;
   const units = schedulingUnits(graph);
@@ -395,7 +402,8 @@ export function scheduleProject(
     const trackResourceId = resources.length > 0 ? resources[track]!.id : null;
     // The track's FTE stretches the projected duration (fte < 1 ⇒ longer).
     const fte = trackFte[track]!;
-    const duration = (node.durationEstimate ?? 0) / (speed * fte);
+    const rawDuration = durationOverrides?.get(u) ?? node.durationEstimate ?? 0;
+    const duration = rawDuration / (speed * fte);
     // Surfaced on the schedule so a view can explain a longer-than-estimate
     // span; omitted when there's nothing to explain (a 1× no-op).
     const stretch = speed * fte !== 1 ? { speedMultiplier: speed, fte } : undefined;
