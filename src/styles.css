@@ -1718,7 +1718,7 @@ body {
 
 /* Header project switcher (#134) — reuses .header-menu-list's popover shell
    (see ProjectSwitcher.tsx), just with its own item styling for the active
-   project and the trailing hint line. */
+   project. */
 .project-menu-item {
   max-width: 240px;
   overflow: hidden;
@@ -1726,10 +1726,6 @@ body {
 }
 .project-menu-item-active {
   font-weight: 600;
-}
-.project-menu-hint {
-  padding: 6px 8px;
-  max-width: 220px;
 }
 
 /* Date-range editor (project holidays / a resource's leave) — chips plus a
