@@ -44,6 +44,13 @@
  * finish-to-start behaviour, so this is a pure no-op with no explicit
  * migration step. No data loss.
  *
+ * v9 → v10: three-point estimates (#133). Work nodes gain
+ * `durationOptimistic` / `durationPessimistic` (working days), backfilled
+ * to `null` — an absent range is a pure no-op for the sampled projection
+ * (`src/model/uncertainty.ts`), which falls back to the point estimate
+ * (or this project's own historical accuracy, once there's enough
+ * completed history) exactly as if the fields didn't exist. No data loss.
+ *
  * Every mutation in graph.ts enforces the 'contains'/'assigned_to'
  * invariants (see graph.ts's top comment), but the file/autosave path is
  * the one entrance that bypasses them — a hand-edited file, a bug in a
@@ -67,7 +74,7 @@ import type {
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 9;
+export const FILE_VERSION = 10;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -75,7 +82,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -213,6 +220,8 @@ function backfillNodeDefaults(nodes: Record<string, WorkNode>): void {
     const n = node as Partial<WorkNode>;
     if (!Array.isArray(n.externalRefs)) n.externalRefs = [];
     if (n.durationEstimate === undefined) n.durationEstimate = null;
+    if (n.durationOptimistic === undefined) n.durationOptimistic = null;
+    if (n.durationPessimistic === undefined) n.durationPessimistic = null;
     if (n.actualStart === undefined) n.actualStart = null;
     if (n.actualFinish === undefined) n.actualFinish = null;
     if (n.resourceId === undefined) n.resourceId = null;
@@ -365,6 +374,8 @@ function migrateLegacy(legacy: LegacyGraph): void {
       priority: 'medium',
       effort: null,
       durationEstimate: null,
+      durationOptimistic: null,
+      durationPessimistic: null,
       actualStart: null,
       actualFinish: null,
       resourceId: null,

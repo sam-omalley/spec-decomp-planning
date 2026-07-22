@@ -531,3 +531,27 @@ describe('scheduleProject — dependency lag/lead and start-to-start (#132)', ()
     assert.equal(s.groups.get('c')!.slackUntil, undefined); // on the critical path
   });
 });
+
+describe('scheduleProject — durationOverrides (#133)', () => {
+  it('uses the override instead of the node estimate when present', () => {
+    let g = base();
+    g = group(g, 'a', 5); // Mon..Fri by default
+    const s = scheduleProject(g, undefined, new Map([['a', 2]])); // Mon..Tue instead
+    assert.equal(s.groups.get('a')!.finish, '2024-01-02');
+  });
+
+  it('falls back to the node estimate for a unit with no entry in the map', () => {
+    let g = base();
+    g = group(g, 'a', 5);
+    const s = scheduleProject(g, undefined, new Map([['other', 99]]));
+    assert.equal(s.groups.get('a')!.finish, '2024-01-05');
+  });
+
+  it('an empty map reproduces the deterministic schedule exactly', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 3);
+    g = group(g, 'b', 2);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a', lagDays: 1 });
+    assert.deepEqual(scheduleProject(g, undefined, new Map()), scheduleProject(g));
+  });
+});

@@ -1781,6 +1781,10 @@ body {
   stroke: var(--text);
   stroke-dasharray: none;
 }
+.tl-marker-p80 {
+  stroke: #6a4c93;
+  stroke-dasharray: 1 3;
+}
 .tl-marker-label {
   font-size: 10px;
   fill: var(--accent);
@@ -1794,6 +1798,9 @@ body {
 .tl-marker-label-now {
   fill: var(--text);
   font-weight: 600;
+}
+.tl-marker-label-p80 {
+  fill: #6a4c93;
 }
 .tl-crosshair line {
   stroke: var(--text);

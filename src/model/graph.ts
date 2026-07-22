@@ -302,6 +302,8 @@ export function createNode(
     priority: input.priority ?? 'medium',
     effort: input.effort ?? null,
     durationEstimate: null,
+    durationOptimistic: null,
+    durationPessimistic: null,
     actualStart: null,
     actualFinish: null,
     resourceId: null,
@@ -349,6 +351,8 @@ export function createGroup(
     priority: 'medium',
     effort: null,
     durationEstimate: null,
+    durationOptimistic: null,
+    durationPessimistic: null,
     actualStart: null,
     actualFinish: null,
     resourceId: null,
@@ -635,9 +639,15 @@ export interface EstimatePatch {
   effort?: number | null;
   /** Duration in working days. Pass null to clear. Omit to leave as-is. */
   durationEstimate?: number | null;
+  /** Optimistic/pessimistic duration bounds (#133) — see `WorkNode`. Pass
+   *  null to clear. Omit to leave as-is; only meaningful together, but
+   *  either may be set independently (a lone bound is simply ignored by
+   *  the sampler until its pair is set too). */
+  durationOptimistic?: number | null;
+  durationPessimistic?: number | null;
 }
 
-/** Sets a node's estimate axes independently; either may be omitted. */
+/** Sets a node's estimate axes independently; any may be omitted. */
 export function setEstimate(
   graph: ProjectGraph,
   id: string,
@@ -654,6 +664,16 @@ export function setEstimate(
     const value = patch.durationEstimate ?? null;
     requireNonNegative(value, 'durationEstimate');
     updated.durationEstimate = value;
+  }
+  if ('durationOptimistic' in patch) {
+    const value = patch.durationOptimistic ?? null;
+    requireNonNegative(value, 'durationOptimistic');
+    updated.durationOptimistic = value;
+  }
+  if ('durationPessimistic' in patch) {
+    const value = patch.durationPessimistic ?? null;
+    requireNonNegative(value, 'durationPessimistic');
+    updated.durationPessimistic = value;
   }
   return putNode(graph, updated);
 }
