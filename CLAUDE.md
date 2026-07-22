@@ -139,18 +139,43 @@ nothing rolls up from assigned spec items.
   into mutations — keeps mutations deterministic and testable.
 - Persistence: versioned JSON envelope (`src/model/serialize.ts`) used
   for both `.json` files and IndexedDB autosave (`src/persist/` — DB
-  `planning-tool`, store `project`, key `current`), so loading from
-  either goes through the same validation/migration. Autosave is a
-  debounced (300 ms) subscriber, deduped by state reference, flushed on
-  visibilitychange; `main.tsx` loads before first render. Import
-  confirms before replacing a non-empty project; `store.reset` clears
-  undo history by design. If the autosave under `current` fails to
-  deserialize (corrupt, or from an unsupported version), `main.tsx` never
-  just falls back to an empty project silently: the raw text is copied to
-  a separate `unrecovered` key first — out of the autosaver's reach, so
-  the next edit's save (to `current`) can't destroy the only copy — and
-  the user gets a loud alert plus a header banner (`App.tsx`) to download
-  or discard it, instead of a console-only warning and permanent loss.
+  `planning-tool`, store `project`), so loading from either goes through
+  the same validation/migration. Autosave is a debounced (300 ms)
+  subscriber, deduped by state reference, flushed on visibilitychange;
+  `main.tsx` loads before first render. Import confirms before replacing
+  a non-empty project; `store.reset` clears undo history by design. If an
+  autosave fails to deserialize (corrupt, or from an unsupported
+  version), `main.tsx` never just falls back to an empty project
+  silently: the raw text is copied to a separate `unrecovered` key first
+  — out of the autosaver's reach, so the next edit's save can't destroy
+  the only copy — and the user gets a loud alert plus a header banner
+  (`App.tsx`) to download or discard it, instead of a console-only
+  warning and permanent loss.
+- **Local storage holds any number of projects** (#134), not one fixed
+  slot: each is keyed `project:<id>`, alongside an `index` record
+  (`{ id, name, savedAt }[]`) and a `current` record — the last-open
+  project id, so startup stays one lookup (`resolveStartupProject`).
+  A one-time migration (`migrateLegacyIfNeeded`, guarded by
+  `looksLikeLegacyProjectFile` so a racing second run — e.g. two tabs
+  open on the first load after upgrading — can't re-wrap an
+  already-migrated id as if it were content) moves a pre-#134 install's
+  single `current` blob into this shape invisibly. A framework-free
+  `ProjectRegistry` (`src/store/projectRegistry.ts`, same
+  store-class-plus-`useSyncExternalStore`-hook shape as `ProjectStore`)
+  tracks the active id and the known-projects list; `src/store/
+  projectActions.ts` is the shared async orchestration (switch / create /
+  duplicate / rename / delete) both the header's `ProjectSwitcher` and
+  Settings' Projects card call into, so neither duplicates the
+  choreography of persisting the outgoing project immediately (bypassing
+  the debounce, never the ~300ms-loss window a plain autosave would risk
+  on a project switch), loading the incoming one, and updating both
+  stores. UI concerns (confirm/prompt dialogs) stay in the calling
+  components. Deleting the active project falls back to the
+  most-recently-saved remaining one, or mints a fresh empty project if it
+  was the last — there is always something open. Duplicate reuses the
+  live in-memory graph for the copy rather than reloading it from
+  IndexedDB. `assigned_to`/baselines/everything else about a project
+  is untouched by any of this — it's purely which graph is loaded.
 - Navigation is hash-routed (`src/ui/route.ts`, pure + tested): the active
   top-level section (Spec / Planning / Graph / Reporting / Settings) and
   its sub-view are mirrored into the location hash (`#/reporting/metrics`)

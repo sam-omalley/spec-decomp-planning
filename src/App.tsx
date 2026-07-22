@@ -14,6 +14,7 @@ import { MarkdownView } from './ui/MarkdownView.tsx';
 import { Outliner } from './ui/Outliner.tsx';
 import { projectToCsv } from './ui/planCsv.ts';
 import { PlanningView } from './ui/PlanningView.tsx';
+import { ProjectSwitcher } from './ui/ProjectSwitcher.tsx';
 import { MetricsView } from './ui/MetricsView.tsx';
 import { AssigneeMetricsView } from './ui/AssigneeMetricsView.tsx';
 import { ConcernsView } from './ui/ConcernsView.tsx';
@@ -284,6 +285,7 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <h1>Planning Tool</h1>
+        <ProjectSwitcher />
         <nav className="view-tabs" aria-label="Section">
           {(Object.keys(SECTION_LABELS) as Section[]).map((s) => (
             <button

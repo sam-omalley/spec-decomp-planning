@@ -17,6 +17,7 @@
  * other's content.
  */
 
+import { useState } from 'react';
 import {
   addResource,
   captureBaseline,
@@ -28,14 +29,94 @@ import {
   updateSettings,
 } from '../model/graph.ts';
 import type { DateRange, ProjectSettings } from '../model/types.ts';
-import { store, useProjectGraph } from '../store/appStore.ts';
+import { store, useActiveProjectId, useProjectGraph, useProjects } from '../store/appStore.ts';
+import type { ProjectIndexEntry } from '../persist/persistence.ts';
+import {
+  createNewProject,
+  deleteProjectAction,
+  renameActiveOrOtherProject,
+  switchProject,
+} from '../store/projectActions.ts';
 import { DateRangeEditor } from './DateRangeEditor.tsx';
 import { HolidayLookup } from './HolidayLookup.tsx';
 import { newHolidays } from './holidaySource.ts';
 
+/** One row in the Projects card: an inline rename input (committed on blur
+ *  or Enter, not per keystroke — renaming goes straight to IndexedDB, no
+ *  debounced autosave sits in front of it like the graph's own edits do),
+ *  a switch button, and delete. */
+function ProjectRow({
+  entry,
+  isActive,
+  onSwitch,
+  onDelete,
+}: {
+  entry: ProjectIndexEntry;
+  isActive: boolean;
+  onSwitch: () => void;
+  onDelete: () => void;
+}) {
+  const [name, setName] = useState(entry.name);
+  function commit() {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== entry.name) void renameActiveOrOtherProject(entry.id, trimmed);
+    else setName(entry.name);
+  }
+  return (
+    <div className={isActive ? 'project-row project-row-active' : 'project-row'}>
+      <input
+        className="meta-input project-name"
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+      />
+      <span className="project-date" title={entry.savedAt}>
+        {new Date(entry.savedAt).toLocaleDateString()}
+      </span>
+      {isActive ? (
+        <span className="project-current">Current</span>
+      ) : (
+        <button className="project-switch" onClick={onSwitch}>
+          Switch
+        </button>
+      )}
+      <button className="project-remove" title="Delete this project" onClick={onDelete}>
+        ×
+      </button>
+    </div>
+  );
+}
+
 export function SettingsView() {
   const graph = useProjectGraph();
   const s = graph.settings;
+  const activeProjectId = useActiveProjectId();
+  const projects = useProjects();
+
+  async function addProject() {
+    const name = window.prompt('Name this project', 'Untitled');
+    if (name === null) return; // cancelled
+    await createNewProject(name);
+  }
+  async function switchToProject(id: string) {
+    try {
+      await switchProject(id);
+    } catch {
+      window.alert('Could not open that project — its saved data may be corrupt.');
+    }
+  }
+  async function removeProject(id: string, name: string) {
+    const isOnly = projects.length === 1;
+    const warning = isOnly
+      ? `Delete “${name}”? It's your only project, so a fresh empty one will open in its place. This cannot be undone.`
+      : `Delete “${name}”? This cannot be undone.`;
+    if (!window.confirm(warning)) return;
+    await deleteProjectAction(id);
+  }
 
   function commit(patch: Partial<ProjectSettings>, field: string) {
     store.commit((g) => updateSettings(g, patch), { coalesce: `settings:${field}` });
@@ -116,6 +197,28 @@ export function SettingsView() {
     <div className="settings-view">
       <div className="settings-columns">
         <div className="settings-col">
+          <section className="settings-card">
+            <h2 className="settings-card-title">Projects</h2>
+            <p className="settings-note">
+              Local storage holds any number of projects — switch from the header, or manage the
+              full list here.
+            </p>
+            <div className="project-list">
+              {projects.map((p) => (
+                <ProjectRow
+                  key={p.id}
+                  entry={p}
+                  isActive={p.id === activeProjectId}
+                  onSwitch={() => void switchToProject(p.id)}
+                  onDelete={() => void removeProject(p.id, p.name.trim() || 'Untitled')}
+                />
+              ))}
+            </div>
+            <button className="baseline-add" onClick={() => void addProject()}>
+              + New project
+            </button>
+          </section>
+
           <section className="settings-card">
             <h2 className="settings-card-title">Schedule</h2>
             <div className="meta-row">
