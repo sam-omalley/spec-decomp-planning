@@ -36,6 +36,7 @@ const MARKER_INFO: Record<TimelineMarker['kind'], { icon: string; label: string 
   now: { icon: '⏱', label: 'Now' },
   target: { icon: '🎯', label: 'Planned end' },
   finish: { icon: '▸', label: 'Projected finish' },
+  p80: { icon: '≀', label: 'P80 finish (uncertainty whisker)' },
 };
 
 const SCHEDULING_HELP =
@@ -227,6 +228,15 @@ export function TimelineView({
         <div className="tl-legend">
           <span className="tl-legend-swatch tl-legend-baseline" />
           Ghost bar — this unit's span in “{baseline.label || 'Untitled'}”
+        </div>
+      )}
+      {model.hasUncertainty && (
+        <div className="tl-legend">
+          <InfoDot
+            text="Some units have an estimate range (Optimistic/Pessimistic, or a range derived from this project's historical accuracy) — the projection was resampled a few hundred times to see how much that uncertainty could move the finish. See Metrics → Projection range for the full P50/P80."
+            align="start"
+          />
+          P80 — 4 in 5 simulated outcomes finish by this date
         </div>
       )}
       <div className="tl-legend tl-legend-markers">

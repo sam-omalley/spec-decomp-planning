@@ -64,6 +64,17 @@ export interface WorkNode {
    */
   durationEstimate: number | null;
   /**
+   * Optimistic/pessimistic bounds (working days) for `durationEstimate`,
+   * for the sampled projection (#133) — "3 days if the vendor API
+   * behaves, 10 if it doesn't". Both null (the default) means "as certain
+   * as today"; a range is only used when **both** are set (either alone
+   * is ignored). Without an explicit range, `uncertainty.ts` derives one
+   * from this project's own historical estimate accuracy instead, so
+   * entering these is optional, not required, to get a calibrated P50/P80.
+   */
+  durationOptimistic: number | null;
+  durationPessimistic: number | null;
+  /**
    * Actual start: an ISO date (`YYYY-MM-DD`, no time entered — reads as
    * 00:00) or an ISO datetime-local value (`YYYY-MM-DDTHH:MM`); null if not
    * started. The scheduler only ever reads the date part (day-granular);

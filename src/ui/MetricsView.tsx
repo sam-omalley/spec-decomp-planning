@@ -9,6 +9,7 @@ import { useProjectGraph } from '../store/appStore.ts';
 import { todayIso } from '../model/graph.ts';
 import { scheduleProject } from '../model/schedule.ts';
 import { computeDrift } from '../model/baselineDrift.ts';
+import { sampleProjection } from '../model/uncertainty.ts';
 import type { Baseline } from '../model/types.ts';
 import {
   burnUp,
@@ -46,6 +47,8 @@ const HELP = {
     'The chain that sets the finish: starting from the last-finishing unit, walk back through each binding prerequisite (the one whose finish set the next unit’s start), stopping at a real start or a capacity/“today” limit. Independent work off this chain doesn’t move the date.',
   burnUp:
     'Cumulative completed scope (working days) stepping up at each unit’s actual finish, against the constant total scope. The ideal line runs from the start to the projected finish; 🎯 marks the target date.',
+  projectionRange:
+    'The projected finish isn’t one hard date — some units are estimated more confidently than others. This re-runs the projection a few hundred times, drawing each not-done unit’s duration from a range (its own Optimistic/Pessimistic in the details card, or — with no range entered — a range derived from how far this project’s own completed units have historically run over or under their estimates) instead of the point estimate. P50 is the median simulated finish; P80 is the date 4 in 5 simulated outcomes finish by. Only appears once at least one unit actually has a range; with none, P50/P80 are identical to the projected finish above.',
   estimateVsActual:
     'For each completed unit: estimate is its duration estimate; actual is the elapsed time between its actual start and finish, in 24h days with weekend time removed. Variance = actual − estimate (+ over, − under).',
   baselineDrift:
@@ -77,6 +80,10 @@ export function MetricsView({ onReveal, scenario = null, baseline = null }: Metr
   );
   const variance = useMemo(() => estimateVsActual(graph), [graph]);
   const burn = useMemo(() => burnUp(effectiveGraph, now, schedule), [effectiveGraph, now, schedule]);
+  const sampled = useMemo(
+    () => sampleProjection(effectiveGraph, now, schedule),
+    [effectiveGraph, now, schedule],
+  );
   const drift = useMemo(
     () => (baseline ? computeDrift(effectiveGraph, baseline, now) : null),
     [effectiveGraph, baseline, now],
@@ -146,6 +153,18 @@ export function MetricsView({ onReveal, scenario = null, baseline = null }: Metr
           helpAlign="end"
         />
       </section>
+
+      {sampled.hasUncertainty && (
+        <section className="metric-panel">
+          <h3>
+            Projection range <InfoDot text={HELP.projectionRange} />
+          </h3>
+          <section className="metric-cards">
+            <Card label="P50 finish" value={sampled.p50 ?? '—'} />
+            <Card label="P80 finish" value={sampled.p80 ?? '—'} />
+          </section>
+        </section>
+      )}
 
       {drift && <BaselineDriftPanel drift={drift} onReveal={onReveal} />}
 

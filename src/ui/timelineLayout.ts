@@ -9,6 +9,7 @@
 import type { Baseline, ProjectGraph } from '../model/types.ts';
 import { childrenOf, groupRootsOf } from '../model/graph.ts';
 import { scheduleProject } from '../model/schedule.ts';
+import { sampleProjection } from '../model/uncertainty.ts';
 import { graphOfBaseline } from '../model/baselineDrift.ts';
 import { rootGroupColor } from './colors.ts';
 
@@ -50,8 +51,11 @@ export interface TimelineMarker {
   frac: number;
   date: string;
   /** 'start'/'now' are always present; 'target' only when set, 'finish'
-   *  only once the scheduler has a projected finish. */
-  kind: 'start' | 'now' | 'finish' | 'target';
+   *  only once the scheduler has a projected finish; 'p80' only when the
+   *  sampled projection (#133) found real uncertainty and its 80th
+   *  percentile lands on a different date than the deterministic finish —
+   *  the "whisker" past the finish line, see `sampleProjection`. */
+  kind: 'start' | 'now' | 'finish' | 'target' | 'p80';
 }
 
 /** Markers sharing a date (e.g. `now` lands on the planned start, or the
@@ -102,6 +106,10 @@ export interface TimelineModel {
    *  redoing the date math. */
   rangeDays: number;
   empty: boolean;
+  /** True when the sampled projection (#133) found real uncertainty and
+   *  drew a 'p80' marker — lets the view show an explanatory legend line
+   *  only when there's a whisker on the chart to explain. */
+  hasUncertainty: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -146,6 +154,7 @@ const EMPTY: TimelineModel = {
   rangeEnd: '',
   rangeDays: 0,
   empty: true,
+  hasUncertainty: false,
 };
 
 export function buildTimeline(
@@ -164,6 +173,7 @@ export function buildTimeline(
   const baselineSchedule = baseline
     ? scheduleProject(graphOfBaseline(baseline), baseline.asOfDate)
     : null;
+  const sampled = sampleProjection(graph, now, schedule);
 
   // Groups in pre-order, with depth, that actually got scheduled.
   const ordered: { id: string; depth: number }[] = [];
@@ -191,9 +201,13 @@ export function buildTimeline(
     }
   }
   const target = graph.settings.targetDate;
-  // Extend the range so every marker below (planned start, now, target)
-  // lands inside [0,1] instead of getting clamped to an edge by frac().
-  for (const d of [graph.settings.startDate, now, target].filter((v): v is string => v !== null)) {
+  const p80Date = sampled.hasUncertainty && sampled.p80 !== schedule.projectFinish ? sampled.p80 : null;
+  // Extend the range so every marker below (planned start, now, target,
+  // the P80 whisker) lands inside [0,1] instead of getting clamped to an
+  // edge by frac().
+  for (const d of [graph.settings.startDate, now, target, p80Date].filter(
+    (v): v is string => v !== null,
+  )) {
     if (d < rangeStart) rangeStart = d;
     if (d > rangeEnd) rangeEnd = d;
   }
@@ -240,6 +254,7 @@ export function buildTimeline(
     markers.push({ frac: frac(schedule.projectFinish), date: schedule.projectFinish, kind: 'finish' });
   }
   if (target) markers.push({ frac: frac(target), date: target, kind: 'target' });
+  if (p80Date) markers.push({ frac: frac(p80Date), date: p80Date, kind: 'p80' });
 
   // Gridlines: daily for a short range (enough width per label to stay
   // readable), else weekly from the first Monday on/after rangeStart — a
@@ -278,7 +293,17 @@ export function buildTimeline(
   }
   if (bandStart !== null) weekends.push({ startFrac: bandStart / span, endFrac: 1 });
 
-  return { rows, markers, ticks, weekends, rangeStart, rangeEnd, rangeDays: span, empty: false };
+  return {
+    rows,
+    markers,
+    ticks,
+    weekends,
+    rangeStart,
+    rangeEnd,
+    rangeDays: span,
+    empty: false,
+    hasUncertainty: p80Date !== null,
+  };
 }
 
 /** The calendar date at a fraction across `model`'s range — the inverse of

@@ -13,6 +13,8 @@ function node(partial: Partial<WorkNode>): WorkNode {
     priority: 'medium',
     effort: null,
     durationEstimate: null,
+    durationOptimistic: null,
+    durationPessimistic: null,
     actualStart: null,
     actualFinish: null,
     resourceId: null,

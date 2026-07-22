@@ -46,7 +46,12 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays + project
   time, elapsed-duration metrics use it), `resourceId` (pins the group to a
   team member — see Project settings), and `externalRefs` (Jira etc.).
   `effort` (size) and `durationEstimate` (time) are distinct axes,
-  convertible via `settings.pointsPerDay`. Groups are the nodes that get
+  convertible via `settings.pointsPerDay`. A group may also carry
+  `durationOptimistic` / `durationPessimistic` — an optional three-point
+  range around `durationEstimate` that feeds the sampled projection (see
+  below); either alone is ignored, and with neither set the sampler falls
+  back to this project's own historical estimate accuracy instead. Groups
+  are the nodes that get
   scheduled, tracked, and sequenced by dependencies. **Rollup /
   scheduling-unit rule:** the topmost node in a subtree with its own
   estimate is the atomic unit for both rollup display and scheduling — own
@@ -211,6 +216,24 @@ nothing rolls up from assigned spec items.
   — when nothing is dependency-ready, the lowest sibling-order unit is
   placed anyway, so a cyclic SCC drains as a batch instead of hanging the
   scheduler.
+- The sampled projection (`src/model/uncertainty.ts`) answers "how
+  confident is that date?" by re-running `scheduleProject` a few hundred
+  times (a small seeded PRNG, deterministic like `now`/`startDate`), each
+  time drawing every not-done unit's duration from a triangular
+  distribution instead of its point estimate, and reporting the P50/P80
+  finish. `scheduleProject` itself stays the single source of placement
+  logic — sampling is just it called repeatedly with a
+  `durationOverrides` map, never a parallel implementation. A unit's range
+  is its own `durationOptimistic`/`durationPessimistic` when both are set,
+  else one derived from this project's own historical estimate accuracy
+  (`estimateVsActual`'s actual÷estimate ratio across completed units, once
+  there are enough to trust); with neither, the unit is certain and
+  contributes no spread. When nothing in the plan has a range, sampling is
+  skipped outright and P50 = P80 = today's deterministic `projectFinish` —
+  a pure no-op, never a second code path to keep in sync. Metrics surfaces
+  the P50/P80 as cards (only once something is actually uncertain); the
+  Timeline draws a dashed "P80" marker past the finish line, the same
+  whisker idea, both fed by the one function.
 - Structural locks (`specLockDepth` / `planLockDepth`) are **UI-level,
   not a graph invariant** — they gate the editing affordances in
   `Outliner`/`PlanTable` via a pure `isLocked` predicate
