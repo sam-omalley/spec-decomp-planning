@@ -330,14 +330,39 @@ nothing rolls up from assigned spec items.
 
 ## Conventions & environment
 
-- Tests: Node built-in runner, no deps — `npm test`
-  (`node --experimental-strip-types --test "src/**/*.test.ts"`).
-  Test the domain layer thoroughly; every invariant gets a test.
+- Tests: Node's built-in runner, no *runner* deps — `npm test`
+  (`node --experimental-strip-types --import ./src/testSetup.ts --test
+  "src/**/*.test.ts"`). Test the domain layer thoroughly; every invariant
+  gets a test.
+- **Component tests** (#136) use the same runner via `src/testSetup.ts`,
+  preloaded with `--import` for *every* test file: a jsdom environment
+  plus a `.tsx` load hook (`node:module`'s `registerHooks`, esbuild's
+  `transformSync` — esbuild is already a transitive Vite dependency,
+  pinned as an explicit devDependency here) so test files can import the
+  app's real components, which Node's native type-stripping can't load at
+  all (`.tsx` isn't a recognized extension, and JSX isn't erasable syntax
+  regardless). Test files themselves still can't write JSX — build
+  elements with `React.createElement` instead
+  (`Outliner.detailsCoalescing.test.ts` is the reference example) — only
+  the *component source* goes through the hook. Since this preloads for
+  the whole suite, `testSetup.ts` dynamic-`import`s esbuild/jsdom inside a
+  `try`/`catch` and is a no-op if they're missing, so the domain suite
+  still runs with no `npm install` exactly as before — only
+  adding/running an actual component test needs it.
+  `@testing-library/react` + `@testing-library/user-event` are the
+  devDependencies for that; call `cleanup()` in an explicit `afterEach`
+  per file (no Jest/Vitest globals here for Testing Library to
+  auto-detect). Reach for a component test when the risk lives in event
+  wiring, lifecycle, or focus/DOM state that a pure function can't
+  capture — CLAUDE.md's own "strategy has been push logic down and test
+  it there" still applies first; component tests are for what's left over
+  after that.
 - TypeScript: strict, `verbatimModuleSyntax` + `erasableSyntaxOnly`
   (Node strip-types: `import type` for types, no enums, no constructor
   parameter properties). Relative imports use explicit `.ts` extensions.
 - `npm install` only needed for the Vite dev server (React 19, Vite 6,
-  @xyflow/react); the core and tests run without it.
+  @xyflow/react) or to add/run component tests; the domain suite runs
+  without it.
 - Git: conventional-commit style messages (`feat:`, `chore:`…).
   Workflow: branch off `main` (`feat/…`, `chore/…`), commit, push, and
   open a PR with `gh` rather than committing to `main` directly. Merge
