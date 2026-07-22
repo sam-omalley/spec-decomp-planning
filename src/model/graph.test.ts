@@ -29,6 +29,7 @@ import {
   setActualDates,
   setEstimate,
   subtreeIds,
+  updateDependency,
   updateNode,
   updateResource,
   updateSettings,
@@ -308,6 +309,66 @@ describe('dependencies', () => {
     g = addEdge(g, { type: 'depends_on', from: 'epicB', to: 'epicA' });
     assert.ok(edgeBetween(g, 'depends_on', 'epicA', 'epicB'));
     assert.ok(edgeBetween(g, 'depends_on', 'epicB', 'epicA'));
+  });
+
+  it('accepts an optional depKind/lagDays and rejects a garbage value (#132)', () => {
+    let g = planned();
+    g = addEdge(g, {
+      type: 'depends_on',
+      from: 'epicA',
+      to: 'epicB',
+      depKind: 'SS',
+      lagDays: 2,
+    });
+    const edge = edgeBetween(g, 'depends_on', 'epicA', 'epicB')!;
+    assert.equal(edge.depKind, 'SS');
+    assert.equal(edge.lagDays, 2);
+
+    assert.throws(
+      () =>
+        addEdge(g, {
+          type: 'depends_on',
+          from: 'epicB',
+          to: 'epicA',
+          depKind: 'XX' as never,
+        }),
+      /Invalid dependency kind/,
+    );
+    assert.throws(
+      () =>
+        addEdge(g, {
+          type: 'depends_on',
+          from: 'epicB',
+          to: 'epicA',
+          lagDays: NaN,
+        }),
+      /lagDays must be a finite number/,
+    );
+  });
+
+  it('defaults to zero-lag FS when depKind/lagDays are omitted', () => {
+    let g = planned();
+    g = addEdge(g, { type: 'depends_on', from: 'epicA', to: 'epicB' });
+    const edge = edgeBetween(g, 'depends_on', 'epicA', 'epicB')!;
+    assert.equal(edge.depKind, undefined);
+    assert.equal(edge.lagDays, undefined);
+  });
+
+  it('updateDependency patches an existing edge\'s kind/lag in place', () => {
+    let g = planned();
+    g = addEdge(g, { type: 'depends_on', from: 'epicA', to: 'epicB' });
+    const id = edgeBetween(g, 'depends_on', 'epicA', 'epicB')!.id;
+    g = updateDependency(g, id, { depKind: 'SS', lagDays: -1 });
+    const edge = g.edges[id]!;
+    assert.equal(edge.id, id); // same edge, patched not recreated
+    assert.equal(edge.depKind, 'SS');
+    assert.equal(edge.lagDays, -1);
+
+    assert.throws(() => updateDependency(g, 'ghost', { lagDays: 1 }), /Edge not found/);
+    assert.throws(
+      () => updateDependency(g, edgeBetween(g, 'contains', 'block1', 'epicA')!.id, { lagDays: 1 }),
+      /Only dependency edges/,
+    );
   });
 });
 

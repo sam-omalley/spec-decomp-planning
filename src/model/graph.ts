@@ -19,6 +19,7 @@
 import type {
   Baseline,
   DateRange,
+  DepKind,
   Edge,
   EdgeType,
   ExternalRef,
@@ -465,6 +466,20 @@ export interface EdgeInput {
   type: EdgeType;
   from: string;
   to: string;
+  /** Only meaningful on 'depends_on'/'blocks'; see `Edge` in types.ts. */
+  depKind?: DepKind;
+  lagDays?: number;
+}
+
+/** Throws unless `depKind`/`lagDays` are absent or well-formed; shared by
+ *  `addEdge` and `updateDependency` (#132). */
+function validateDepFields(depKind: unknown, lagDays: unknown): void {
+  if (depKind !== undefined && depKind !== 'FS' && depKind !== 'SS') {
+    throw new GraphError(`Invalid dependency kind: ${String(depKind)}`);
+  }
+  if (lagDays !== undefined && (typeof lagDays !== 'number' || !Number.isFinite(lagDays))) {
+    throw new GraphError('lagDays must be a finite number');
+  }
 }
 
 export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
@@ -504,6 +519,7 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
         'Dependencies sequence delivery groups (the plan); spec work nodes are structural only',
       );
     }
+    validateDepFields(input.depKind, input.lagDays);
   }
 
   if (input.type === 'assigned_to') {
@@ -527,11 +543,34 @@ export function addEdge(graph: ProjectGraph, input: EdgeInput): ProjectGraph {
     from: input.from,
     to: input.to,
     ...(order !== undefined ? { order } : {}),
+    ...(input.depKind !== undefined ? { depKind: input.depKind } : {}),
+    ...(input.lagDays !== undefined ? { lagDays: input.lagDays } : {}),
   };
   let next: ProjectGraph = { ...graph, edges: { ...graph.edges, [edge.id]: edge } };
   // Gaining a parent removes the child from its side's root order.
   if (edge.type === 'contains') next = withoutRoot(next, edge.to);
   return next;
+}
+
+/**
+ * Patches an existing dependency edge's kind/lag (#132) in place, keeping
+ * its id — unlike remove-then-add, this doesn't disturb anything that
+ * references the edge by id (e.g. a reconnect handle in the Dependency
+ * graph).
+ */
+export function updateDependency(
+  graph: ProjectGraph,
+  edgeId: string,
+  patch: { depKind?: DepKind; lagDays?: number },
+): ProjectGraph {
+  const edge = graph.edges[edgeId];
+  if (!edge) throw new GraphError(`Edge not found: ${edgeId}`);
+  if (edge.type !== 'depends_on' && edge.type !== 'blocks') {
+    throw new GraphError('Only dependency edges carry a kind/lag');
+  }
+  validateDepFields(patch.depKind, patch.lagDays);
+  const updated: Edge = { ...edge, ...patch };
+  return { ...graph, edges: { ...graph.edges, [edgeId]: updated } };
 }
 
 export function removeEdge(graph: ProjectGraph, edgeId: string): ProjectGraph {
