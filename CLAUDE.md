@@ -64,25 +64,32 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays + project
   carry `order` for sibling ordering; root order lives in
   `ProjectGraph.rootOrder` (work side) and `groupRootOrder` (group
   side), maintained by every mutation, reconciled on file load.
-  File version 6 (`src/model/serialize.ts` has the full per-version
-  migration history in comments); every version migrates forward with no
-  data loss except one case: on load, `depends_on`/`blocks` edges that
-  touch a work node are dropped, since dependencies are group-only now
-  and any legacy spec-level deps are meaningless.
+  File version tracked in `FILE_VERSION` (`src/model/serialize.ts`, which
+  has the full per-version migration history in comments — deliberately
+  not restated here as a number, since that would only drift again; see
+  the conventions note below on keeping this file in sync); every version
+  migrates forward with no data loss except one case: on load,
+  `depends_on`/`blocks` edges that touch a work node are dropped, since
+  dependencies are group-only now and any legacy spec-level deps are
+  meaningless.
 - **Project settings** (`ProjectGraph.settings: ProjectSettings`) —
   project-level config, carried inside the graph so it rides the
   store/undo/serialize/autosave path unchanged. Scheduling: `startDate`,
-  `targetDate`, `pointsPerDay`, `hoursPerWeek`, `speedMultiplier`, and
-  `resources` — the delivery **team** (`{ id, name, fte }`). Capacity is
-  one scheduling track per resource (an empty team is a single implicit
-  full-time track); a group's `resourceId` pins its scheduling unit to
-  that resource's track, and FTE stretches duration
+  `targetDate`, `pointsPerDay`, `hoursPerWeek`, `speedMultiplier`,
+  `holidays` (project-wide non-working date ranges — public holidays,
+  office closures — baked into the shared calendar on top of weekends),
+  and `resources` — the delivery **team** (`{ id, name, fte, leave }`,
+  `leave` being that individual's own time off, applied only to their own
+  track). Capacity is one scheduling track per resource (an empty team is
+  a single implicit full-time track); a group's `resourceId` pins its
+  scheduling unit to that resource's track, and FTE stretches duration
   (`durationEstimate / (speedMultiplier × fte)` — a 0.8-FTE resource's
   work takes `1 / 0.8` longer). Editing locks: `specLockDepth` /
   `planLockDepth` — how many top levels of each side are frozen against
   accidental edits (0 = unlocked; see the Locks bullet below). Locks are a
   *config value*, not a graph invariant: they gate the editing UI, not the
-  core mutations.
+  core mutations. `baselines` — named graph snapshots for drift
+  comparison (see `Baseline` below).
 
 Rollup runs along group `contains` (own estimate wins over child sum);
 nothing rolls up from assigned spec items.
@@ -114,8 +121,8 @@ nothing rolls up from assigned spec items.
 - **Views are pure projections of the graph and its settings.** Spec view
   reads the work side of `contains`; Planning reads the group side plus
   `assigned_to`; Graph reads everything; the Reporting sub-views (Timeline,
-  Metrics, Assignees, Concerns) derive from the scheduler / rollup /
-  concerns analysis. None store view-specific copies of data. Ephemeral
+  Metrics, Assignees, Concerns, Coverage) derive from the scheduler /
+  rollup / concerns analysis. None store view-specific copies of data. Ephemeral
   view-narrowing state — global search/filter, per-side depth caps, the
   Graph view's sort mode and infer-chains toggle, and the current
   section/sub-view (mirrored to the URL hash for navigation, see below) —
@@ -259,6 +266,25 @@ nothing rolls up from assigned spec items.
   the P50/P80 as cards (only once something is actually uncertain); the
   Timeline draws a dashed "P80" marker past the finish line, the same
   whisker idea, both fed by the one function.
+- **What-if scenarios** (`src/ui/scenario.ts`) are an ephemeral settings
+  override (team + speed multiplier only, not per-node estimates) held in
+  view-layer React state and shared across Reporting's Timeline/Metrics —
+  never written to the graph/store, same rule as search/filter/depth-cap
+  state. `applyScenario` overlays the patch onto a graph's `settings`
+  only; every other read (titles, dependencies, …) stays safe against the
+  result exactly as it would against the real graph.
+- **Baselines** (`Baseline` in types.ts, captured via `captureBaseline` in
+  graph.ts, managed in Settings) are named snapshots of the graph plus the
+  scheduler's `now` at capture time, so `computeDrift`
+  (`src/model/baselineDrift.ts`) can re-run `scheduleProject` against both
+  the snapshot and the live graph and decompose the difference into what a
+  steering conversation asks about: scope added/removed, estimates
+  revised, and units that started later than planned. A baseline's own
+  `settings` deliberately excludes `baselines` itself (no unbounded
+  nesting as more snapshots are captured over a project's life), and it
+  re-runs its own projection as of its own capture-time `now`
+  (`asOfDate`), never live "today" — see the `Baseline` doc comment in
+  types.ts.
 - Structural locks (`specLockDepth` / `planLockDepth`) are **UI-level,
   not a graph invariant** — they gate the editing affordances in
   `Outliner`/`PlanTable` via a pure `isLocked` predicate
@@ -290,14 +316,17 @@ nothing rolls up from assigned spec items.
   `scheduleProject` once and threads the result into both
   `projectionSummary` and `burnUp` rather than letting each call it
   separately.
-- The Reporting section groups four read-only sub-views behind one tab:
-  Timeline (Gantt), Metrics (projection/burn-up/estimate-vs-actual),
-  Assignees (per-resource estimate-vs-actual, points/day, weekly
-  completions), and Concerns (`src/model/concerns.ts`'s
+- The Reporting section groups five read-only sub-views behind one tab:
+  Timeline (Gantt), Metrics (projection/burn-up/estimate-vs-actual/
+  P50-P80 range), Assignees (per-resource estimate-vs-actual, points/day,
+  weekly completions), Concerns (`src/model/concerns.ts`'s
   `analyzeConcerns`: per-unit overdue/blocked/cycle/unestimated/
   unassigned flags, plus project-level thin-WIP and behind-target
-  signals, severity-sorted). Settings is a full-page tab (two-column card
-  layout), not a header popover — it outgrew that.
+  signals, severity-sorted), and Coverage (the symmetric counterpart to
+  Concerns for the spec side — which requirements no group addresses at
+  all, at any depth, as a nested list so an uncovered subtree can still
+  contain a covered "island"). Settings is a full-page tab (two-column
+  card layout), not a header popover — it outgrew that.
 
 ## Conventions & environment
 
@@ -317,3 +346,12 @@ nothing rolls up from assigned spec items.
 - Sandbox notes: npm registry access requires it to be enabled AND a fresh
   session; folder file deletion needs the allow-delete permission (git lock
   files trip this).
+- **Keep this file in sync with `serialize.ts` migrations.** The doc drift
+  found in #135 was systematic: each error was a feature landing without
+  its doc line (a settings field, a Reporting sub-view, a model bullet).
+  When a change adds/renames a field on `WorkNode`, `ProjectSettings`, or
+  `Resource`, or bumps `FILE_VERSION` with a migration, update the Data
+  model section's field lists in the same PR — not just the migration
+  comment in `serialize.ts`. Same for a new top-level view or Reporting
+  sub-view: add it to both places that enumerate them (the "Views are
+  pure projections" bullet and the Reporting bullet) and to the README.
