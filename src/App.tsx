@@ -63,6 +63,7 @@ export function App() {
   // — collapses to an icon when unused; forced open below whenever a filter
   // is actually active, so an active filter is never hidden silently.
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
   // Per-side depth caps (undefined = all levels); ephemeral view state,
   // like planMode — never serialized.
   const [specMaxDepth, setSpecMaxDepth] = useState<number | undefined>(undefined);
@@ -86,6 +87,22 @@ export function App() {
     void loadUnrecoveredText().then((text) => setBackupText(text ?? null));
     setLoadRepairs(takePendingLoadRepairs());
   }, []);
+
+  // Collapse the disclosed search control on an outside click — same
+  // pattern as HeaderMenu/FilterFacets's own outside-click handling, rather
+  // than the input's onBlur (which fired the moment focus moved to the
+  // Facets trigger inside this same widget, closing the picker before a
+  // facet could be picked — a regression from #149).
+  useEffect(() => {
+    if (!searchOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [searchOpen]);
 
   // Views the filter applies to; others (Markdown, Reporting) are unchanged.
   const searchable =
@@ -418,7 +435,10 @@ export function App() {
             />
           )}
           {searchable && (
-            <div className={`app-search${section === 'spec' ? '' : ' app-search-aside'}`}>
+            <div
+              className={`app-search${section === 'spec' ? '' : ' app-search-aside'}`}
+              ref={searchRef}
+            >
               {searchOpen || filterActive ? (
                 <>
                   <input
@@ -434,9 +454,6 @@ export function App() {
                         setFilterText('');
                         e.currentTarget.blur();
                       }
-                    }}
-                    onBlur={() => {
-                      if (!filterActive) setSearchOpen(false);
                     }}
                   />
                   {filterActive && (
