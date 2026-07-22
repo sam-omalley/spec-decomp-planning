@@ -59,6 +59,10 @@ export function App() {
   // Facets (#129) — same ephemeral rules as filterText, just disclosed
   // behind a picker instead of always-on so the header doesn't grow.
   const [facets, setFacets] = useState<FacetValue>({ statuses: [], priorities: [], tags: [] });
+  // Whether the search/filter control is disclosed (#149 header compactness)
+  // — collapses to an icon when unused; forced open below whenever a filter
+  // is actually active, so an active filter is never hidden silently.
+  const [searchOpen, setSearchOpen] = useState(false);
   // Per-side depth caps (undefined = all levels); ephemeral view state,
   // like planMode — never serialized.
   const [specMaxDepth, setSpecMaxDepth] = useState<number | undefined>(undefined);
@@ -284,97 +288,97 @@ export function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Planning Tool</h1>
-        <ProjectSwitcher />
-        <nav className="view-tabs" aria-label="Section">
-          {(Object.keys(SECTION_LABELS) as Section[]).map((s) => (
-            <button
-              key={s}
-              className={section === s ? 'view-tab view-tab-active' : 'view-tab'}
-              onClick={() => setSection(s)}
-            >
-              {SECTION_LABELS[s]}
-            </button>
-          ))}
-        </nav>
-        <span className="app-count">
-          {itemCount} item{itemCount === 1 ? '' : 's'}
-        </span>
-        {searchable && (
-          <div className="app-search">
-            <input
-              type="search"
-              className="app-search-input"
-              placeholder="Filter…"
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setFilterText('');
-                  e.currentTarget.blur();
-                }
-              }}
-            />
-            {filterActive && (
-              <span className="app-search-count">
-                {matchCount} match{matchCount === 1 ? '' : 'es'}
-              </span>
-            )}
-            <FilterFacets
-              value={facets}
-              onChange={setFacets}
-              showStatus={showStatusFacet}
-              tagOptions={tagOptions}
-            />
+        <div className="app-header-main">
+          <h1>Planning Tool</h1>
+          <ProjectSwitcher />
+          <nav className="view-tabs view-tabs-primary" aria-label="Section">
+            {(Object.keys(SECTION_LABELS) as Section[]).map((s) => (
+              <button
+                key={s}
+                className={section === s ? 'view-tab view-tab-active' : 'view-tab'}
+                onClick={() => setSection(s)}
+              >
+                {SECTION_LABELS[s]}
+              </button>
+            ))}
+          </nav>
+          <div className="section-nav-menu">
+            <HeaderMenu label={`${SECTION_LABELS[section]} ▾`} title="Section" align="start">
+              {(Object.keys(SECTION_LABELS) as Section[]).map((s) => (
+                <button
+                  key={s}
+                  className={s === section ? 'project-menu-item project-menu-item-active' : 'project-menu-item'}
+                  onClick={() => setSection(s)}
+                >
+                  {s === section ? '● ' : ''}
+                  {SECTION_LABELS[s]}
+                </button>
+              ))}
+            </HeaderMenu>
           </div>
-        )}
-        <div className="app-spacer" />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,application/json"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = '';
-            if (file) void importProject(file);
-          }}
-        />
-        <button disabled={!store.canUndo} onClick={() => store.undo()} title="⌘Z">
-          ↩ Undo
-        </button>
-        <button disabled={!store.canRedo} onClick={() => store.redo()} title="⇧⌘Z">
-          ↪ Redo
-        </button>
-        <span className="header-divider" />
-        <HeaderMenu label="☰" title="Menu">
-          <button onClick={() => fileInputRef.current?.click()} title="Open a project .json">
-            Open…
-          </button>
-          <button onClick={exportProject} title="Download the project as .json">
-            Save…
-          </button>
-          <button onClick={exportCsv} title="Download the plan as .csv">
-            Export CSV…
-          </button>
-          <div className="header-menu-divider" />
-          <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">
-            ⌨ Shortcuts
-          </button>
-          <div className="header-menu-divider" />
-          <a
-            className="header-link"
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            title="Open the project on GitHub (raise an issue, browse the code)"
+          <span className="app-count">
+            {itemCount} item{itemCount === 1 ? '' : 's'}
+          </span>
+        </div>
+        <div className="app-header-actions">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void importProject(file);
+            }}
+          />
+          <button
+            className="header-btn-icon"
+            disabled={!store.canUndo}
+            onClick={() => store.undo()}
+            title="Undo (⌘Z)"
+            aria-label="Undo"
           >
-            GitHub ↗
-          </a>
-        </HeaderMenu>
+            ↩
+          </button>
+          <button
+            className="header-btn-icon"
+            disabled={!store.canRedo}
+            onClick={() => store.redo()}
+            title="Redo (⇧⌘Z)"
+            aria-label="Redo"
+          >
+            ↪
+          </button>
+          <span className="header-divider" />
+          <HeaderMenu label="☰" title="Menu">
+            <button onClick={() => fileInputRef.current?.click()} title="Open a project .json">
+              Open…
+            </button>
+            <button onClick={exportProject} title="Download the project as .json">
+              Save…
+            </button>
+            <button onClick={exportCsv} title="Download the plan as .csv">
+              Export CSV…
+            </button>
+            <div className="header-menu-divider" />
+            <button onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)">
+              ⌨ Shortcuts
+            </button>
+            <div className="header-menu-divider" />
+            <a
+              className="header-link"
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Open the project on GitHub (raise an issue, browse the code)"
+            >
+              GitHub ↗
+            </a>
+          </HeaderMenu>
+        </div>
       </header>
-      {(section === 'planning' || section === 'graph' || section === 'reporting') && (
+      {(section === 'spec' || section === 'planning' || section === 'graph' || section === 'reporting') && (
         <div className="app-subheader">
           {section === 'planning' && (
             <SubTabs
@@ -413,16 +417,63 @@ export function App() {
               onSelect={setReportMode}
             />
           )}
+          {searchable && (
+            <div className={`app-search${section === 'spec' ? '' : ' app-search-aside'}`}>
+              {searchOpen || filterActive ? (
+                <>
+                  <input
+                    type="search"
+                    className="app-search-input"
+                    placeholder="Filter…"
+                    autoFocus={searchOpen}
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setFilterText('');
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!filterActive) setSearchOpen(false);
+                    }}
+                  />
+                  {filterActive && (
+                    <span className="app-search-count">
+                      {matchCount} match{matchCount === 1 ? '' : 'es'}
+                    </span>
+                  )}
+                  <FilterFacets
+                    value={facets}
+                    onChange={setFacets}
+                    showStatus={showStatusFacet}
+                    tagOptions={tagOptions}
+                  />
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="header-btn-icon"
+                  title="Filter…"
+                  aria-label="Filter"
+                  onClick={() => setSearchOpen(true)}
+                >
+                  🔍
+                </button>
+              )}
+            </div>
+          )}
           {section === 'reporting' && (reportMode === 'timeline' || reportMode === 'metrics') && (
-            <>
-              <span className="header-divider" />
+            <div className="scenario-group">
+              <span className="scenario-group-label">Scenario</span>
               <ScenarioPanel value={scenario} onChange={setScenario} baseSettings={graph.settings} />
               <BaselineSelector
                 baselines={graph.settings.baselines}
                 value={selectedBaselineId}
                 onChange={setSelectedBaselineId}
               />
-            </>
+            </div>
           )}
         </div>
       )}
