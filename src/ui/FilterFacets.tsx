@@ -56,12 +56,16 @@ export function FilterFacets({ value, onChange, showStatus, tagOptions }: Filter
   return (
     <div className="filter-facets" ref={ref}>
       <button
-        className="filter-facets-trigger"
+        className="filter-facets-trigger header-btn-icon"
         aria-expanded={open}
+        aria-label="Filters"
         title="Filter by status, priority, or tag"
         onClick={() => setOpen((o) => !o)}
       >
-        Facets{activeCount > 0 ? ` (${activeCount})` : ''}
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M1 2h14l-5 6v4l-4 2v-6z" fill="currentColor" />
+        </svg>
+        {activeCount > 0 && <span className="filter-facets-count">{activeCount}</span>}
       </button>
       {open && (
         <div className="filter-facets-panel" role="group" aria-label="Filter facets">
