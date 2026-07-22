@@ -461,3 +461,73 @@ describe('scheduleProject — critical path', () => {
     assert.deepEqual(scheduleProject(g).criticalPath, ['a']);
   });
 });
+
+describe('scheduleProject — dependency lag/lead and start-to-start (#132)', () => {
+  it('pushes a dependent start N working days past its prerequisite finish (FS + lag)', () => {
+    // Two tracks so capacity never binds — isolates the pure dependency
+    // offset. 'a' (dependency-free) is scheduled first and takes track 0;
+    // 'b' is then the only ready unit and lands on the free track 1.
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 2); // Jan1..Jan2 (offsets 0..2)
+    g = group(g, 'b', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a', lagDays: 3 });
+    const s = scheduleProject(g);
+    // finish offset 2 + 3 lag = offset 5 = Jan8 (see the offset map above).
+    assert.equal(s.groups.get('b')!.start, '2024-01-08');
+  });
+
+  it('lets a dependent start before its prerequisite finishes (FS + negative lag = lead)', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 2); // Jan1..Jan2
+    g = group(g, 'b', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a', lagDays: -1 });
+    const s = scheduleProject(g);
+    // finish offset 2 - 1 lead = offset 1 = Jan2 — overlaps 'a's own finish.
+    assert.equal(s.groups.get('b')!.start, '2024-01-02');
+  });
+
+  it('runs a start-to-start dependent alongside its prerequisite with no lag', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 3);
+    g = group(g, 'b', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a', depKind: 'SS' });
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('b')!.start, s.groups.get('a')!.start);
+  });
+
+  it("runs a start-to-start dependent N days behind its prerequisite's start", () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 5);
+    g = group(g, 'b', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a', depKind: 'SS', lagDays: 1 });
+    const s = scheduleProject(g);
+    // a starts offset 0 (Jan1); b's SS+1 constraint = offset 1 = Jan2.
+    assert.equal(s.groups.get('b')!.start, '2024-01-02');
+  });
+
+  it('extends the critical path distance by the lag on a binding FS edge', () => {
+    let g = base(); // 1 track
+    g = group(g, 'a', 2);
+    g = group(g, 'b', 1);
+    g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a', lagDays: 4 });
+    const s = scheduleProject(g);
+    assert.deepEqual(s.criticalPath, ['a', 'b']);
+    // Without the lag, b would start right after a (offset 2); the lag
+    // pushes the project finish out by those same 4 working days.
+    const noLag = scheduleProject(group(group(base(), 'a', 2), 'b', 1));
+    assert.ok(s.groups.get('b')!.finish > noLag.groups.get('b')!.finish);
+  });
+
+  it('still reports correct slack for a parallel unit when the other chain has lag', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 2); // track 0, Jan1..Jan2
+    g = group(g, 'b', 2); // track 1, Jan1..Jan2, parallel — no dependents
+    g = group(g, 'c', 1); // depends on a, with a 3-day lag after a's finish
+    g = addEdge(g, { type: 'depends_on', from: 'c', to: 'a', lagDays: 3 });
+    const s = scheduleProject(g);
+    // c is the critical path's tail; b has no downstream dependents, so it
+    // can slip all the way up to the project finish.
+    assert.equal(s.groups.get('b')!.slackUntil, s.projectFinish);
+    assert.equal(s.groups.get('c')!.slackUntil, undefined); // on the critical path
+  });
+});

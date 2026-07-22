@@ -8,7 +8,8 @@
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { prerequisitesOf } from '../model/analysis.ts';
-import { addEdge, edgeBetween, removeEdge } from '../model/graph.ts';
+import { addEdge, edgeBetween, removeEdge, updateDependency } from '../model/graph.ts';
+import type { DepKind } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 
 interface DependencyEditorProps {
@@ -51,6 +52,24 @@ export function DependencyEditor({ id }: DependencyEditorProps) {
     });
   }
 
+  /** The underlying edge for a prerequisite chip — direct 'depends_on' or
+   *  an inverse 'blocks', same lookup `remove` uses (#132: needed to read/
+   *  patch its kind/lag). */
+  function edgeFor(targetId: string) {
+    return edgeBetween(graph, 'depends_on', id, targetId) ?? edgeBetween(graph, 'blocks', targetId, id);
+  }
+
+  function setKind(edgeId: string, depKind: DepKind) {
+    store.commit((g) => updateDependency(g, edgeId, { depKind }));
+  }
+
+  function setLag(edgeId: string, raw: string) {
+    if (raw.trim() === '') return;
+    const lagDays = Number(raw);
+    if (!Number.isFinite(lagDays)) return;
+    store.commit((g) => updateDependency(g, edgeId, { lagDays }), { coalesce: `dep-lag:${edgeId}` });
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -65,18 +84,43 @@ export function DependencyEditor({ id }: DependencyEditorProps) {
   return (
     <div className="dep-editor">
       <span className="dep-label">Depends on</span>
-      {prerequisites.map((p) => (
-        <span key={p} className="dep-chip">
-          {graph.nodes[p]?.title.trim() || 'Untitled'}
-          <button
-            className="icon-button"
-            title="Remove dependency"
-            onClick={() => remove(p)}
-          >
-            ×
-          </button>
-        </span>
-      ))}
+      {prerequisites.map((p) => {
+        const edge = edgeFor(p);
+        return (
+          <span key={p} className="dep-chip">
+            {graph.nodes[p]?.title.trim() || 'Untitled'}
+            {edge && (
+              <>
+                <select
+                  className="dep-kind-select"
+                  title="Dependency kind: finish-to-start (default) or start-to-start"
+                  value={edge.depKind ?? 'FS'}
+                  onChange={(e) => setKind(edge.id, e.target.value as DepKind)}
+                >
+                  <option value="FS">FS</option>
+                  <option value="SS">SS</option>
+                </select>
+                <input
+                  type="number"
+                  step={1}
+                  className="dep-lag-input"
+                  title="Lag in working days — negative is a lead (overlap)"
+                  value={edge.lagDays ?? 0}
+                  onChange={(e) => setLag(edge.id, e.target.value)}
+                  onBlur={() => store.breakCoalescing()}
+                />
+              </>
+            )}
+            <button
+              className="icon-button"
+              title="Remove dependency"
+              onClick={() => remove(p)}
+            >
+              ×
+            </button>
+          </span>
+        );
+      })}
       <span className="dep-input-wrap">
         <input
           className="dep-input"

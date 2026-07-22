@@ -7,7 +7,7 @@
  * them (Tarjan SCC) so views can highlight, never forbid.
  */
 
-import type { ProjectGraph } from './types.ts';
+import type { DepKind, ProjectGraph } from './types.ts';
 
 /** Direct prerequisites of `id`: the nodes it needs first. */
 export function prerequisitesOf(graph: ProjectGraph, id: string): string[] {
@@ -42,6 +42,37 @@ export function dependencyAdjacency(graph: ProjectGraph): Map<string, string[]> 
     else if (edge.type === 'blocks') add(edge.to, edge.from);
   }
   return adjacency;
+}
+
+export interface DependencyConstraint {
+  prereqId: string;
+  depKind: DepKind;
+  lagDays: number;
+}
+
+/**
+ * Same direction as `dependencyAdjacency` (dependent → its prerequisites),
+ * but carrying each edge's scheduling kind/lag (#132) instead of just the
+ * id — used by the scheduler, which needs both to compute a start offset.
+ * A 'blocks' edge inverts direction the same way `dependencyAdjacency`
+ * does; its kind/lag are read as authored on that edge either way.
+ */
+export function dependencyConstraints(graph: ProjectGraph): Map<string, DependencyConstraint[]> {
+  const result = new Map<string, DependencyConstraint[]>();
+  const add = (dependent: string, prereqId: string, depKind: DepKind, lagDays: number): void => {
+    const constraint = { prereqId, depKind, lagDays };
+    const list = result.get(dependent);
+    if (list) list.push(constraint);
+    else result.set(dependent, [constraint]);
+  };
+  for (const edge of Object.values(graph.edges)) {
+    if (edge.type === 'depends_on') {
+      add(edge.from, edge.to, edge.depKind ?? 'FS', edge.lagDays ?? 0);
+    } else if (edge.type === 'blocks') {
+      add(edge.to, edge.from, edge.depKind ?? 'FS', edge.lagDays ?? 0);
+    }
+  }
+  return result;
 }
 
 /**

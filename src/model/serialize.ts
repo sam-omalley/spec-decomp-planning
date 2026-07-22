@@ -38,6 +38,12 @@
  * drift comparison, see `Baseline` in types.ts), backfilled to `[]` — a
  * pure no-op until one is captured. No data loss.
  *
+ * v8 → v9: dependency lag/lead and start-to-start (#132). `depends_on`/
+ * `blocks` edges gain optional `depKind` ('FS' | 'SS') and `lagDays`; both
+ * absent (rather than backfilled) reproduces exactly today's zero-lag
+ * finish-to-start behaviour, so this is a pure no-op with no explicit
+ * migration step. No data loss.
+ *
  * Every mutation in graph.ts enforces the 'contains'/'assigned_to'
  * invariants (see graph.ts's top comment), but the file/autosave path is
  * the one entrance that bypasses them — a hand-edited file, a bug in a
@@ -61,7 +67,7 @@ import type {
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 8;
+export const FILE_VERSION = 9;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -69,7 +75,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {

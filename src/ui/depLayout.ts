@@ -33,8 +33,8 @@
  */
 
 import { childrenOf, groupRootsOf, subtreeIds } from '../model/graph.ts';
-import { dependencyAdjacency } from '../model/analysis.ts';
-import type { ProjectGraph } from '../model/types.ts';
+import { dependencyConstraints } from '../model/analysis.ts';
+import type { DepKind, ProjectGraph } from '../model/types.ts';
 import { rootGroupColor } from './colors.ts';
 
 export const DEP_COLUMN_WIDTH = 240;
@@ -59,6 +59,10 @@ export interface DepGraphEdge {
   inferred: boolean;
   /** True when both endpoints share a real-dependency cycle. */
   inCycle: boolean;
+  /** 'FS' (default) or 'SS' (#132) — always 'FS' for an inferred edge. */
+  depKind: DepKind;
+  /** Working days of lag/lead (#132) — always 0 for an inferred edge. */
+  lagDays: number;
 }
 
 export interface DepGraphLayout {
@@ -354,18 +358,28 @@ export function layoutDependencies(
   if (leaves.length === 0) return { nodes: [], edges: [] };
   const leafSet = new Set(leaves);
 
-  // Real dependency relation among leaves, fanning containers out.
+  // Real dependency relation among leaves, fanning containers out. Each
+  // expanded (dependent, prerequisite) leaf pair inherits its originating
+  // edge's kind/lag (#132) for display; when more than one original edge
+  // collapses onto the same pair, a non-default kind/lag wins (more useful
+  // to surface than the plain FS/0 case).
   const realNeeds = new Map<string, Set<string>>();
+  const depMeta = new Map<string, { depKind: DepKind; lagDays: number }>();
   for (const l of leaves) realNeeds.set(l, new Set());
-  for (const [node, prereqs] of dependencyAdjacency(graph)) {
+  for (const [node, constraints] of dependencyConstraints(graph)) {
     if (graph.nodes[node]?.type !== 'group') continue;
     const dependents = leavesFor(graph, node, leafSet);
-    for (const prereq of prereqs) {
-      if (graph.nodes[prereq]?.type !== 'group') continue;
-      const prereqLeaves = leavesFor(graph, prereq, leafSet);
+    for (const c of constraints) {
+      if (graph.nodes[c.prereqId]?.type !== 'group') continue;
+      const prereqLeaves = leavesFor(graph, c.prereqId, leafSet);
       for (const dl of dependents) {
         for (const pl of prereqLeaves) {
-          if (dl !== pl) realNeeds.get(dl)!.add(pl);
+          if (dl === pl) continue;
+          realNeeds.get(dl)!.add(pl);
+          const key = `${dl}|${pl}`;
+          if (!depMeta.has(key) || c.depKind !== 'FS' || c.lagDays !== 0) {
+            depMeta.set(key, { depKind: c.depKind, lagDays: c.lagDays });
+          }
         }
       }
     }
@@ -419,11 +433,19 @@ export function layoutDependencies(
     for (const prerequisite of prereqs) {
       const inCycle =
         cycleOf.has(dependent) && cycleOf.get(dependent) === cycleOf.get(prerequisite);
-      edges.push({ dependent, prerequisite, inferred: false, inCycle });
+      const meta = depMeta.get(`${dependent}|${prerequisite}`);
+      edges.push({
+        dependent,
+        prerequisite,
+        inferred: false,
+        inCycle,
+        depKind: meta?.depKind ?? 'FS',
+        lagDays: meta?.lagDays ?? 0,
+      });
     }
   }
   for (const e of inferred) {
-    edges.push({ ...e, inferred: true, inCycle: false });
+    edges.push({ ...e, inferred: true, inCycle: false, depKind: 'FS', lagDays: 0 });
   }
 
   return { nodes, edges };

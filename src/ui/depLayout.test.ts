@@ -56,6 +56,38 @@ describe('layoutDependencies', () => {
     );
   });
 
+  it('carries a real edge\'s depKind/lagDays through to its layout edge (#132)', () => {
+    let g = fixture();
+    g = addEdge(g, {
+      type: 'depends_on',
+      from: 'epicB',
+      to: 'epicA',
+      depKind: 'SS',
+      lagDays: 2,
+    });
+    const layout = layoutDependencies(g);
+    const edge = layout.edges.find((e) => e.dependent === 'epicB')!;
+    assert.equal(edge.depKind, 'SS');
+    assert.equal(edge.lagDays, 2);
+  });
+
+  it('defaults an inferred chain edge to FS/0 (#132)', () => {
+    const layout = layoutDependencies(fixture(), { inferChains: true });
+    const inferredEdge = layout.edges.find((e) => e.inferred)!;
+    assert.ok(inferredEdge);
+    assert.equal(inferredEdge.depKind, 'FS');
+    assert.equal(inferredEdge.lagDays, 0);
+  });
+
+  it('defaults a plain (zero-lag FS) real edge to depKind FS and lagDays 0', () => {
+    let g = fixture();
+    g = dep(g, 'epicB', 'epicA');
+    const layout = layoutDependencies(g);
+    const edge = layout.edges.find((e) => e.dependent === 'epicB')!;
+    assert.equal(edge.depKind, 'FS');
+    assert.equal(edge.lagDays, 0);
+  });
+
   it('fans a container dependency out to its descendant leaves', () => {
     let g = fixture();
     g = dep(g, 'block2', 'block1'); // container → container
