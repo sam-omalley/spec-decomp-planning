@@ -28,7 +28,7 @@
 
 import type { DateRange, ProjectGraph } from './types.ts';
 import { childrenOf, groupRootsOf, parentOf, subtreeIds } from './graph.ts';
-import { dependencyAdjacency } from './analysis.ts';
+import { dependencyConstraints, type DependencyConstraint } from './analysis.ts';
 import { toDateOnly } from './time.ts';
 
 export interface ScheduledGroup {
@@ -196,6 +196,12 @@ function finishIndex(startOffset: number, duration: number): number {
  * many working days it could slip without moving the project's projected
  * finish; 0 along the critical path by construction.
  *
+ * Generalized for lag/lead and start-to-start (#132): an FS constraint
+ * bounds the prereq's latest finish directly (`latestStart(u) - lag`, the
+ * lag=0 case matching the original formula exactly); an SS constraint
+ * bounds the prereq's latest *start* instead, translated back to a latest
+ * finish via the prereq's own (already-placed) span.
+ *
  * A simplification shared with every CPM tool: it doesn't re-level resource
  * contention for the backward pass (that would mean a second, much more
  * complex resource-constrained solve), so this answers "if only the
@@ -207,7 +213,7 @@ function finishIndex(startOffset: number, duration: number): number {
  */
 function computeLatestFinish(
   units: string[],
-  unitPrereqs: Map<string, Set<string>>,
+  unitPrereqs: Map<string, DependencyConstraint[]>,
   startOffset: Map<string, number>,
   finishOffset: Map<string, number>,
   projectFinishOffset: number,
@@ -219,9 +225,12 @@ function computeLatestFinish(
     for (const u of units) {
       const span = finishOffset.get(u)! - startOffset.get(u)!;
       const latestStart = latestFinish.get(u)! - span;
-      for (const p of unitPrereqs.get(u) ?? []) {
-        if (latestStart < latestFinish.get(p)!) {
-          latestFinish.set(p, latestStart);
+      for (const c of unitPrereqs.get(u) ?? []) {
+        const pSpan = finishOffset.get(c.prereqId)! - startOffset.get(c.prereqId)!;
+        const bound =
+          c.depKind === 'SS' ? latestStart - c.lagDays + pSpan : latestStart - c.lagDays;
+        if (bound < latestFinish.get(c.prereqId)!) {
+          latestFinish.set(c.prereqId, bound);
           changed = true;
         }
       }
@@ -312,17 +321,21 @@ export function scheduleProject(
   const pre = groupPreOrder(graph);
 
   // Unit-level prerequisites, expanded from the raw group dependency graph.
-  const adjacency = dependencyAdjacency(graph);
-  const unitPrereqs = new Map<string, Set<string>>();
-  for (const u of units) unitPrereqs.set(u, new Set());
-  for (const [node, prereqs] of adjacency) {
+  // A container endpoint fans out to every unit it covers; each resulting
+  // (dependent, prereq) pair inherits the original edge's kind/lag (#132).
+  const constraintsByNode = dependencyConstraints(graph);
+  const unitPrereqs = new Map<string, DependencyConstraint[]>();
+  for (const u of units) unitPrereqs.set(u, []);
+  for (const [node, constraints] of constraintsByNode) {
     if (graph.nodes[node]?.type !== 'group') continue;
     const dependents = unitsFor(graph, node, unitSet);
-    for (const prereq of prereqs) {
-      if (graph.nodes[prereq]?.type !== 'group') continue;
-      for (const pu of unitsFor(graph, prereq, unitSet)) {
+    for (const c of constraints) {
+      if (graph.nodes[c.prereqId]?.type !== 'group') continue;
+      for (const pu of unitsFor(graph, c.prereqId, unitSet)) {
         for (const du of dependents) {
-          if (du !== pu) unitPrereqs.get(du)!.add(pu);
+          if (du !== pu) {
+            unitPrereqs.get(du)!.push({ prereqId: pu, depKind: c.depKind, lagDays: c.lagDays });
+          }
         }
       }
     }
@@ -356,7 +369,7 @@ export function scheduleProject(
   const remaining = new Set(units);
   while (remaining.size > 0) {
     let ready = [...remaining].filter((u) => {
-      for (const p of unitPrereqs.get(u)!) if (remaining.has(p)) return false;
+      for (const c of unitPrereqs.get(u)!) if (remaining.has(c.prereqId)) return false;
       return true;
     });
     // Dependency cycle: nothing is ready — proceed by sibling order anyway.
@@ -387,10 +400,13 @@ export function scheduleProject(
     // span; omitted when there's nothing to explain (a 1× no-op).
     const stretch = speed * fte !== 1 ? { speedMultiplier: speed, fte } : undefined;
 
+    // FS (default) gates on the prereq's finish; SS gates on its start
+    // instead (#132) — either way, `lagDays` (negative = lead) shifts the
+    // constraint point before comparing.
     let prereqFinish = 0;
-    for (const p of unitPrereqs.get(u)!) {
-      const f = finishOffset.get(p);
-      if (f !== undefined) prereqFinish = Math.max(prereqFinish, f);
+    for (const c of unitPrereqs.get(u)!) {
+      const base = c.depKind === 'SS' ? startOffset.get(c.prereqId) : finishOffset.get(c.prereqId);
+      if (base !== undefined) prereqFinish = Math.max(prereqFinish, base + c.lagDays);
     }
 
     if (node.actualFinish !== null) {
@@ -504,11 +520,12 @@ export function scheduleProject(
     if (graph.nodes[cur]!.actualStart !== null) break; // anchored on real start
     const start = startOffset.get(cur);
     let binding: string | null = null;
-    for (const p of unitPrereqs.get(cur)!) {
-      if (finishOffset.get(p) === start) {
+    for (const c of unitPrereqs.get(cur)!) {
+      const base = c.depKind === 'SS' ? startOffset.get(c.prereqId) : finishOffset.get(c.prereqId);
+      if (base !== undefined && base + c.lagDays === start) {
         // Prefer the highest-pre-order-stable prereq; any exact match is
         // a genuine gater, so the first found is fine.
-        binding = p;
+        binding = c.prereqId;
         break;
       }
     }
@@ -521,12 +538,15 @@ export function scheduleProject(
   // only where there's something to show — a done unit has nothing left to
   // flex, and a zero-slack (critical-path) unit is already highlighted.
   // Folds the implicit capacity-queue prereqs in with the real dependency
-  // ones, so slack never overstates how free a track-mate actually is.
-  const slackPrereqs = new Map<string, Set<string>>();
+  // ones (as a zero-lag FS constraint), so slack never overstates how free
+  // a track-mate actually is.
+  const slackPrereqs = new Map<string, DependencyConstraint[]>();
   for (const u of units) {
-    const combined = new Set(unitPrereqs.get(u));
+    const combined = [...unitPrereqs.get(u)!];
     const capacityPrereq = capacityPrereqs.get(u);
-    if (capacityPrereq !== undefined) combined.add(capacityPrereq);
+    if (capacityPrereq !== undefined) {
+      combined.push({ prereqId: capacityPrereq, depKind: 'FS', lagDays: 0 });
+    }
     slackPrereqs.set(u, combined);
   }
   const projectFinishOffset = last !== null ? finishOffset.get(last)! : 0;

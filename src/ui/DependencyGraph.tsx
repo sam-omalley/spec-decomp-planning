@@ -193,10 +193,20 @@ export function DependencyGraph({
           ? undefined
           : (edgeBetween(graph, 'depends_on', e.dependent, e.prerequisite) ??
             edgeBetween(graph, 'blocks', e.prerequisite, e.dependent));
+        // Non-default kind/lag (#132): a distinct dash (never confusable
+        // with the inferred-chain dash) plus a label — the label text is
+        // what actually carries the meaning, not the dash alone.
+        const hasLag = e.depKind === 'SS' || e.lagDays !== 0;
+        const label = hasLag
+          ? [e.depKind === 'SS' ? 'SS' : '', e.lagDays !== 0 ? `${e.lagDays > 0 ? '+' : ''}${e.lagDays}d` : '']
+              .filter(Boolean)
+              .join(' ')
+          : undefined;
         const className = [
           'gedge-dep',
           e.inCycle ? 'gedge-dep-cycle' : '',
           e.inferred ? 'gedge-dep-inferred' : '',
+          hasLag ? 'gedge-dep-lag' : '',
           backing ? 'gedge-deletable' : '',
         ]
           .filter(Boolean)
@@ -216,6 +226,7 @@ export function DependencyGraph({
           // backing edge to pick up.
           reconnectable: backing ? true : false,
           data: { graphEdgeId: backing?.id },
+          ...(label ? { label, labelStyle: { fontSize: 10, fontWeight: 600, fill: '#8a6a1f' } } : {}),
           markerEnd: {
             type: MarkerType.ArrowClosed,
             width: 16,

@@ -87,6 +87,12 @@ export interface WorkNode {
   modifiedAt: string;
 }
 
+/** How a dependency edge constrains its dependent's start (#132): 'FS'
+ *  (finish-to-start, the default) gates on the prerequisite's finish; 'SS'
+ *  (start-to-start) gates on its start instead — the common "runs alongside,
+ *  N days behind" shape. Combines with `lagDays`. */
+export type DepKind = 'FS' | 'SS';
+
 export interface Edge {
   id: string;
   type: EdgeType;
@@ -96,6 +102,12 @@ export interface Edge {
   to: string;
   /** Sibling sort position; only meaningful on 'contains' edges. */
   order?: number;
+  /** Only meaningful on 'depends_on'/'blocks' edges; absent = 'FS'. */
+  depKind?: DepKind;
+  /** Working days added after the constraint point before the dependent may
+   *  start; only meaningful on 'depends_on'/'blocks' edges. Negative = lead
+   *  (overlap) — absent/0 is today's zero-lag behaviour. */
+  lagDays?: number;
 }
 
 /** A closed date range (ISO `YYYY-MM-DD`, inclusive both ends) — a project

@@ -1118,6 +1118,29 @@ body {
   border: 1px solid #f0d9a3;
 }
 
+/* Kind (FS/SS) + lag controls inline in each dependency chip (#132). */
+.dep-kind-select {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 2px;
+  border: 1px solid #e2c887;
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.dep-lag-input {
+  font: inherit;
+  font-size: 11px;
+  width: 34px;
+  padding: 1px 3px;
+  border: 1px solid #e2c887;
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: right;
+}
+
 .dep-input-wrap {
   position: relative;
 }
@@ -2532,6 +2555,14 @@ button.asg-legend-item:hover {
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
   opacity: 0.6;
+}
+
+/* A real edge with a non-default kind/lag (#132) — a tighter dash than the
+   inferred chain's (never confusable with it) plus the label text (SS /
+   +Nd, set via labelStyle in DependencyGraph.tsx) carries the actual
+   meaning, not the dash alone. */
+.gedge-dep-lag .react-flow__edge-path {
+  stroke-dasharray: 3 2;
 }
 
 /* A real dependency edge you can click to remove. */
