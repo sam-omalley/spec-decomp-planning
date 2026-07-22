@@ -56,15 +56,41 @@ body {
   caret-color: auto;
 }
 
+/* Two zones (#149): everything global-but-reflowable (title, project
+   switcher, section nav, item count) wraps onto a second line below
+   ~1024px rather than clipping. Undo/Redo + the hamburger are app-level
+   actions, not page content, so they live in a separate non-wrapping zone
+   pinned to the row's right edge — exactly where users already look for
+   them — instead of getting pushed onto a wrapped line. */
+.app-header-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* Second header row (#142): the active section's sub-nav (Outline/Table/
-   Markdown, Map/Dependency, or the five Reporting tabs) plus, for Timeline/
-   Metrics, the What-if and baseline pickers — split out from .app-header so
-   Reporting's controls don't crowd the primary nav into a single packed row.
-   Only rendered for sections that actually have a sub-nav (Spec/Settings
-   render nothing here), so it costs no space elsewhere. */
+   Markdown, Map/Dependency, or the five Reporting tabs), the search/filter
+   control (#149 — content-scoped, so it lives here rather than in the
+   global .app-header), and, for Timeline/Metrics, the What-if and baseline
+   pickers — split out from .app-header so Reporting's controls don't crowd
+   the primary nav into a single packed row. Settings is the only section
+   that renders nothing here. */
 .app-subheader {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
   gap: 12px;
   padding: 8px 20px;
   background: var(--panel);
@@ -78,6 +104,9 @@ body {
   font-size: 15px;
   font-weight: 600;
   margin: 0;
+  /* Never wrap to two lines and eat into the row's already-tight budget. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .app-count {
@@ -89,10 +118,57 @@ body {
   flex: 1;
 }
 
+/* Icon-only header controls (Undo/Redo, the search trigger, the Facets
+   trigger, #149): a fixed square instead of text-width padding, so they
+   read as one compact family rather than each wasting label width.
+   Self-contained (border/hover/disabled) rather than relying on the
+   .app-header button:not(.view-tab) rule below, since some of these now
+   live in .app-subheader (search/Facets triggers) instead of .app-header. */
+.header-btn-icon {
+  font: inherit;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.header-btn-icon:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.header-btn-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Section nav pop-out (#149): hidden by default, swapped in for the
+   segmented .view-tabs-primary control below ~760px via the media query
+   at the bottom of this file, reusing HeaderMenu (the same disclosure
+   ProjectSwitcher and the hamburger already use) instead of a new pattern. */
+.section-nav-menu {
+  display: none;
+}
+
 .app-search {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Aside a sub-nav (Planning/Graph, #149) the search control right-aligns
+   in the shared subheader row, the same way .scenario-group sits aside
+   Reporting's sub-tabs. Spec has no sub-nav, so it omits this modifier
+   and just sits at the row's start. */
+.app-search-aside {
+  margin-left: auto;
 }
 
 .app-search-input {
@@ -224,10 +300,33 @@ body {
   background: var(--accent-soft);
 }
 
+/* Active-facet count badge (#149: the trigger itself lost its "Facets"
+   text label for a funnel icon, so the count needs its own non-colour
+   cue — a number, not just a colour change — same reasoning as the
+   colourblind-safe leading glyph on .picker-option-active). */
+.filter-facets-count {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+
 .filter-facets-panel {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  /* The trigger can now sit at the subheader's right edge (#149, aside a
+     sub-nav), so anchor the panel to its right side (opening leftward)
+     rather than overflowing off-screen, same reasoning as
+     .header-menu-list. */
+  right: 0;
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -3247,16 +3346,55 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   font-weight: 600;
 }
 
-/* What-if scenario panel (Reporting header, Timeline/Metrics only) */
+/* Scenario/baseline group (#150): right-aligned and boxed with square
+   corners + a text label, distinct in shape (not just colour, since the
+   user is colourblind) from the rounded, borderless-container view-tab
+   pills it sits beside — reads as a settings toggle, not a 6th tab. */
+.scenario-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 3px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.scenario-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* What-if scenario panel (Reporting header, Timeline/Metrics only). Plain
+   text control (no border/pill) so it can't be mistaken for a .view-tab. */
 .scenario-panel {
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.scenario-toggle-active {
+.scenario-toggle {
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.scenario-toggle:hover {
   background: var(--accent-soft);
-  border-color: var(--accent);
+}
+.scenario-toggle-active {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .scenario-banner {
   display: flex;
@@ -3355,4 +3493,17 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 }
 .scenario-resource-add:hover {
   border-color: var(--muted);
+}
+
+/* Section nav collapses to a pop-out menu below ~760px (#149) — the
+   segmented .view-tabs-primary control doesn't reflow like body text, it
+   swaps for .section-nav-menu (a HeaderMenu, same disclosure as
+   ProjectSwitcher/the hamburger) instead. */
+@media (max-width: 760px) {
+  .view-tabs-primary {
+    display: none;
+  }
+  .section-nav-menu {
+    display: inline-flex;
+  }
 }
