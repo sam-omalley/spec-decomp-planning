@@ -297,53 +297,6 @@ export function App() {
             </button>
           ))}
         </nav>
-        {section === 'planning' && (
-          <SubTabs
-            label="Planning view"
-            options={[
-              ['outline', 'Outline'],
-              ['table', 'Table'],
-              ['markdown', 'Markdown'],
-            ]}
-            active={planMode}
-            onSelect={setPlanMode}
-          />
-        )}
-        {section === 'graph' && (
-          <SubTabs
-            label="Graph view"
-            options={[
-              ['map', 'Map'],
-              ['dep', 'Dependency'],
-            ]}
-            active={graphMode}
-            onSelect={setGraphMode}
-          />
-        )}
-        {section === 'reporting' && (
-          <SubTabs
-            label="Report"
-            options={[
-              ['timeline', 'Timeline'],
-              ['metrics', 'Metrics'],
-              ['assignees', 'Assignees'],
-              ['concerns', 'Concerns'],
-              ['coverage', 'Coverage'],
-            ]}
-            active={reportMode}
-            onSelect={setReportMode}
-          />
-        )}
-        {section === 'reporting' && (reportMode === 'timeline' || reportMode === 'metrics') && (
-          <>
-            <ScenarioPanel value={scenario} onChange={setScenario} baseSettings={graph.settings} />
-            <BaselineSelector
-              baselines={graph.settings.baselines}
-              value={selectedBaselineId}
-              onChange={setSelectedBaselineId}
-            />
-          </>
-        )}
         <span className="app-count">
           {itemCount} item{itemCount === 1 ? '' : 's'}
         </span>
@@ -421,6 +374,58 @@ export function App() {
           </a>
         </HeaderMenu>
       </header>
+      {(section === 'planning' || section === 'graph' || section === 'reporting') && (
+        <div className="app-subheader">
+          {section === 'planning' && (
+            <SubTabs
+              label="Planning view"
+              options={[
+                ['outline', 'Outline'],
+                ['table', 'Table'],
+                ['markdown', 'Markdown'],
+              ]}
+              active={planMode}
+              onSelect={setPlanMode}
+            />
+          )}
+          {section === 'graph' && (
+            <SubTabs
+              label="Graph view"
+              options={[
+                ['map', 'Map'],
+                ['dep', 'Dependency'],
+              ]}
+              active={graphMode}
+              onSelect={setGraphMode}
+            />
+          )}
+          {section === 'reporting' && (
+            <SubTabs
+              label="Report"
+              options={[
+                ['timeline', 'Timeline'],
+                ['metrics', 'Metrics'],
+                ['assignees', 'Assignees'],
+                ['concerns', 'Concerns'],
+                ['coverage', 'Coverage'],
+              ]}
+              active={reportMode}
+              onSelect={setReportMode}
+            />
+          )}
+          {section === 'reporting' && (reportMode === 'timeline' || reportMode === 'metrics') && (
+            <>
+              <span className="header-divider" />
+              <ScenarioPanel value={scenario} onChange={setScenario} baseSettings={graph.settings} />
+              <BaselineSelector
+                baselines={graph.settings.baselines}
+                value={selectedBaselineId}
+                onChange={setSelectedBaselineId}
+              />
+            </>
+          )}
+        </div>
+      )}
       {backupText && (
         <div className="app-banner" role="alert">
           A previous autosave couldn’t be loaded — nothing was deleted, it was kept as a backup
