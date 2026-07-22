@@ -22,12 +22,14 @@ There is deliberately no rigid "plan / epic / block" hierarchy — just groups n
 
 Every view is a pure projection of the same graph, kept in sync:
 
-- **Spec outliner** — decompose the specification. Keyboard-first (`Enter` = sibling, `Tab` = indent), Things-style inline detail cards (`⌘↩`).
-- **Planning view** — the delivery forest. Drag spec rows onto groups to assign; coverage and overlap are shown as chips and badges.
-- **Graph view** — the whole graph at once: spec forest left-to-right, delivery forest mirrored right-to-left, with `assigned_to` edges bridging the two and dependency edges drawn between work items (cycles highlighted).
+- **Spec outliner** — decompose the specification. Keyboard-first (`Enter` = sibling, `Tab` = indent), Things-style inline detail cards (`⌘↩`). Purely structural: no estimates, no dependencies — just what must be built.
+- **Planning view** — the delivery forest (outline or table), the thing you actually estimate, track, and sequence. Drag spec rows onto groups to assign; coverage and overlap are shown as chips and badges.
+- **Graph view** — the whole graph at once: spec forest left-to-right, delivery forest mirrored right-to-left, with `assigned_to` edges bridging the two (Map mode) or the delivery groups' dependency graph, lag/lead and start-to-start included (Dependency mode, with Tarjan cycle detection — cycles are visualized, never forbidden).
 - **Markdown view** — the delivery plan rendered as copyable Markdown for export.
+- **Reporting** — Timeline (Gantt, with a P80 uncertainty whisker), Metrics (projected finish, burn-up, estimate-vs-actual, a sampled P50/P80 projection range), Assignees (per-resource stats), Concerns (overdue/blocked/cycle/unestimated/unassigned flags), and Coverage (spec items no group addresses).
+- **Settings** — schedule (start/target dates, holidays), the delivery team (FTE, individual leave), points↔days conversion, editing locks, and named baselines to diff the current plan against.
 
-Plus **dependencies** across work items (with Tarjan cycle detection and "waiting" badges) and full **undo/redo**.
+Plus a resource-constrained **scheduler** (skip-weekends calendar, capacity per team member), **what-if scenarios** (preview a team/speed change without touching the plan), any number of **local projects** with a header switcher, CSV export, and full **undo/redo**.
 
 ## Tech
 
