@@ -6,7 +6,9 @@
  * Nodes are leaf groups; edges are the dependency relation from
  * `analysis.ts` (`depends_on` + inverse `blocks`), restricted to leaves —
  * a dependency on a container fans out to the leaf groups in its subtree,
- * mirroring how `schedule.ts` expands container endpoints to units.
+ * mirroring how `schedule.ts` expands container endpoints to units. A
+ * parking-lot group (#155) and its subtree are never leaves here, same as
+ * they're never scheduling units.
  *
  * Layout is a layered left→right DAG: prerequisites left, dependents
  * right, each node's column its longest prerequisite chain. Cycles are
@@ -75,11 +77,14 @@ export interface DepLayoutOptions {
   inferChains?: boolean;
 }
 
-/** Leaf groups (no child group), in group pre-order. */
+/** Leaf groups (no child group), in group pre-order. A parking-lot group
+ *  (#155) and its whole subtree are excluded — parked work never appears
+ *  on the Dependency graph. */
 function leafGroups(graph: ProjectGraph): string[] {
   const leaves: string[] = [];
   const visit = (id: string): void => {
     if (graph.nodes[id]?.type !== 'group') return;
+    if (graph.nodes[id]?.parkingLot) return;
     const kids = childrenOf(graph, id);
     if (kids.length === 0) {
       leaves.push(id);

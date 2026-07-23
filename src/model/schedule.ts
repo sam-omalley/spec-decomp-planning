@@ -5,7 +5,9 @@
  *
  * Scheduling units = the topmost groups with an own `durationEstimate`
  * (the rollup/scheduling-unit rule): such a group is atomic and its
- * subtree is not descended into. Units are placed in dependency order
+ * subtree is not descended into. A parking-lot group (#155) and its whole
+ * subtree are excluded from the unit set entirely, regardless of estimate.
+ * Units are placed in dependency order
  * (reusing `analysis.ts`) onto tracks. Capacity is one track per
  * `settings.resources` entry (an empty team is a single full-time track);
  * a unit assigned to a resource (`resourceId`) is pinned to that resource's
@@ -242,12 +244,16 @@ function computeLatestFinish(
 
 /* --------------------------- scheduling units --------------------------- */
 
-/** Topmost groups with an own duration estimate, in group pre-order. */
+/** Topmost groups with an own duration estimate, in group pre-order.
+ *  A parking-lot group (#155) and its whole subtree are excluded — parked
+ *  work is never scheduled, so it can't appear on the Timeline or the
+ *  Dependency graph, both of which are built from this unit set. */
 export function schedulingUnits(graph: ProjectGraph): string[] {
   const units: string[] = [];
   const visit = (id: string): void => {
     const node = graph.nodes[id];
     if (!node || node.type !== 'group') return;
+    if (node.parkingLot) return;
     if (node.durationEstimate !== null) {
       units.push(id);
       return; // atomic: do not descend

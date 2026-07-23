@@ -104,6 +104,25 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
       </div>
 
       <div className="meta-row">
+        <label className="meta-field meta-field-checkbox">
+          <input
+            type="checkbox"
+            checked={node.parkingLot}
+            onChange={(e) =>
+              store.commit((g) => updateNode(g, id, { parkingLot: e.target.checked }))
+            }
+          />
+          <span className="meta-label">
+            Parking lot
+            <InfoDot
+              text="Parks this group (and everything under it) out of scheduling: excluded from the Timeline, the Dependency graph, and Concerns. Still visible on the Map graph, and spec items assigned here still count as covered."
+              align="start"
+            />
+          </span>
+        </label>
+      </div>
+
+      <div className="meta-row">
         <label className="meta-field">
           <span className="meta-label">Resource</span>
           <select

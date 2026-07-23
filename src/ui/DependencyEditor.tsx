@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { prerequisitesOf } from '../model/analysis.ts';
-import { addEdge, edgeBetween, removeEdge, updateDependency } from '../model/graph.ts';
+import { addEdge, edgeBetween, isParked, removeEdge, updateDependency } from '../model/graph.ts';
 import type { DepKind } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 
@@ -31,6 +31,7 @@ export function DependencyEditor({ id }: DependencyEditorProps) {
               n.type === 'group' &&
               n.id !== id &&
               !prerequisites.includes(n.id) &&
+              !isParked(graph, n.id) &&
               n.title.toLowerCase().includes(needle),
           )
           .slice(0, 6);

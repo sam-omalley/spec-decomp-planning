@@ -52,7 +52,12 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays + project
   below); either alone is ignored, and with neither set the sampler falls
   back to this project's own historical estimate accuracy instead. Groups
   are the nodes that get
-  scheduled, tracked, and sequenced by dependencies. **Rollup /
+  scheduled, tracked, and sequenced by dependencies. A group can be marked
+  `parkingLot` (#155) — it and its whole subtree are then excluded from
+  scheduling units (so invisible to the Timeline, the Dependency graph, and
+  `analyzeConcerns`), while remaining visible on the Map graph and still
+  counting toward spec coverage, since `assigned_to`/coverage don't care
+  whether the target group is scheduled. **Rollup /
   scheduling-unit rule:** the topmost node in a subtree with its own
   estimate is the atomic unit for both rollup display and scheduling — own
   value wins over summing children (no double counting), and an

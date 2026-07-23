@@ -243,6 +243,21 @@ export function isInSubtreeOf(
   return false;
 }
 
+/** True when `id` (a group) is itself a parking lot (#155) or sits inside
+ *  one — a parking-lot group parks its whole subtree, not just itself. */
+export function isParked(graph: ProjectGraph, id: string): boolean {
+  let current: string | null = id;
+  // Mirrors isInSubtreeOf's guard: a well-formed graph has no 'contains'
+  // cycle, but a loaded file might before validateGraph's repair pass.
+  const visited = new Set<string>();
+  while (current !== null && !visited.has(current)) {
+    if (graph.nodes[current]?.parkingLot) return true;
+    visited.add(current);
+    current = parentOf(graph, current);
+  }
+  return false;
+}
+
 /** The 'assigned_to' edge of a work node, if any (at most one exists). */
 export function assignmentEdgeOf(graph: ProjectGraph, nodeId: string): Edge | undefined {
   return getIndex(graph).assignmentByFrom.get(nodeId);
@@ -308,6 +323,7 @@ export function createNode(
     actualFinish: null,
     resourceId: null,
     externalRefs: [],
+    parkingLot: false,
     tags: input.tags ?? [],
     notes: input.notes ?? '',
     createdAt: timestamp,
@@ -357,6 +373,7 @@ export function createGroup(
     actualFinish: null,
     resourceId: null,
     externalRefs: [],
+    parkingLot: false,
     tags: [],
     notes: '',
     createdAt: timestamp,

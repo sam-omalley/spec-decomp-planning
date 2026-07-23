@@ -62,6 +62,8 @@ interface GNodeData extends Record<string, unknown> {
   dimmed: boolean;
   matched: boolean;
   color?: string;
+  /** Group side only: excluded from scheduling (#155), still shown here. */
+  parkingLot?: boolean;
 }
 
 type GNode = FlowNode<GNodeData>;
@@ -137,6 +139,14 @@ function GroupGraphNode({ id, data }: NodeProps<GNode>) {
         {data.title.trim() || 'Untitled'}
       </span>
       {data.hasDetails && <span className="gnode-details">≡</span>}
+      {data.parkingLot && (
+        <span
+          className="gnode-parked"
+          title="Parking lot — excluded from the Timeline, Dependency graph, and Concerns"
+        >
+          parked
+        </span>
+      )}
       <Handle type="target" position={Position.Right} id="rt" className="ghandle" isConnectable={false} />
     </div>
   );
@@ -298,7 +308,9 @@ export function GraphView({
             (textActive && !textMatch(placed.id)) ||
             (anyFilter && mode === 'spotlight' && !matched),
           matched: (textActive && textMatch(placed.id)) || (anyFilter && matched),
-          ...(placed.side === 'group' ? { color: rootGroupColor(graph, placed.id) } : {}),
+          ...(placed.side === 'group'
+            ? { color: rootGroupColor(graph, placed.id), parkingLot: node.parkingLot }
+            : {}),
         },
         draggable: false,
         connectable: true,
