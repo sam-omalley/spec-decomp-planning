@@ -92,6 +92,15 @@ export interface WorkNode {
   resourceId: string | null;
   /** External-tracker pointers (Jira, GitHub, …). Allowed on groups too. */
   externalRefs: ExternalRef[];
+  /**
+   * A parking-lot group (#155) holds work deliberately kept out of
+   * scheduling: it and its whole subtree are excluded from scheduling
+   * units (so absent from the Timeline and the Dependency graph) and from
+   * `analyzeConcerns`, but still appear in the Map graph and still count
+   * toward spec coverage — `assigned_to` and the coverage tags don't care
+   * whether the target group is scheduled. Only meaningful on group nodes.
+   */
+  parkingLot: boolean;
   tags: string[];
   notes: string;
   createdAt: string;

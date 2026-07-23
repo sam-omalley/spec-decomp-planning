@@ -7,6 +7,7 @@ import {
   emptyGraph,
   setActualDates,
   setEstimate,
+  updateNode,
   updateSettings,
 } from './graph.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
@@ -46,6 +47,22 @@ describe('schedulingUnits', () => {
     g = group(g, 'e1', 3, 'block');
     g = group(g, 'e2', 3, 'block');
     assert.deepEqual(schedulingUnits(g).sort(), ['e1', 'e2']);
+  });
+
+  it('excludes a parking-lot group even though it has its own estimate (#155)', () => {
+    let g = base();
+    g = group(g, 'a', 3);
+    g = group(g, 'parked', 5);
+    g = updateNode(g, 'parked', { parkingLot: true });
+    assert.deepEqual(schedulingUnits(g), ['a']);
+  });
+
+  it('excludes an estimated unit nested inside a parked container', () => {
+    let g = base();
+    g = group(g, 'block', null);
+    g = updateNode(g, 'block', { parkingLot: true });
+    g = group(g, 'epic', 5, 'block'); // would otherwise be a unit
+    assert.deepEqual(schedulingUnits(g), []);
   });
 });
 

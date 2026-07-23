@@ -87,6 +87,16 @@ describe('analyzeConcerns — per-unit signals', () => {
       ['leaf'],
     );
   });
+
+  it('never flags a parked group or its subtree (#155)', () => {
+    let g = base();
+    g = group(g, 'block', null); // container, parked
+    g = updateNode(g, 'block', { parkingLot: true, status: 'blocked' });
+    g = group(g, 'leaf', null, 'block'); // unestimated leaf, inside the parked subtree
+    const ks = kinds(g);
+    assert.equal(ks.includes('blocked'), false);
+    assert.equal(ks.includes('unestimated'), false);
+  });
 });
 
 describe('analyzeConcerns — resourcing', () => {

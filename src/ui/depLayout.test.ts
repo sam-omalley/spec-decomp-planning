@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEdge, createGroup, createNode, emptyGraph } from '../model/graph.ts';
+import { addEdge, createGroup, createNode, emptyGraph, updateNode } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
 import { DEP_COLUMN_WIDTH, layoutDependencies } from './depLayout.ts';
 
@@ -32,6 +32,15 @@ describe('layoutDependencies', () => {
       'epicC',
       'solo',
     ]);
+  });
+
+  it('excludes a parking-lot leaf group and its parked container subtree (#155)', () => {
+    let g = fixture();
+    g = updateNode(g, 'epicB', { parkingLot: true });
+    g = createGroup(g, { id: 'block3', title: 'Block 3' });
+    g = updateNode(g, 'block3', { parkingLot: true });
+    g = createGroup(g, { id: 'epicD', title: 'Epic D' }, 'block3');
+    assert.deepEqual(ids(layoutDependencies(g)), ['epicA', 'epicC', 'solo']);
   });
 
   it('is empty when there are no leaf groups', () => {

@@ -18,6 +18,7 @@ import {
   groupOf,
   groupRootsOf,
   isInSubtreeOf,
+  isParked,
   membersOfGroup,
   moveNode,
   parentOf,
@@ -195,6 +196,30 @@ describe('groups and the delivery tree', () => {
       () => addEdge(detached, { type: 'contains', from: 'epicA', to: 'block1' }),
       /cycle/,
     );
+  });
+});
+
+describe('parking-lot groups (#155)', () => {
+  it('a new node or group starts unparked', () => {
+    let g = planned();
+    g = createNode(g, { id: 'w', title: 'Work' });
+    assert.equal(g.nodes['w']!.parkingLot, false);
+    assert.equal(g.nodes['block1']!.parkingLot, false);
+  });
+
+  it('isParked is true for a group flagged directly', () => {
+    let g = planned();
+    g = updateNode(g, 'epicA', { parkingLot: true });
+    assert.equal(isParked(g, 'epicA'), true);
+    assert.equal(isParked(g, 'epicB'), false);
+  });
+
+  it('isParked is inherited by descendants of a parked group', () => {
+    let g = planned();
+    g = createGroup(g, { id: 'sub', title: 'Sub-epic' }, 'epicA');
+    g = updateNode(g, 'epicA', { parkingLot: true });
+    assert.equal(isParked(g, 'sub'), true);
+    assert.equal(isParked(g, 'block1'), false, 'a parked child does not park its parent');
   });
 });
 
@@ -439,6 +464,29 @@ describe('serialization', () => {
     assert.equal(g.settings.planLockDepth, 0);
     // Calendar exceptions (v7) backfill to empty.
     assert.deepEqual(g.settings.holidays, []);
+  });
+
+  it('migrates a v10 file by backfilling parkingLot to false (#155)', () => {
+    const v10 = {
+      version: 10,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {
+          a: {
+            id: 'a', title: 'A', description: '', type: 'group',
+            status: 'not_started', priority: 'medium', effort: null,
+            durationEstimate: null, durationOptimistic: null, durationPessimistic: null,
+            actualStart: null, actualFinish: null, resourceId: null,
+            externalRefs: [], tags: [], notes: '',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            modifiedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+        edges: {}, rootOrder: [], groupRootOrder: ['a'],
+      },
+    };
+    const g = deserializeProject(JSON.stringify(v10));
+    assert.equal(g.nodes['a']!.parkingLot, false);
   });
 
   it('migrates a v6 file by backfilling holidays and per-resource leave', () => {

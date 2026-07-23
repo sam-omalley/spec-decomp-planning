@@ -178,6 +178,7 @@ export function PlanTable({
         <thead>
           <tr>
             <th className="col-title">Group</th>
+            <th className="col-check">Parked</th>
             <th>Status</th>
             <th>Priority</th>
             <th>Resource</th>
@@ -250,6 +251,16 @@ export function PlanTable({
                       </button>
                     )}
                   </div>
+                </td>
+                <td className="col-check">
+                  <input
+                    type="checkbox"
+                    checked={node.parkingLot}
+                    title="Parking lot — excluded from the Timeline, Dependency graph, and Concerns; still shown on the Map graph and still counts toward spec coverage"
+                    onChange={(e) =>
+                      bulkCommit(row.id, (g, t) => updateNode(g, t, { parkingLot: e.target.checked }))
+                    }
+                  />
                 </td>
                 <td>
                   <select

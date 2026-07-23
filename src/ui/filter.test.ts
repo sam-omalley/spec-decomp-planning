@@ -19,6 +19,7 @@ function node(partial: Partial<WorkNode>): WorkNode {
     actualFinish: null,
     resourceId: null,
     externalRefs: [],
+    parkingLot: false,
     tags: [],
     notes: '',
     createdAt: '2026-01-01T00:00:00Z',

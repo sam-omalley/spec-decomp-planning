@@ -822,6 +822,19 @@ body {
   cursor: help;
 }
 
+.parked-badge {
+  flex: none;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #f3ede1;
+  color: #8a6a2f;
+  border: 1px solid #e6d7bd;
+  cursor: help;
+}
+
 .pane-hint {
   font-size: 13px;
   color: var(--muted);
@@ -1132,6 +1145,20 @@ body {
   font-size: 11px;
 }
 
+.gnode-parked {
+  flex: none;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #f3ede1;
+  color: #8a6a2f;
+  border: 1px solid #e6d7bd;
+  cursor: help;
+}
+
 .gnode-group {
   border-left: 4px solid var(--group-color, var(--accent));
   background: color-mix(in srgb, var(--group-color, var(--accent)) 6%, white);
@@ -1339,6 +1366,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.meta-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-field-checkbox .meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .meta-label {
@@ -2978,7 +3017,8 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   white-space: nowrap;
 }
 
-.plan-table th.col-num {
+.plan-table th.col-num,
+.plan-table th.col-check {
   text-align: center;
 }
 
@@ -2991,6 +3031,15 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 .plan-table td.col-num {
   text-align: center;
   color: var(--muted);
+}
+
+.plan-table td.col-check {
+  text-align: center;
+}
+
+.plan-table td.col-check input {
+  cursor: pointer;
+  margin: 0;
 }
 
 /* Per-status row highlighting (#45). Status is shown by a coloured left-edge

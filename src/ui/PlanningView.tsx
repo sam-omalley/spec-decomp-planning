@@ -199,15 +199,30 @@ export function PlanningView({
   function rowExtras(groupId: string): ReactNode {
     const members = membersOfGroup(graph, groupId);
     const overlaps = new Set(overlappingMembers(graph, groupId));
+    const parked = graph.nodes[groupId]?.parkingLot === true;
+    const parkedBadge = parked ? (
+      <span
+        className="parked-badge"
+        title="Parking lot — excluded from the Timeline, Dependency graph, and Concerns"
+      >
+        parked
+      </span>
+    ) : null;
     if (members.length === 0) {
       return isEmptyLeafGroup(graph, groupId) ? (
-        <span className="empty-badge" title="No work items assigned to this group">
-          empty
-        </span>
-      ) : null;
+        <>
+          {parkedBadge}
+          <span className="empty-badge" title="No work items assigned to this group">
+            empty
+          </span>
+        </>
+      ) : (
+        parkedBadge
+      );
     }
     return (
       <>
+        {parkedBadge}
         {overlaps.size > 0 && (
           <span
             className="overlap-badge"
