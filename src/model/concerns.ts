@@ -10,10 +10,13 @@
  *   unassigned.
  * - project-level (`id: null`): the whole plan is behind target or the team
  *   is under-utilised (not enough work in progress).
+ *
+ * A parking-lot group (#155) and its subtree never raise a concern — being
+ * parked out of the schedule is deliberate, not a signal to chase.
  */
 
 import type { ProjectGraph } from './types.ts';
-import { childrenOf } from './graph.ts';
+import { childrenOf, isParked } from './graph.ts';
 import { cycleIndexOf } from './analysis.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
 import { calendarDaysBetween, workingDaysInclusive } from './metrics.ts';
@@ -128,9 +131,10 @@ export function analyzeConcerns(
     }
   }
 
-  // Blocked groups (any depth): a manual stop signal.
+  // Blocked groups (any depth): a manual stop signal. Parked groups (#155)
+  // are deliberately parked out of the plan, so they're never a concern.
   for (const node of Object.values(graph.nodes)) {
-    if (node.type === 'group' && node.status === 'blocked') {
+    if (node.type === 'group' && node.status === 'blocked' && !isParked(graph, node.id)) {
       concerns.push({
         kind: 'blocked',
         severity: 'medium',
@@ -141,12 +145,14 @@ export function analyzeConcerns(
     }
   }
 
-  // Leaf groups with no estimate: invisible to the schedule (a blind spot).
+  // Leaf groups with no estimate: invisible to the schedule (a blind spot)
+  // — unless the group is parked (#155), where that's the point.
   for (const node of Object.values(graph.nodes)) {
     if (
       node.type === 'group' &&
       node.durationEstimate === null &&
-      isLeafGroup(graph, node.id)
+      isLeafGroup(graph, node.id) &&
+      !isParked(graph, node.id)
     ) {
       concerns.push({
         kind: 'unestimated',

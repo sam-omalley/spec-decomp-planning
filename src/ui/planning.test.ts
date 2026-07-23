@@ -5,6 +5,7 @@ import {
   createGroup,
   createNode,
   emptyGraph,
+  updateNode,
 } from '../model/graph.ts';
 import type { ProjectGraph } from '../model/types.ts';
 import {
@@ -118,6 +119,14 @@ describe('uncoveredWorkIds', () => {
     const ids = uncoveredWorkIds(fixture());
     assert.equal(ids.has('block1'), false);
     assert.equal(ids.has('epicA'), false);
+  });
+
+  it('assignment to a parking-lot group still counts as coverage (#155)', () => {
+    let g = fixture();
+    g = updateNode(g, 'epicA', { parkingLot: true });
+    g = assignToGroup(g, 'login', 'epicA');
+    assert.equal(isUncovered(g, 'login'), false);
+    assert.deepEqual([...uncoveredWorkIds(g)].sort(), ['app', 'auth', 'billing', 'signup']);
   });
 });
 
