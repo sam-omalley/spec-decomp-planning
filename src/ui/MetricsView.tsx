@@ -11,6 +11,7 @@ import { scheduleProject } from '../model/schedule.ts';
 import { computeDrift } from '../model/baselineDrift.ts';
 import { sampleProjection } from '../model/uncertainty.ts';
 import type { Baseline } from '../model/types.ts';
+import type { BurnPoint } from '../model/metrics.ts';
 import {
   burnUp,
   calendarDaysBetween,
@@ -46,7 +47,7 @@ const HELP = {
   criticalPath:
     'The chain that sets the finish: starting from the last-finishing unit, walk back through each binding prerequisite (the one whose finish set the next unit’s start), stopping at a real start or a capacity/“today” limit. Independent work off this chain doesn’t move the date.',
   burnUp:
-    'Cumulative completed scope (working days) stepping up at each unit’s actual finish, against the constant total scope. The ideal line runs from the start to the projected finish; 🎯 marks the target date.',
+    'Cumulative completed scope (working days) stepping up at each unit’s actual finish, against the constant total scope. The ideal line runs from the start to the projected finish; 🎯 marks the target date. Hover (or tab to) a step to see which units finished on that date.',
   projectionRange:
     'The projected finish isn’t one hard date — some units are estimated more confidently than others. This re-runs the projection a few hundred times, drawing each not-done unit’s duration from a range (its own Optimistic/Pessimistic in the details card, or — with no range entered — a range derived from how far this project’s own completed units have historically run over or under their estimates) instead of the point estimate. P50 is the median simulated finish; P80 is the date 4 in 5 simulated outcomes finish by. Only appears once at least one unit actually has a range; with none, P50/P80 are identical to the projected finish above.',
   estimateVsActual:
@@ -374,6 +375,10 @@ function BurnUpChart({
   summary: ReturnType<typeof projectionSummary>;
   burn: ReturnType<typeof burnUp>;
 }) {
+  // Which step the pointer (or keyboard focus) is on — view-only state; the
+  // index is safe to hold since a graph edit rebuilds the whole chart.
+  const [hover, setHover] = useState<number | null>(null);
+  const hovered = hover === null ? null : (burn[hover] ?? null);
   const total = burn[0]?.total ?? summary.totalDays;
   const start = burn[0]?.date ?? summary.projectStart ?? graph.settings.startDate;
   const candidates = [
@@ -394,7 +399,15 @@ function BurnUpChart({
   const idealTo = summary.projectFinish ?? end;
 
   return (
-    <svg width={CHART_W} height={CHART_H} className="burn-svg" role="img">
+    // A group, not an img: the steps inside are focusable and carry their own
+    // labels, which a presentational img subtree would hide.
+    <svg
+      width={CHART_W}
+      height={CHART_H}
+      className="burn-svg"
+      role="group"
+      aria-label="Burn-up: completed vs total scope"
+    >
       {/* axes */}
       <line x1={PAD} y1={CHART_H - PAD} x2={CHART_W - PAD} y2={CHART_H - PAD} className="axis" />
       <line x1={PAD} y1={PAD} x2={PAD} y2={CHART_H - PAD} className="axis" />
@@ -418,7 +431,27 @@ function BurnUpChart({
       {/* actual done */}
       <path d={donePath} className="burn-done" fill="none" />
       {burn.map((p, i) => (
-        <circle key={i} cx={x(p.date)} cy={y(p.done)} r={3} className="burn-dot" />
+        <g
+          key={i}
+          tabIndex={0}
+          role="img"
+          aria-label={pointLabel(p)}
+          className="burn-point"
+          onMouseEnter={() => setHover(i)}
+          onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+          onFocus={() => setHover(i)}
+          onBlur={() => setHover((h) => (h === i ? null : h))}
+        >
+          {/* the visible dot, plus a wider invisible hit area — a 3px dot is
+              far too small a hover/tap target on its own */}
+          <circle
+            cx={x(p.date)}
+            cy={y(p.done)}
+            r={hover === i ? 5 : 3}
+            className={`burn-dot${hover === i ? ' burn-dot-active' : ''}`}
+          />
+          <circle cx={x(p.date)} cy={y(p.done)} r={11} className="burn-hit" />
+        </g>
       ))}
       <text x={PAD} y={CHART_H - 8} className="burn-axis-label">
         {start}
@@ -426,7 +459,74 @@ function BurnUpChart({
       <text x={CHART_W - PAD} y={CHART_H - 8} textAnchor="end" className="burn-axis-label">
         {end}
       </text>
+      {/* hover card — drawn last so it paints over the chart */}
+      {hovered && <BurnUpTip point={hovered} px={x(hovered.date)} py={y(hovered.done)} />}
     </svg>
+  );
+}
+
+const TIP_LINE_H = 14;
+const TIP_PAD = 7;
+/** Rough advance width of the 11px tip text — hand-rolled SVG has no measuring,
+ *  and over-estimating just leaves a little slack on the right. */
+const TIP_CHAR_W = 6;
+/** Beyond this the tip would dominate the 200px-tall chart; the rest is
+ *  summarised as a “+N more” line. */
+const TIP_MAX_UNITS = 6;
+const TIP_MAX_CHARS = 34;
+
+function ellipsize(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+/** Screen-reader / native-tooltip text for one burn-up step. */
+function pointLabel(p: BurnPoint): string {
+  const head = `${p.date}: ${formatDays(p.done)} of ${formatDays(p.total)}d complete`;
+  return p.completed.length === 0
+    ? `${head}, nothing finished`
+    : `${head}. Finished: ${p.completed.map((c) => c.title).join(', ')}`;
+}
+
+/**
+ * The burn-up's hover card (#157): a step only says "scope went up" on its
+ * own — this names the units that actually closed on that date. Drawn as
+ * plain SVG (no foreignObject) so it scales with the chart, and
+ * pointer-transparent so it can't steal the hover that opened it.
+ */
+function BurnUpTip({ point, px, py }: { point: BurnPoint; px: number; py: number }) {
+  const shown = point.completed.slice(0, TIP_MAX_UNITS);
+  const rest = point.completed.length - shown.length;
+  const head = `${point.date} · ${formatDays(point.done)}/${formatDays(point.total)}d`;
+  const lines = [
+    ...shown.map((c) => `▪ ${ellipsize(c.title, TIP_MAX_CHARS)} · ${formatDays(c.days)}d`),
+    ...(rest > 0 ? [`+${rest} more`] : []),
+  ];
+  if (lines.length === 0) lines.push('nothing finished yet');
+
+  const w =
+    Math.max(head.length, ...lines.map((l) => l.length)) * TIP_CHAR_W + TIP_PAD * 2;
+  const h = (lines.length + 1) * TIP_LINE_H + TIP_PAD * 2;
+  // Prefer up-and-right of the dot, flipping/clamping at the chart edges.
+  const tx = px + 12 + w > CHART_W - 2 ? Math.max(2, px - 12 - w) : px + 12;
+  const ty = Math.min(CHART_H - 2 - h, Math.max(2, py - h - 10));
+
+  return (
+    <g className="burn-tip" pointerEvents="none">
+      <rect x={tx} y={ty} width={w} height={h} rx={6} className="burn-tip-box" />
+      <text x={tx + TIP_PAD} y={ty + TIP_PAD + 10} className="burn-tip-head">
+        {head}
+      </text>
+      {lines.map((line, i) => (
+        <text
+          key={i}
+          x={tx + TIP_PAD}
+          y={ty + TIP_PAD + 10 + (i + 1) * TIP_LINE_H}
+          className="burn-tip-line"
+        >
+          {line}
+        </text>
+      ))}
+    </g>
   );
 }
 

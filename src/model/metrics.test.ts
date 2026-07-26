@@ -129,8 +129,54 @@ describe('estimateVsActual', () => {
 describe('burnUp', () => {
   it('steps cumulative done up at each actual finish against a constant total', () => {
     assert.deepEqual(burnUp(fixture()), [
-      { date: '2024-01-01', done: 0, total: 4 },
-      { date: '2024-01-03', done: 2, total: 4 },
+      { date: '2024-01-01', done: 0, total: 4, completed: [] },
+      {
+        date: '2024-01-03',
+        done: 2,
+        total: 4,
+        completed: [{ id: 'e1', title: 'Epic 1', days: 2 }],
+      },
+    ]);
+  });
+
+  it('groups same-day finishes onto one point, in plan order', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, { startDate: '2024-01-01' });
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = createGroup(g, { id: 'b', title: '  ' }); // untitled
+    g = createGroup(g, { id: 'c', title: 'C' });
+    g = setEstimate(g, 'a', { durationEstimate: 1 });
+    g = setEstimate(g, 'b', { durationEstimate: 2 });
+    g = setEstimate(g, 'c', { durationEstimate: 3 });
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01', actualFinish: '2024-01-02T15:00' });
+    g = setActualDates(g, 'b', { actualStart: '2024-01-01', actualFinish: '2024-01-02' });
+    assert.deepEqual(burnUp(g), [
+      { date: '2024-01-01', done: 0, total: 6, completed: [] },
+      {
+        date: '2024-01-02',
+        done: 3,
+        total: 6,
+        completed: [
+          { id: 'a', title: 'A', days: 1 },
+          { id: 'b', title: 'Untitled', days: 2 },
+        ],
+      },
+    ]);
+  });
+
+  it('folds a finish on the start date into the first point', () => {
+    let g = emptyGraph();
+    g = updateSettings(g, { startDate: '2024-01-01' });
+    g = createGroup(g, { id: 'a', title: 'A' });
+    g = setEstimate(g, 'a', { durationEstimate: 1 });
+    g = setActualDates(g, 'a', { actualStart: '2024-01-01', actualFinish: '2024-01-01' });
+    assert.deepEqual(burnUp(g), [
+      {
+        date: '2024-01-01',
+        done: 1,
+        total: 1,
+        completed: [{ id: 'a', title: 'A', days: 1 }],
+      },
     ]);
   });
 });

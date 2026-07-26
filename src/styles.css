@@ -2430,6 +2430,41 @@ body {
 .burn-dot {
   fill: var(--accent);
 }
+/* Hovered/focused step (#157): grows and gains a ring, so the active point
+   reads by shape as well as colour. */
+.burn-dot-active {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+.burn-point {
+  cursor: help;
+}
+.burn-point:focus {
+  outline: none;
+}
+.burn-point:focus-visible .burn-dot {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+/* Invisible but hit-testable: a 3px dot is too small to hover reliably. */
+.burn-hit {
+  fill: transparent;
+}
+.burn-tip-box {
+  fill: var(--text);
+  stroke: none;
+}
+.burn-tip-head,
+.burn-tip-line {
+  fill: var(--bg);
+  font-size: 11px;
+}
+.burn-tip-head {
+  font-weight: 600;
+}
+.burn-tip-line {
+  opacity: 0.85;
+}
 .burn-target {
   stroke: #d1495b;
   stroke-width: 1.5;
