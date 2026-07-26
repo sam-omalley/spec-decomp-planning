@@ -179,16 +179,29 @@ export function filterVarianceByAssignee(
   };
 }
 
+/** One unit finishing on a burn-up point's date — what its step up is made
+ *  of, so the chart can name the work behind each rise. */
+export interface BurnCompletion {
+  id: string;
+  title: string;
+  /** Duration days this unit contributed to `done`. */
+  days: number;
+}
+
 export interface BurnPoint {
   date: string;
   done: number;
   total: number;
+  /** Units whose actual finish lands on this date, in plan order. Empty on
+   *  the project-start point (unless something finished that same day). */
+  completed: BurnCompletion[];
 }
 
 /**
  * Cumulative completed scope (unit duration days) over time — a burn-up.
  * Starts at 0 on the project start, stepping up at each unit's actual
- * finish. `total` is the constant full scope.
+ * finish. `total` is the constant full scope; each point also carries the
+ * units that finished on its date.
  */
 export function burnUp(
   graph: ProjectGraph,
@@ -199,26 +212,34 @@ export function burnUp(
 ): BurnPoint[] {
   const units = schedulingUnits(graph);
   let total = 0;
-  const finishes: { date: string; days: number }[] = [];
+  const finishes: { date: string; unit: BurnCompletion }[] = [];
   for (const id of units) {
     const node = graph.nodes[id]!;
     const days = node.durationEstimate ?? 0;
     total += days;
     if (isDone(graph, id) && node.actualFinish !== null) {
-      finishes.push({ date: toDateOnly(node.actualFinish), days });
+      finishes.push({
+        date: toDateOnly(node.actualFinish),
+        unit: { id, title: node.title.trim() || 'Untitled', days },
+      });
     }
   }
   if (units.length === 0) return [];
+  // Stable sort, so same-day finishes stay in plan order within their point.
   finishes.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   const start = schedule.projectStart ?? graph.settings.startDate;
-  const points: BurnPoint[] = [{ date: start, done: 0, total }];
+  const points: BurnPoint[] = [{ date: start, done: 0, total, completed: [] }];
   let done = 0;
   for (const f of finishes) {
-    done += f.days;
+    done += f.unit.days;
     const last = points[points.length - 1]!;
-    if (last.date === f.date) last.done = done;
-    else points.push({ date: f.date, done, total });
+    if (last.date === f.date) {
+      last.done = done;
+      last.completed.push(f.unit);
+    } else {
+      points.push({ date: f.date, done, total, completed: [f.unit] });
+    }
   }
   return points;
 }
