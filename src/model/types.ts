@@ -93,6 +93,19 @@ export interface WorkNode {
   /** External-tracker pointers (Jira, GitHub, …). Allowed on groups too. */
   externalRefs: ExternalRef[];
   /**
+   * The `Milestone` (release) this item is committed to; null = none.
+   * Only meaningful on group nodes (the plan side), where it is the
+   * delivery counterpart of `resourceId`: *who* does it vs *which release
+   * it lands in*. Membership is inherited down the group tree — a unit
+   * with no id of its own belongs to its nearest ancestor's milestone (see
+   * `milestoneOf` in `src/model/milestones.ts`), so a whole block can be
+   * committed in one edit. References an id in `ProjectSettings.milestones`;
+   * a dangling id reads as unassigned. Changes nothing about scheduling:
+   * a milestone is a window the projection is *compared against*, never an
+   * input to it.
+   */
+  milestoneId: string | null;
+  /**
    * A parking-lot group (#155) holds work deliberately kept out of
    * scheduling: it and its whole subtree are excluded from scheduling
    * units (so absent from the Timeline and the Dependency graph) and from
@@ -156,6 +169,28 @@ export interface Resource {
 }
 
 /**
+ * A release/milestone (#159): a named, *authored* delivery window the plan
+ * is measured against. Groups commit to it via `WorkNode.milestoneId`
+ * (inherited down the group tree), and its dates are typed by the user, not
+ * derived from the schedule — that's what makes a milestone something the
+ * plan can be late for. It feeds nothing into the scheduler: placement is
+ * unchanged whether or not milestones exist, and the comparison runs one
+ * way only (projection → milestone), exactly like `settings.targetDate`.
+ * Lives inside `ProjectSettings` so it rides the store/undo/serialize path
+ * unchanged, the same shape as `Resource`.
+ */
+export interface Milestone {
+  id: string;
+  name: string;
+  /** Opens the window (ISO date) — display/context only, never a scheduling
+   *  constraint: committed work is not pushed to start here. */
+  startDate: string;
+  /** The commitment date (ISO date) the projected finish is compared
+   *  against; must not be before `startDate`. */
+  targetDate: string;
+}
+
+/**
  * A named snapshot of the graph, captured for baseline-vs-current drift
  * comparison (`src/model/baselineDrift.ts`). Carries just enough to re-run
  * the scheduler (`scheduleProject`) against the moment it was captured:
@@ -210,6 +245,11 @@ export interface ProjectSettings {
    * falls back to a single full-time track). Replaces `parallelTracks`.
    */
   resources: Resource[];
+  /**
+   * Release windows the plan is measured against (#159); see `Milestone`.
+   * Empty = the project's own `targetDate` is the only commitment.
+   */
+  milestones: Milestone[];
   /** Capacity: global per-track speed multiplier (>0; scales durations). */
   speedMultiplier: number;
   /** Project-wide non-working dates (public holidays, office closures) —

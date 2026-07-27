@@ -13,7 +13,14 @@
 import { useMemo } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { cycleIndexOf, waitingMap } from '../model/analysis.ts';
-import { assignResource, setActualDates, setEstimate, updateNode } from '../model/graph.ts';
+import {
+  assignMilestone,
+  assignResource,
+  setActualDates,
+  setEstimate,
+  updateNode,
+} from '../model/graph.ts';
+import { milestoneOf } from '../model/milestones.ts';
 import { rolledDuration, rolledEffort } from '../model/rollup.ts';
 import type { Priority, ProjectGraph, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
@@ -62,6 +69,21 @@ export function PlanTable({
   // Levels that actually exist, so a lock deeper than the tree cannot
   // freeze a phantom level.
   const levels = useMemo(() => treeDepth(graph, 'group'), [graph]);
+
+  // The Milestone column only exists once releases are defined (#159) —
+  // otherwise it's a column of dashes on every plan that doesn't use them.
+  const hasMilestones = graph.settings.milestones.length > 0;
+  const milestoneNames = useMemo(
+    () => new Map(graph.settings.milestones.map((m) => [m.id, m.name.trim() || 'Untitled milestone'])),
+    [graph.settings.milestones],
+  );
+
+  /** The release this row inherits from an ancestor, when it has none of its
+   *  own; null when nothing above it is committed either. */
+  function inheritedMilestoneName(id: string): string | null {
+    const inherited = milestoneOf(graph, id);
+    return inherited === null ? null : (milestoneNames.get(inherited) ?? null);
+  }
 
   /** Fan a mutation out over the selection when this row is part of it. */
   function targetsFor(id: string): string[] {
@@ -182,6 +204,7 @@ export function PlanTable({
             <th>Status</th>
             <th>Priority</th>
             <th>Resource</th>
+            {hasMilestones && <th>Milestone</th>}
             <th className="col-num">Points</th>
             <th className="col-num">Days</th>
             <th>Start</th>
@@ -312,6 +335,35 @@ export function PlanTable({
                     ))}
                   </select>
                 </td>
+                {hasMilestones && (
+                  <td>
+                    {/* Blank means "whatever my ancestors committed to" — the
+                        placeholder names it, the same as the details card. */}
+                    <select
+                      className="cell-select"
+                      value={node.milestoneId ?? ''}
+                      onChange={(e) =>
+                        bulkCommit(row.id, (g, t) => assignMilestone(g, t, e.target.value || null))
+                      }
+                      title={
+                        node.milestoneId === null && inheritedMilestoneName(row.id) !== null
+                          ? `Inherited from an ancestor: ${inheritedMilestoneName(row.id)}`
+                          : undefined
+                      }
+                    >
+                      <option value="">
+                        {node.milestoneId === null && inheritedMilestoneName(row.id) !== null
+                          ? `↳ ${inheritedMilestoneName(row.id)}`
+                          : '—'}
+                      </option>
+                      {graph.settings.milestones.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name.trim() || 'Untitled milestone'}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                )}
                 <td className="col-num">
                   <input
                     className="cell-input cell-num"

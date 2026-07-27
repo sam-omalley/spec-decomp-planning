@@ -2,13 +2,21 @@
  * Metadata fields inside a group row's details card: status, priority,
  * the two estimate axes (points + duration in days), an optional
  * optimistic/pessimistic range on the duration for the sampled projection
- * (#133), actual start/finish dates, and external-tracker keys. Status and
+ * (#133), the release it's committed to (#159), actual start/finish dates,
+ * and external-tracker keys. Status and
  * effort were modelled from slice 1 but never had a surface; the rest
  * arrived with the project-management extension (slice 8). Key entry lives
  * in the shared `KeyEditor` (key-only, defaulting to Jira).
  */
 
-import { assignResource, setActualDates, setEstimate, updateNode } from '../model/graph.ts';
+import {
+  assignMilestone,
+  assignResource,
+  setActualDates,
+  setEstimate,
+  updateNode,
+} from '../model/graph.ts';
+import { milestoneOf } from '../model/milestones.ts';
 import type { Priority, Status } from '../model/types.ts';
 import { store, useProjectGraph } from '../store/appStore.ts';
 import { ActualDateInput } from './ActualDateInput.tsx';
@@ -65,6 +73,17 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
       coalesce: `duration-pess:${id}`,
     });
   }
+
+  // With no id of its own a group inherits its nearest ancestor's release,
+  // so the empty option has to say which one that is — "None" would be a
+  // lie for a child of a committed block.
+  const inheritedId = node.milestoneId === null ? milestoneOf(graph, id) : null;
+  const inheritedName =
+    inheritedId === null
+      ? null
+      : graph.settings.milestones.find((m) => m.id === inheritedId)?.name.trim() ||
+        'Untitled milestone';
+  const inheritedLabel = inheritedName === null ? 'None' : `Inherited — ${inheritedName}`;
 
   return (
     <div className="meta-editor">
@@ -140,6 +159,29 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
             ))}
           </select>
         </label>
+        {graph.settings.milestones.length > 0 && (
+          <label className="meta-field">
+            <span className="meta-label">
+              Milestone
+              <InfoDot
+                text="The release this group is committed to. Inherited by everything under it, so committing a block commits its whole subtree — a child only needs its own value to override. Changes no dates: the projection is compared against the milestone's window, never pushed into it."
+                align="start"
+              />
+            </span>
+            <select
+              className="meta-select"
+              value={node.milestoneId ?? ''}
+              onChange={(e) => store.commit((g) => assignMilestone(g, id, e.target.value || null))}
+            >
+              <option value="">{inheritedLabel}</option>
+              {graph.settings.milestones.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name.trim() || 'Untitled milestone'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="meta-row">

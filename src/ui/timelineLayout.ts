@@ -2,13 +2,15 @@
  * Pure layout for the timeline / Gantt view. Turns the scheduler's output
  * into positioned rows (fractions in [0,1] across the date range, so the
  * SVG view just multiplies by a pixel width), plus planned-start/now/
- * target/projected-finish markers and weekly gridline ticks. No pixels
- * here — all geometry is fraction-based and unit-testable.
+ * target/projected-finish markers, release windows (#159) and weekly
+ * gridline ticks. No pixels here — all geometry is fraction-based and
+ * unit-testable.
  */
 
 import type { Baseline, ProjectGraph } from '../model/types.ts';
 import { childrenOf, groupRootsOf } from '../model/graph.ts';
 import { scheduleProject } from '../model/schedule.ts';
+import { milestoneSummaries } from '../model/milestones.ts';
 import { sampleProjection } from '../model/uncertainty.ts';
 import { graphOfBaseline } from '../model/baselineDrift.ts';
 import { rootGroupColor } from './colors.ts';
@@ -82,6 +84,34 @@ export function groupMarkersByDate(markers: TimelineMarker[]): TimelineMarkerGro
   return groups;
 }
 
+/**
+ * A release window (#159) drawn as a band across the chart: the authored
+ * `start → target` span, plus where the committed work is actually
+ * projected to finish. `late` (projection past the target) is carried as
+ * data so the view can differentiate by pattern and label, not colour
+ * alone.
+ */
+export interface TimelineMilestone {
+  id: string;
+  name: string;
+  startFrac: number;
+  /** The authored target date's position — the band's right edge. */
+  targetFrac: number;
+  targetDate: string;
+  /** Where the committed units are projected to finish; absent when
+   *  nothing is committed to this milestone (an empty window). */
+  finishFrac?: number;
+  finishDate?: string;
+  /** Calendar days the projection lands past the target (+late/−early);
+   *  absent when nothing is committed. */
+  varianceDays?: number;
+  late: boolean;
+  /** Committed scheduling units, and how many of them are done — the
+   *  band's tooltip summary. */
+  unitCount: number;
+  doneCount: number;
+}
+
 export interface TimelineTick {
   frac: number;
   label: string;
@@ -97,6 +127,8 @@ export interface TimelineWeekendBand {
 export interface TimelineModel {
   rows: TimelineRow[];
   markers: TimelineMarker[];
+  /** Release windows, in configured order; empty when none are defined. */
+  milestones: TimelineMilestone[];
   ticks: TimelineTick[];
   weekends: TimelineWeekendBand[];
   rangeStart: string;
@@ -148,6 +180,7 @@ function stretchNote(
 const EMPTY: TimelineModel = {
   rows: [],
   markers: [],
+  milestones: [],
   ticks: [],
   weekends: [],
   rangeStart: '',
@@ -202,10 +235,14 @@ export function buildTimeline(
   }
   const target = graph.settings.targetDate;
   const p80Date = sampled.hasUncertainty && sampled.p80 !== schedule.projectFinish ? sampled.p80 : null;
+  const summaries = milestoneSummaries(graph, now, schedule);
   // Extend the range so every marker below (planned start, now, target,
-  // the P80 whisker) lands inside [0,1] instead of getting clamped to an
-  // edge by frac().
-  for (const d of [graph.settings.startDate, now, target, p80Date].filter(
+  // the P80 whisker) and every release window lands inside [0,1] instead of
+  // getting clamped to an edge by frac(). A milestone window can sit
+  // entirely outside the scheduled work — a release targeted well past the
+  // last bar, or opening before it — and must still be visible.
+  const milestoneDates = summaries.flatMap((m) => [m.startDate, m.targetDate]);
+  for (const d of [graph.settings.startDate, now, target, p80Date, ...milestoneDates].filter(
     (v): v is string => v !== null,
   )) {
     if (d < rangeStart) rangeStart = d;
@@ -256,6 +293,20 @@ export function buildTimeline(
   if (target) markers.push({ frac: frac(target), date: target, kind: 'target' });
   if (p80Date) markers.push({ frac: frac(p80Date), date: p80Date, kind: 'p80' });
 
+  const milestones: TimelineMilestone[] = summaries.map((m) => ({
+    id: m.id,
+    name: m.name,
+    startFrac: frac(m.startDate),
+    targetFrac: frac(m.targetDate),
+    targetDate: m.targetDate,
+    ...(m.finish !== null
+      ? { finishFrac: frac(m.finish), finishDate: m.finish, varianceDays: m.varianceDays! }
+      : {}),
+    late: m.onTrack === false,
+    unitCount: m.unitIds.length,
+    doneCount: m.doneCount,
+  }));
+
   // Gridlines: daily for a short range (enough width per label to stay
   // readable), else weekly from the first Monday on/after rangeStart — a
   // long project would otherwise get cluttered with too many labels.
@@ -296,6 +347,7 @@ export function buildTimeline(
   return {
     rows,
     markers,
+    milestones,
     ticks,
     weekends,
     rangeStart,

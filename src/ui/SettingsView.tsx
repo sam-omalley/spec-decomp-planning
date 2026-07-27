@@ -2,8 +2,9 @@
  * Project settings view (top-level Settings tab): the scheduling knobs —
  * start / target dates, points↔days conversion, hours per week, the delivery
  * team (resources with FTE, which set capacity + stretch durations), the
- * speed multiplier, and the structural locks. Every edit goes through
- * `updateSettings` / the resource mutations, so it is undoable and autosaved
+ * release windows the plan is measured against (#159), the speed
+ * multiplier, and the structural locks. Every edit goes through
+ * `updateSettings` / the resource & milestone mutations, so it is undoable and autosaved
  * with the graph. Inputs are pre-validated here because those throw on an
  * invalid value and a throwing commit would propagate.
  *
@@ -17,17 +18,22 @@
  * other's content.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  addMilestone,
   addResource,
   captureBaseline,
   createId,
   deleteBaseline,
+  removeMilestone,
   removeResource,
   renameBaseline,
+  todayIso,
+  updateMilestone,
   updateResource,
   updateSettings,
 } from '../model/graph.ts';
+import { milestoneSummaries } from '../model/milestones.ts';
 import type { DateRange, ProjectSettings } from '../model/types.ts';
 import { store, useActiveProjectId, useProjectGraph, useProjects } from '../store/appStore.ts';
 import type { ProjectIndexEntry } from '../persist/persistence.ts';
@@ -96,6 +102,13 @@ export function SettingsView() {
   const s = graph.settings;
   const activeProjectId = useActiveProjectId();
   const projects = useProjects();
+  // Live status per release, so the card shows what each window is actually
+  // tracking against rather than just its dates. Runs the scheduler once for
+  // the whole list; skipped entirely when no releases are defined.
+  const releaseSummaries = useMemo(
+    () => (s.milestones.length === 0 ? [] : milestoneSummaries(graph, todayIso())),
+    [graph, s.milestones.length],
+  );
 
   async function addProject() {
     const name = window.prompt('Name this project', 'Untitled');
@@ -155,6 +168,40 @@ export function SettingsView() {
   }
   function removeResourceLeave(id: string, current: DateRange[], index: number) {
     store.commit((g) => updateResource(g, id, { leave: current.filter((_, i) => i !== index) }));
+  }
+
+  /** A new release opens today (or at the project start, whichever is
+   *  later) and targets four weeks out — a sane window the user then edits,
+   *  rather than an invalid empty one the mutation would reject. */
+  function addRelease() {
+    const start = s.startDate > todayIso() ? s.startDate : todayIso();
+    const target = new Date(Date.parse(`${start}T00:00:00Z`) + 28 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    store.commit((g) =>
+      addMilestone(g, { id: createId(), name: '', startDate: start, targetDate: target }),
+    );
+  }
+  function renameMilestone(id: string, name: string) {
+    store.commit((g) => updateMilestone(g, id, { name }), { coalesce: `ms-name:${id}` });
+  }
+  /** Commit a milestone date, keeping start ≤ target: the mutation rejects a
+   *  crossed pair, so the other end is dragged along instead of throwing at
+   *  the user mid-edit. */
+  function setMilestoneDate(id: string, field: 'startDate' | 'targetDate', raw: string) {
+    if (raw.trim() === '') return;
+    store.commit((g) => {
+      const m = g.settings.milestones.find((x) => x.id === id);
+      if (!m) return g;
+      const patch =
+        field === 'startDate'
+          ? { startDate: raw, ...(raw > m.targetDate ? { targetDate: raw } : {}) }
+          : { targetDate: raw, ...(raw < m.startDate ? { startDate: raw } : {}) };
+      return updateMilestone(g, id, patch);
+    });
+  }
+  function dropMilestone(id: string) {
+    store.commit((g) => removeMilestone(g, id));
   }
 
   function addHoliday(range: DateRange) {
@@ -407,6 +454,86 @@ export function SettingsView() {
             )}
             <button className="resource-add" onClick={addTeamResource}>
               + Add resource
+            </button>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-card-title">Releases</h2>
+            <p className="settings-note">
+              Delivery windows the plan is measured against. Commit groups to
+              one in the plan (details card or the table's Milestone column) —
+              everything under a committed group inherits it. Windows show as
+              lanes on the Timeline, and a release projected to miss its target
+              raises a Concern.
+            </p>
+            {s.milestones.length === 0 ? (
+              <p className="settings-note">
+                No releases yet — the project's own target date is the only
+                commitment.
+              </p>
+            ) : (
+              <div className="milestone-list">
+                {s.milestones.map((m) => {
+                  const summary = releaseSummaries.find((r) => r.id === m.id);
+                  return (
+                    <div className="milestone-row" key={m.id}>
+                      <div className="milestone-row-main">
+                        <input
+                          className="meta-input milestone-name"
+                          type="text"
+                          placeholder="Name (e.g. R1)"
+                          value={m.name}
+                          onChange={(e) => renameMilestone(m.id, e.target.value)}
+                          onBlur={() => store.breakCoalescing()}
+                        />
+                        <button
+                          className="resource-remove"
+                          title="Remove this release"
+                          onClick={() => dropMilestone(m.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="milestone-dates">
+                        <label className="meta-field">
+                          <span className="meta-label">Start</span>
+                          <input
+                            className="meta-input"
+                            type="date"
+                            value={m.startDate}
+                            onChange={(e) => setMilestoneDate(m.id, 'startDate', e.target.value)}
+                          />
+                        </label>
+                        <label className="meta-field">
+                          <span className="meta-label">Target</span>
+                          <input
+                            className="meta-input"
+                            type="date"
+                            value={m.targetDate}
+                            onChange={(e) => setMilestoneDate(m.id, 'targetDate', e.target.value)}
+                          />
+                        </label>
+                      </div>
+                      <p className="settings-note milestone-status">
+                        {summary === undefined || summary.unitIds.length === 0
+                          ? 'Nothing committed yet.'
+                          : `${summary.unitIds.length} unit${summary.unitIds.length === 1 ? '' : 's'} · ${summary.doneCount} done · projected ${summary.finish ?? '—'}${
+                              summary.varianceDays === null
+                                ? ''
+                                : summary.varianceDays > 0
+                                  ? ` · ⚠ ${summary.varianceDays}d late`
+                                  : summary.varianceDays === 0
+                                    ? ' · on the target'
+                                    : ` · ${Math.abs(summary.varianceDays)}d early`
+                            }`}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button className="resource-add" onClick={addRelease}>
+              + Add release
             </button>
           </section>
 
