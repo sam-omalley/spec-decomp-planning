@@ -4,7 +4,9 @@ import {
   GraphError,
   addEdge,
   addExternalRef,
+  addMilestone,
   addResource,
+  assignMilestone,
   assignResource,
   assignToGroup,
   captureBaseline,
@@ -24,6 +26,7 @@ import {
   parentOf,
   removeExternalRef,
   removeFromGroup,
+  removeMilestone,
   removeResource,
   renameBaseline,
   rootsOf,
@@ -31,10 +34,12 @@ import {
   setEstimate,
   subtreeIds,
   updateDependency,
+  updateMilestone,
   updateNode,
   updateResource,
   updateSettings,
 } from './graph.ts';
+import { scheduleProject } from './schedule.ts';
 import { deserializeProject, deserializeProjectWithReport, serializeProject } from './serialize.ts';
 import type { ProjectGraph } from './types.ts';
 
@@ -489,6 +494,56 @@ describe('serialization', () => {
     assert.equal(g.nodes['a']!.parkingLot, false);
   });
 
+  it('migrates a v11 file by backfilling milestones and milestoneId (#159)', () => {
+    const v11 = {
+      version: 11,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {
+          a: {
+            id: 'a', title: 'A', description: '', type: 'group',
+            status: 'not_started', priority: 'medium', effort: null,
+            durationEstimate: null, durationOptimistic: null, durationPessimistic: null,
+            actualStart: null, actualFinish: null, resourceId: null,
+            externalRefs: [], parkingLot: false, tags: [], notes: '',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            modifiedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+        edges: {}, rootOrder: [], groupRootOrder: ['a'],
+      },
+    };
+    const g = deserializeProject(JSON.stringify(v11));
+    assert.equal(g.nodes['a']!.milestoneId, null);
+    assert.deepEqual(g.settings.milestones, []);
+  });
+
+  it('drops an invalid persisted milestone (bad/crossed dates, duplicate id)', () => {
+    const file = {
+      version: 12,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerWeek: 38, speedMultiplier: 1, specLockDepth: 0, planLockDepth: 0,
+          resources: [], holidays: [],
+          milestones: [
+            { id: 'r1', name: 'R1', startDate: '2026-01-01', targetDate: '2026-02-01' }, // valid
+            { id: 'r1', name: 'Dup', startDate: '2026-01-01', targetDate: '2026-02-01' },
+            { id: 'r2', name: 'Backwards', startDate: '2026-03-01', targetDate: '2026-02-01' },
+            { id: 'r3', name: 'No target', startDate: '2026-03-01' },
+            { name: 'No id', startDate: '2026-03-01', targetDate: '2026-04-01' },
+          ],
+        },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(file));
+    assert.deepEqual(g.settings.milestones, [
+      { id: 'r1', name: 'R1', startDate: '2026-01-01', targetDate: '2026-02-01' },
+    ]);
+  });
+
   it('migrates a v6 file by backfilling holidays and per-resource leave', () => {
     const v6 = {
       version: 6,
@@ -866,6 +921,50 @@ describe('external refs and settings', () => {
     assert.equal(g.settings.resources.length, 1);
     assert.equal(g.nodes['login']!.resourceId, null);
     assert.throws(() => removeResource(g, 'r1'), /No resource/);
+  });
+});
+
+describe('milestones (#159)', () => {
+  it('manages release windows and commits groups to them', () => {
+    let g = fixture();
+    g = addMilestone(g, { id: 'r1', name: ' R1 ', startDate: '2026-01-01', targetDate: '2026-02-01' });
+    assert.equal(g.settings.milestones[0]!.name, 'R1'); // trimmed
+    assert.throws(
+      () => addMilestone(g, { id: 'r1', name: 'Dup', startDate: '2026-01-01', targetDate: '2026-02-01' }),
+      /duplicate milestone id/,
+    );
+    assert.throws(
+      () => addMilestone(g, { id: 'r2', name: 'Backwards', startDate: '2026-03-01', targetDate: '2026-02-01' }),
+      /start must not be after its target/,
+    );
+
+    g = updateMilestone(g, 'r1', { targetDate: '2026-03-15' });
+    assert.equal(g.settings.milestones[0]!.targetDate, '2026-03-15');
+    assert.throws(() => updateMilestone(g, 'nope', { name: 'x' }), /No milestone/);
+    assert.throws(() => updateMilestone(g, 'r1', { startDate: '2026-12-01' }), /start must not be after/);
+
+    // Commitment must reference a real milestone; clears with null.
+    g = assignMilestone(g, 'login', 'r1');
+    assert.equal(g.nodes['login']!.milestoneId, 'r1');
+    assert.throws(() => assignMilestone(g, 'login', 'ghost'), /No milestone/);
+    g = assignMilestone(g, 'login', null);
+    assert.equal(g.nodes['login']!.milestoneId, null);
+
+    // Removing a release clears it from every committed node.
+    g = assignMilestone(g, 'login', 'r1');
+    g = removeMilestone(g, 'r1');
+    assert.deepEqual(g.settings.milestones, []);
+    assert.equal(g.nodes['login']!.milestoneId, null);
+    assert.throws(() => removeMilestone(g, 'r1'), /No milestone/);
+  });
+
+  it('leaves scheduling untouched — a release is measured against, never scheduled', () => {
+    let g = fixture();
+    g = setEstimate(g, 'login', { durationEstimate: 3 });
+    const before = scheduleProject(g, '2026-01-01').groups.get('login');
+    g = addMilestone(g, { id: 'r1', name: 'R1', startDate: '2026-06-01', targetDate: '2026-06-30' });
+    g = assignMilestone(g, 'login', 'r1');
+    assert.deepEqual(scheduleProject(g, '2026-01-01').groups.get('login'), before);
   });
 });
 

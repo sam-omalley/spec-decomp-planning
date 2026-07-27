@@ -8,6 +8,7 @@
  */
 
 import type { Priority, ProjectGraph, Status } from '../model/types.ts';
+import { milestoneOf } from '../model/milestones.ts';
 import { visibleRows } from './outline.ts';
 
 const DEFAULT_SYSTEM = 'jira';
@@ -21,6 +22,10 @@ export interface PlanCsvRow {
   priority: Priority;
   /** Resolved resource name; '' when unassigned or the id is dangling. */
   resource: string;
+  /** Resolved release name (#159) — the *effective* one, so a row that
+   *  inherits its ancestor's commitment exports that name rather than a
+   *  blank. '' when nothing up the chain is committed. */
+  milestone: string;
   effort: number | null;
   durationEstimate: number | null;
   actualStart: string | null;
@@ -34,6 +39,7 @@ export interface PlanCsvRow {
  *  (a CSV export always has everything). */
 export function projectToPlanCsvRows(graph: ProjectGraph): PlanCsvRow[] {
   const resourceNames = new Map(graph.settings.resources.map((r) => [r.id, r.name]));
+  const milestoneNames = new Map(graph.settings.milestones.map((m) => [m.id, m.name]));
   return visibleRows(graph, new Set(), 'group').map((row) => {
     const node = graph.nodes[row.id]!;
     return {
@@ -42,6 +48,7 @@ export function projectToPlanCsvRows(graph: ProjectGraph): PlanCsvRow[] {
       status: node.status,
       priority: node.priority,
       resource: (node.resourceId && resourceNames.get(node.resourceId)) || '',
+      milestone: milestoneNames.get(milestoneOf(graph, row.id) ?? '') ?? '',
       effort: node.effort,
       durationEstimate: node.durationEstimate,
       actualStart: node.actualStart,
@@ -64,6 +71,7 @@ const HEADER = [
   'Status',
   'Priority',
   'Resource',
+  'Milestone',
   'Points',
   'Days',
   'Start',
@@ -80,6 +88,7 @@ export function rowsToCsv(rows: PlanCsvRow[]): string {
         row.status.replace('_', ' '),
         row.priority,
         row.resource,
+        row.milestone,
         row.effort ?? '',
         row.durationEstimate ?? '',
         row.actualStart ?? '',

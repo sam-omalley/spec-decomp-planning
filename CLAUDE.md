@@ -44,7 +44,9 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays + project
   `actualFinish` (ISO date, or ISO datetime-local when a time is set — a
   bare date reads as 00:00; the scheduler stays day-granular and drops any
   time, elapsed-duration metrics use it), `resourceId` (pins the group to a
-  team member — see Project settings), and `externalRefs` (Jira etc.).
+  team member — see Project settings), `milestoneId` (commits the group —
+  and, by inheritance, its subtree — to a release window; see Project
+  settings), and `externalRefs` (Jira etc.).
   `effort` (size) and `durationEstimate` (time) are distinct axes,
   convertible via `settings.pointsPerDay`. A group may also carry
   `durationOptimistic` / `durationPessimistic` — an optional three-point
@@ -93,8 +95,17 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays + project
   `planLockDepth` — how many top levels of each side are frozen against
   accidental edits (0 = unlocked; see the Locks bullet below). Locks are a
   *config value*, not a graph invariant: they gate the editing UI, not the
-  core mutations. `baselines` — named graph snapshots for drift
-  comparison (see `Baseline` below).
+  core mutations. `milestones` — release windows the plan is measured
+  against (`{ id, name, startDate, targetDate }`, #159): **authored**
+  dates, not derived ones, so the plan can be late for them. A group's
+  `milestoneId` commits it and everything under it (nearest id up the
+  tree wins, so a descendant can override — `milestoneOf` in
+  `src/model/milestones.ts`), and `milestoneSummaries` rolls the committed
+  scheduling units up into the release's projected finish. Deliberately
+  **not** a scheduler input: placement is identical whether or not
+  milestones exist, and the comparison only ever runs projection →
+  window, exactly like `targetDate`. `baselines` — named graph snapshots
+  for drift comparison (see `Baseline` below).
 
 Rollup runs along group `contains` (own estimate wins over child sum);
 nothing rolls up from assigned spec items.
@@ -326,8 +337,11 @@ nothing rolls up from assigned spec items.
   P50-P80 range), Assignees (per-resource estimate-vs-actual, points/day,
   weekly completions), Concerns (`src/model/concerns.ts`'s
   `analyzeConcerns`: per-unit overdue/blocked/cycle/unestimated/
-  unassigned flags, plus project-level thin-WIP and behind-target
-  signals, severity-sorted), and Coverage (the symmetric counterpart to
+  unassigned flags, plus project-level thin-WIP, milestone-at-risk and
+  behind-target signals, severity-sorted — date commitments are
+  milestone-driven once any release exists, with the project-wide
+  behind-target signal as the fallback for a plan that defines none, so
+  the two never double up), and Coverage (the symmetric counterpart to
   Concerns for the spec side — which requirements no group addresses at
   all, at any depth, as a nested list so an uncovered subtree can still
   contain a covered "island"). Settings is a full-page tab (two-column

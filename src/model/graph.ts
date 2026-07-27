@@ -23,6 +23,7 @@ import type {
   Edge,
   EdgeType,
   ExternalRef,
+  Milestone,
   Priority,
   ProjectGraph,
   ProjectSettings,
@@ -50,6 +51,7 @@ export function defaultSettings(): ProjectSettings {
     pointsPerDay: 1,
     hoursPerWeek: 38,
     resources: [],
+    milestones: [],
     speedMultiplier: 1,
     holidays: [],
     specLockDepth: 0,
@@ -322,6 +324,7 @@ export function createNode(
     actualStart: null,
     actualFinish: null,
     resourceId: null,
+    milestoneId: null,
     externalRefs: [],
     parkingLot: false,
     tags: input.tags ?? [],
@@ -372,6 +375,7 @@ export function createGroup(
     actualStart: null,
     actualFinish: null,
     resourceId: null,
+    milestoneId: null,
     externalRefs: [],
     parkingLot: false,
     tags: [],
@@ -803,6 +807,26 @@ export function updateSettings(
     if (!(r.fte > 0)) throw new GraphError('resource fte must be greater than 0');
     validateRanges(r.leave, 'resource leave');
   }
+  if (!Array.isArray(settings.milestones)) {
+    throw new GraphError('milestones must be an array');
+  }
+  const seenMilestones = new Set<string>();
+  for (const m of settings.milestones) {
+    if (typeof m.id !== 'string' || m.id === '') {
+      throw new GraphError('milestone needs an id');
+    }
+    if (seenMilestones.has(m.id)) throw new GraphError(`duplicate milestone id: ${m.id}`);
+    seenMilestones.add(m.id);
+    if (typeof m.startDate !== 'string' || m.startDate === '') {
+      throw new GraphError('milestone needs a start date');
+    }
+    if (typeof m.targetDate !== 'string' || m.targetDate === '') {
+      throw new GraphError('milestone needs a target date');
+    }
+    if (m.startDate > m.targetDate) {
+      throw new GraphError("milestone's start must not be after its target");
+    }
+  }
   validateRanges(settings.holidays, 'holidays');
   if (!Array.isArray(settings.baselines)) {
     throw new GraphError('baselines must be an array');
@@ -885,6 +909,85 @@ export function assignResource(
     throw new GraphError(`No resource with id ${resourceId}`);
   }
   return putNode(graph, { ...node, resourceId });
+}
+
+/* ------------------------------- milestones ------------------------------- */
+
+/**
+ * Adds a release window (#159). Dates are authored, so both are required
+ * and must be ordered; the name may start blank (typed in the Settings
+ * card, like a resource's).
+ */
+export function addMilestone(
+  graph: ProjectGraph,
+  input: { id: string; name: string; startDate: string; targetDate: string },
+): ProjectGraph {
+  const milestone: Milestone = {
+    id: input.id,
+    name: input.name.trim(),
+    startDate: input.startDate,
+    targetDate: input.targetDate,
+  };
+  return updateSettings(graph, {
+    milestones: [...graph.settings.milestones, milestone],
+  });
+}
+
+/** Patches a milestone's name and/or dates; validation runs in updateSettings. */
+export function updateMilestone(
+  graph: ProjectGraph,
+  id: string,
+  patch: { name?: string; startDate?: string; targetDate?: string },
+): ProjectGraph {
+  if (!graph.settings.milestones.some((m) => m.id === id)) {
+    throw new GraphError(`No milestone with id ${id}`);
+  }
+  const milestones = graph.settings.milestones.map((m) =>
+    m.id === id
+      ? {
+          ...m,
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.startDate !== undefined ? { startDate: patch.startDate } : {}),
+          ...(patch.targetDate !== undefined ? { targetDate: patch.targetDate } : {}),
+        }
+      : m,
+  );
+  return updateSettings(graph, { milestones });
+}
+
+/**
+ * Removes a milestone and clears it from every node committed to it, so no
+ * `milestoneId` dangles. Undoable as one step with the settings change —
+ * the same contract as `removeResource`.
+ */
+export function removeMilestone(graph: ProjectGraph, id: string): ProjectGraph {
+  if (!graph.settings.milestones.some((m) => m.id === id)) {
+    throw new GraphError(`No milestone with id ${id}`);
+  }
+  let next = updateSettings(graph, {
+    milestones: graph.settings.milestones.filter((m) => m.id !== id),
+  });
+  for (const node of Object.values(next.nodes)) {
+    if (node.milestoneId === id) next = putNode(next, { ...node, milestoneId: null });
+  }
+  return next;
+}
+
+/**
+ * Commits a node to a milestone (or clears with null). Meaningful on group
+ * nodes, where it — and, by inheritance, its subtree — is measured against
+ * that release window. Rejects an unknown milestone id.
+ */
+export function assignMilestone(
+  graph: ProjectGraph,
+  id: string,
+  milestoneId: string | null,
+): ProjectGraph {
+  const node = requireNode(graph, id);
+  if (milestoneId !== null && !graph.settings.milestones.some((m) => m.id === milestoneId)) {
+    throw new GraphError(`No milestone with id ${milestoneId}`);
+  }
+  return putNode(graph, { ...node, milestoneId });
 }
 
 /* -------------------------------- baselines -------------------------------- */

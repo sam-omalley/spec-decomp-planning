@@ -55,6 +55,13 @@
  * backfilled to `false` — a pure no-op (a group behaves exactly as before)
  * until explicitly marked parked. No data loss.
  *
+ * v11 → v12: milestones / release tracking (#159). Settings gain
+ * `milestones` (authored delivery windows, see `Milestone` in types.ts)
+ * and work nodes gain `milestoneId`, backfilled to `[]` / `null`. A plan
+ * with no milestones behaves exactly as before — the scheduler never reads
+ * either field, and the project-level behind-target concern still fires —
+ * so this is a pure no-op until a release is defined. No data loss.
+ *
  * Every mutation in graph.ts enforces the 'contains'/'assigned_to'
  * invariants (see graph.ts's top comment), but the file/autosave path is
  * the one entrance that bypasses them — a hand-edited file, a bug in a
@@ -71,6 +78,7 @@ import type {
   DateRange,
   Edge,
   EdgeType,
+  Milestone,
   ProjectGraph,
   ProjectSettings,
   Resource,
@@ -78,7 +86,7 @@ import type {
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 11;
+export const FILE_VERSION = 12;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -86,7 +94,7 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, FILE_VERSION];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -229,6 +237,7 @@ function backfillNodeDefaults(nodes: Record<string, WorkNode>): void {
     if (n.actualStart === undefined) n.actualStart = null;
     if (n.actualFinish === undefined) n.actualFinish = null;
     if (n.resourceId === undefined) n.resourceId = null;
+    if (n.milestoneId === undefined) n.milestoneId = null;
     if (n.parkingLot === undefined) n.parkingLot = false;
   }
 }
@@ -265,6 +274,31 @@ function normalizeResources(provided: unknown): Resource[] | null {
       leave: normalizeRanges(r.leave),
     });
     seen.add(r.id);
+  }
+  return out;
+}
+
+/** Sanitises a persisted milestones array; drops entries that aren't valid
+ *  (missing/misordered dates, duplicate ids) rather than failing the file —
+ *  a milestone is a measurement window, never load-bearing for the plan. */
+function normalizeMilestones(provided: unknown): Milestone[] {
+  if (!Array.isArray(provided)) return [];
+  const out: Milestone[] = [];
+  const seen = new Set<string>();
+  for (const item of provided) {
+    if (typeof item !== 'object' || item === null) continue;
+    const m = item as Record<string, unknown>;
+    if (typeof m.id !== 'string' || m.id === '' || seen.has(m.id)) continue;
+    if (typeof m.startDate !== 'string' || m.startDate === '') continue;
+    if (typeof m.targetDate !== 'string' || m.targetDate === '') continue;
+    if (m.startDate > m.targetDate) continue;
+    out.push({
+      id: m.id,
+      name: typeof m.name === 'string' ? m.name : '',
+      startDate: m.startDate,
+      targetDate: m.targetDate,
+    });
+    seen.add(m.id);
   }
   return out;
 }
@@ -311,6 +345,7 @@ function normalizeSettings(provided: unknown): ProjectSettings {
     pointsPerDay: num(p.pointsPerDay, base.pointsPerDay),
     hoursPerWeek,
     resources,
+    milestones: normalizeMilestones(p.milestones),
     speedMultiplier: num(p.speedMultiplier, base.speedMultiplier),
     holidays: normalizeRanges(p.holidays),
     specLockDepth: lockDepth(p.specLockDepth, base.specLockDepth),
@@ -384,6 +419,7 @@ function migrateLegacy(legacy: LegacyGraph): void {
       actualStart: null,
       actualFinish: null,
       resourceId: null,
+      milestoneId: null,
       externalRefs: [],
       parkingLot: false,
       tags: [],

@@ -18,6 +18,7 @@ function node(partial: Partial<WorkNode>): WorkNode {
     actualStart: null,
     actualFinish: null,
     resourceId: null,
+    milestoneId: null,
     externalRefs: [],
     parkingLot: false,
     tags: [],

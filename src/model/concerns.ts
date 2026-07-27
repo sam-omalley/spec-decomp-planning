@@ -8,8 +8,15 @@
  * Two families of concern:
  * - per-unit: a specific group is late, blocked, unestimated, cycling, or
  *   unassigned.
- * - project-level (`id: null`): the whole plan is behind target or the team
- *   is under-utilised (not enough work in progress).
+ * - project-level (`id: null`): a release window (#159) won't be met, the
+ *   whole plan is behind target, or the team is under-utilised (not enough
+ *   work in progress).
+ *
+ * Date commitments are milestone-driven once milestones exist: each one
+ * raises its own `milestone_late` when its committed work is projected past
+ * its target. The project-wide `past_target` is the fallback for a plan
+ * with no milestones defined, so nothing regresses for plans that don't use
+ * them — but it doesn't double up with per-release signals either.
  *
  * A parking-lot group (#155) and its subtree never raise a concern — being
  * parked out of the schedule is deliberate, not a signal to chase.
@@ -19,6 +26,7 @@ import type { ProjectGraph } from './types.ts';
 import { childrenOf, isParked } from './graph.ts';
 import { cycleIndexOf } from './analysis.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
+import { milestoneSummaries } from './milestones.ts';
 import { calendarDaysBetween, workingDaysInclusive } from './metrics.ts';
 import { toDateOnly } from './time.ts';
 
@@ -29,6 +37,7 @@ export type ConcernKind =
   | 'unestimated' // leaf group with no duration → not scheduled
   | 'unassigned' // no resource (team defined); medium once started, low otherwise
   | 'thin_wip' // fewer items in progress than capacity
+  | 'milestone_late' // a release's committed work is projected past its target
   | 'past_target'; // projected finish beyond the target date
 
 export type Severity = 'high' | 'medium' | 'low';
@@ -46,13 +55,14 @@ export interface Concern {
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
 const KIND_RANK: Record<ConcernKind, number> = {
-  past_target: 0,
-  overdue: 1,
-  cycle: 2,
-  blocked: 3,
-  thin_wip: 4,
-  unassigned: 5,
-  unestimated: 6,
+  milestone_late: 0,
+  past_target: 1,
+  overdue: 2,
+  cycle: 3,
+  blocked: 4,
+  thin_wip: 5,
+  unassigned: 6,
+  unestimated: 7,
 };
 
 function titleOf(graph: ProjectGraph, id: string): string {
@@ -177,9 +187,31 @@ export function analyzeConcerns(
     });
   }
 
-  // Projected to land past the target date.
+  // Release windows (#159): each milestone whose committed work is
+  // projected to finish after its target date. An empty milestone raises
+  // nothing — there's no commitment to miss yet.
+  for (const m of milestoneSummaries(graph, now, schedule)) {
+    if (m.finish === null || m.onTrack !== false) continue;
+    const over = m.varianceDays!;
+    concerns.push({
+      kind: 'milestone_late',
+      severity: 'high',
+      id: null,
+      title: `Milestone at risk: ${m.name}`,
+      detail: `${m.unitIds.length} committed unit${m.unitIds.length === 1 ? '' : 's'} project to finish ${m.finish}, ${over} calendar day${over === 1 ? '' : 's'} past the ${m.targetDate} target${m.drivingUnit ? ` — last is “${m.drivingUnit.title}”` : ''}.`,
+    });
+  }
+
+  // Projected to land past the project target date — the fallback signal
+  // for a plan with no milestones; with them, the per-release concerns
+  // above are the commitment being tracked and this would just double up.
   const { targetDate } = graph.settings;
-  if (targetDate && schedule.projectFinish && schedule.projectFinish > targetDate) {
+  if (
+    graph.settings.milestones.length === 0 &&
+    targetDate &&
+    schedule.projectFinish &&
+    schedule.projectFinish > targetDate
+  ) {
     const over = calendarDaysBetween(targetDate, schedule.projectFinish);
     concerns.push({
       kind: 'past_target',
