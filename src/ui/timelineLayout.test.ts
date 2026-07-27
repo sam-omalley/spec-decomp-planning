@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  addMilestone,
+  assignMilestone,
   captureBaseline,
   createGroup,
   emptyGraph,
@@ -252,6 +254,49 @@ describe('buildTimeline', () => {
       const e2 = t.rows.find((r) => r.id === 'e2')!;
       assert.ok(e2.baselineEndFrac! > e2.endFrac); // baseline ran later than the now-shrunk current
     });
+  });
+});
+
+describe('release windows (#159)', () => {
+  it('has no milestone lanes when none are defined', () => {
+    assert.deepEqual(buildTimeline(fixture()).milestones, []);
+  });
+
+  it('lays out an authored window with its committed work’s projected finish', () => {
+    let g = fixture();
+    g = addMilestone(g, { id: 'r1', name: 'R1', startDate: '2024-01-01', targetDate: '2024-01-05' });
+    g = assignMilestone(g, 'block', 'r1'); // inherited by e1/e2
+    const [ms] = buildTimeline(g).milestones;
+    assert.equal(ms!.name, 'R1');
+    assert.equal(ms!.startFrac, 0);
+    assert.equal(ms!.targetFrac, 1); // Jan 5 = the range end
+    assert.equal(ms!.finishDate, '2024-01-04');
+    assert.equal(ms!.late, false);
+    assert.equal(ms!.unitCount, 2);
+    assert.equal(ms!.varianceDays, -1);
+  });
+
+  it('marks a window late and keeps the overrun inside the range', () => {
+    let g = fixture();
+    g = addMilestone(g, { id: 'r1', name: 'R1', startDate: '2024-01-01', targetDate: '2024-01-02' });
+    g = assignMilestone(g, 'block', 'r1');
+    const t = buildTimeline(g);
+    const ms = t.milestones[0]!;
+    assert.equal(ms.late, true);
+    assert.equal(ms.varianceDays, 2); // Jan 4 projected vs the Jan 2 target
+    assert.ok(ms.finishFrac! > ms.targetFrac, 'the overrun tail runs past the band');
+  });
+
+  it('extends the date range to a window that sits outside the scheduled work', () => {
+    let g = fixture();
+    g = addMilestone(g, { id: 'r1', name: 'Later', startDate: '2024-03-01', targetDate: '2024-03-31' });
+    const t = buildTimeline(g);
+    assert.equal(t.rangeEnd, '2024-03-31');
+    assert.equal(t.milestones[0]!.targetFrac, 1);
+    // Nothing committed: no projected finish to draw, and not late.
+    assert.equal(t.milestones[0]!.finishFrac, undefined);
+    assert.equal(t.milestones[0]!.late, false);
+    assert.equal(t.milestones[0]!.unitCount, 0);
   });
 });
 

@@ -2,7 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addExternalRef,
+  addMilestone,
   addResource,
+  assignMilestone,
   assignResource,
   createGroup,
   emptyGraph,
@@ -55,6 +57,16 @@ describe('projectToPlanCsvRows', () => {
     assert.equal(design.effort, 3);
   });
 
+  it('exports the effective release, including an inherited one (#159)', () => {
+    let g = fixture();
+    g = addMilestone(g, { id: 'r1', name: 'R1', startDate: '2026-01-01', targetDate: '2026-03-01' });
+    g = assignMilestone(g, 'block1', 'r1');
+    const rows = projectToPlanCsvRows(g);
+    assert.equal(rows.find((r) => r.title === 'Block 1')!.milestone, 'R1');
+    assert.equal(rows.find((r) => r.title === 'Design Epic')!.milestone, 'R1', 'inherited');
+    assert.equal(rows.find((r) => r.title === 'Build Epic')!.milestone, 'R1');
+  });
+
   it('resolves resourceId to the resource name, and blanks a dangling id', () => {
     let g = fixture();
     g = updateNode(g, 'build', { resourceId: 'no-such-resource' });
@@ -82,10 +94,10 @@ describe('rowsToCsv', () => {
   it('emits a header row and indents nested titles', () => {
     const csv = rowsToCsv(projectToPlanCsvRows(fixture()));
     const lines = csv.trim().split('\r\n');
-    assert.equal(lines[0], 'Title,Status,Priority,Resource,Points,Days,Start,Finish,Keys');
-    assert.equal(lines[1], 'Block 1,not started,medium,,,,,,');
-    assert.equal(lines[2], '  Design Epic,not started,medium,Ada,3,,,,');
-    assert.equal(lines[4], '    Subtask,done,medium,,,2,2026-01-05,2026-01-07,PT-1');
+    assert.equal(lines[0], 'Title,Status,Priority,Resource,Milestone,Points,Days,Start,Finish,Keys');
+    assert.equal(lines[1], 'Block 1,not started,medium,,,,,,,');
+    assert.equal(lines[2], '  Design Epic,not started,medium,Ada,,3,,,,');
+    assert.equal(lines[4], '    Subtask,done,medium,,,,2,2026-01-05,2026-01-07,PT-1');
   });
 
   it('quotes a title containing a comma or quote, doubling internal quotes', () => {

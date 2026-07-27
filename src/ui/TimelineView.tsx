@@ -1,7 +1,8 @@
 /**
  * Timeline / Gantt view: bars per scheduling unit (and spanning bars for
  * their containers) on a calendar axis, with planned-start/now/target/
- * projected-finish markers and a hover crosshair. Hand-rolled SVG like
+ * projected-finish markers, release-window lanes (#159) and a hover
+ * crosshair. Hand-rolled SVG like
  * GraphView — no chart dep. Pure geometry comes from `timelineLayout.ts`;
  * this file only paints it.
  *
@@ -61,6 +62,9 @@ const CHART_W = 760;
 const ROW_H = 26;
 const HEAD_H = 34;
 const PAD = 12;
+/** Height of one release-window lane (#159), stacked under the date header
+ *  so a band never overlaps the bars it describes. */
+const MS_LANE_H = 20;
 /** Never zoom in past a one-day-wide window. */
 const MIN_VISIBLE_DAYS = 1;
 
@@ -167,7 +171,11 @@ export function TimelineView({
   }
 
   const width = LABEL_W + CHART_W + PAD * 2;
-  const height = HEAD_H + model.rows.length * ROW_H + PAD * 2;
+  // Release windows get their own lanes between the date header and the
+  // bars, so the chart body starts below them.
+  const laneH = model.milestones.length * MS_LANE_H;
+  const chartTop = HEAD_H + laneH;
+  const height = chartTop + model.rows.length * ROW_H + PAD * 2;
   const viewSpan = view.end - view.start;
   const x = (frac: number) => LABEL_W + PAD + ((frac - view.start) / viewSpan) * CHART_W;
   // Position of `frac` relative to the visible window, for edge-anchoring
@@ -230,6 +238,13 @@ export function TimelineView({
           Ghost bar — this unit's span in “{baseline.label || 'Untitled'}”
         </div>
       )}
+      {model.milestones.length > 0 && (
+        <div className="tl-legend">
+          <span className="tl-legend-swatch tl-legend-milestone" />
+          Release window — the authored start→target span of a milestone; a hatched tail past its
+          edge is committed work projected to land late
+        </div>
+      )}
       {model.hasUncertainty && (
         <div className="tl-legend">
           <InfoDot
@@ -270,7 +285,7 @@ export function TimelineView({
         {/* row hover highlight + titles — outside the clip, never affected
             by zoom/pan, and the only clickable part of a row (#99). */}
         {model.rows.map((row, i) => {
-          const y = HEAD_H + i * ROW_H;
+          const y = chartTop + i * ROW_H;
           const selected = row.id === selectedId;
           return (
             <g key={row.id} className="tl-row">
@@ -305,14 +320,15 @@ export function TimelineView({
               chart space where no other element is painted */}
           <rect x={LABEL_W} y={0} width={width - LABEL_W} height={height} className="tl-chart-catcher" />
 
-          {/* non-working (weekend) bands */}
+          {/* non-working (weekend) bands — behind the bars only; the release
+              lanes above stay unshaded so their labels remain legible */}
           {model.weekends.map((band, i) => (
             <rect
               key={`w${i}`}
               x={x(band.startFrac)}
-              y={HEAD_H}
+              y={chartTop}
               width={Math.max(0, x(band.endFrac) - x(band.startFrac))}
-              height={height - HEAD_H - PAD}
+              height={height - chartTop - PAD}
               className="tl-weekend"
             />
           ))}
@@ -333,9 +349,73 @@ export function TimelineView({
             </g>
           ))}
 
+          {/* release windows (#159): one lane each, the authored start→target
+              span as a band, plus a hatched overrun out to where the
+              committed work is actually projected to land when that's past
+              the target. Late reads from the hatch, the ⚠ and the label —
+              never colour alone. */}
+          {model.milestones.map((ms, i) => {
+            const laneY = HEAD_H + i * MS_LANE_H;
+            const bandY = laneY + 3;
+            const bandH = MS_LANE_H - 6;
+            const bx = x(ms.startFrac);
+            const bw = Math.max(2, x(ms.targetFrac) - bx);
+            const overrunW = ms.late && ms.finishFrac !== undefined
+              ? Math.max(0, x(ms.finishFrac) - x(ms.targetFrac))
+              : 0;
+            const varianceText =
+              ms.varianceDays === undefined
+                ? 'nothing committed yet'
+                : ms.varianceDays > 0
+                  ? `${ms.varianceDays}d late`
+                  : ms.varianceDays === 0
+                    ? 'lands on the target'
+                    : `${Math.abs(ms.varianceDays)}d early`;
+            const tip = (
+              <title>
+                {ms.name}: {ms.targetDate} target · {ms.unitCount} committed unit
+                {ms.unitCount === 1 ? '' : 's'} ({ms.doneCount} done)
+                {ms.finishDate ? ` · projected ${ms.finishDate} — ${varianceText}` : ' · nothing committed yet'}
+              </title>
+            );
+            return (
+              <g key={ms.id} className="tl-ms">
+                <rect x={bx} y={bandY} width={bw} height={bandH} rx={3} className="tl-ms-band">
+                  {tip}
+                </rect>
+                {overrunW > 0 && (
+                  <rect
+                    x={x(ms.targetFrac)}
+                    y={bandY}
+                    width={overrunW}
+                    height={bandH}
+                    rx={3}
+                    className="tl-ms-overrun"
+                  >
+                    {tip}
+                  </rect>
+                )}
+                {/* the commitment itself: a hard edge at the target date */}
+                <line
+                  x1={x(ms.targetFrac)}
+                  x2={x(ms.targetFrac)}
+                  y1={laneY + 1}
+                  y2={height - PAD}
+                  className="tl-ms-target"
+                />
+                <text x={bx + 5} y={laneY + MS_LANE_H / 2} className="tl-ms-label" dominantBaseline="middle">
+                  {ms.late ? '⚠ ' : ''}
+                  {ms.name}
+                  {ms.unitCount > 0 ? ` · ${ms.doneCount}/${ms.unitCount} · ${varianceText}` : ' · empty'}
+                  {tip}
+                </text>
+              </g>
+            );
+          })}
+
           {/* bars, plus a hatched trailing extension for any slack (float) */}
           {model.rows.map((row, i) => {
-            const y = HEAD_H + i * ROW_H;
+            const y = chartTop + i * ROW_H;
             const barY = y + 5;
             const barH = ROW_H - 12;
             const bx = x(row.startFrac);

@@ -2,7 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addEdge,
+  addMilestone,
   addResource,
+  assignMilestone,
   assignResource,
   createGroup,
   emptyGraph,
@@ -164,6 +166,42 @@ describe('analyzeConcerns — project-level signals', () => {
     const c = analyzeConcerns(g).find((x) => x.kind === 'past_target');
     assert.ok(c);
     assert.equal(c!.severity, 'high');
+  });
+
+  it('raises a per-release concern when committed work runs past its window', () => {
+    let g = base();
+    g = addMilestone(g, { id: 'r1', name: 'R1', startDate: '2024-01-01', targetDate: '2024-01-05' });
+    g = group(g, 'a', 10); // finishes Jan 12, well past the Jan 5 target
+    g = assignMilestone(g, 'a', 'r1');
+    const c = analyzeConcerns(g).find((x) => x.kind === 'milestone_late');
+    assert.ok(c);
+    assert.equal(c!.severity, 'high');
+    assert.equal(c!.id, null); // project-level: a release isn't a revealable node
+    assert.match(c!.title, /R1/);
+    assert.match(c!.detail, /2024-01-05 target/);
+  });
+
+  it('raises nothing for a release that fits, or one with nothing committed', () => {
+    let g = base();
+    g = addMilestone(g, { id: 'r1', name: 'R1', startDate: '2024-01-01', targetDate: '2024-06-01' });
+    g = addMilestone(g, { id: 'r2', name: 'R2', startDate: '2024-01-01', targetDate: '2024-01-02' });
+    g = group(g, 'a', 3);
+    g = assignMilestone(g, 'a', 'r1'); // r2 stays empty despite its tight target
+    assert.deepEqual(kinds(g).filter((k) => k === 'milestone_late'), []);
+  });
+
+  it('milestones replace the project-wide behind-target signal', () => {
+    let g = base({ targetDate: '2024-01-03' });
+    g = group(g, 'a', 10);
+    assert.ok(kinds(g).includes('past_target'), 'fires with no releases defined');
+
+    // Defining a release moves the date commitment onto it: the project-level
+    // signal steps aside rather than doubling up.
+    g = addMilestone(g, { id: 'r1', name: 'R1', startDate: '2024-01-01', targetDate: '2024-01-31' });
+    g = assignMilestone(g, 'a', 'r1');
+    const after = kinds(g);
+    assert.ok(!after.includes('past_target'));
+    assert.ok(!after.includes('milestone_late'), 'and the release itself is fine');
   });
 
   it('is empty for a clean, on-track plan', () => {

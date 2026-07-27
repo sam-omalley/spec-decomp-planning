@@ -1637,6 +1637,43 @@ body {
   border-color: var(--muted);
 }
 
+/* Releases (#159) — authored delivery windows, styled like the Team roster
+   above: a name row, the two dates, then a live status line. */
+.milestone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.milestone-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.milestone-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.milestone-row-main {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.milestone-name {
+  flex: 1;
+}
+.milestone-dates {
+  display: flex;
+  gap: 8px;
+}
+.milestone-dates .meta-field {
+  flex: 1;
+}
+.milestone-status {
+  margin: 0;
+}
+
 /* Baselines (#131) — named graph snapshots for drift comparison, styled
    like the Team roster above. */
 .baseline-list {
@@ -1968,6 +2005,32 @@ body {
   stroke-width: 1.5;
   stroke-dasharray: 2 2;
 }
+/* Release window lane (#159): an outlined band, never a filled block, so it
+   reads as a container for the bars below rather than another bar. Late is
+   carried by the hatched overrun, the ⚠ in the label and the text itself —
+   colour is only ever a reinforcement here. */
+.tl-ms-band {
+  fill: color-mix(in srgb, var(--accent) 8%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+.tl-ms-overrun {
+  fill: url(#tl-slack-hatch);
+  stroke: #d1495b;
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+.tl-ms-target {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.7;
+}
+.tl-ms-label {
+  font-size: 10px;
+  fill: var(--text);
+  pointer-events: none;
+}
 .tl-legend {
   display: flex;
   align-items: center;
@@ -2000,6 +2063,10 @@ body {
 .tl-legend-baseline {
   background: none;
   border: 1.5px dashed var(--muted);
+}
+.tl-legend-milestone {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1.5px solid var(--accent);
 }
 .tl-legend-markers {
   gap: 14px;
