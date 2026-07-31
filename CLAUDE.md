@@ -142,13 +142,66 @@ nothing rolls up from assigned spec items.
   outside it (sibling group, other block, coarser ancestor group) the
   member gets the overlap badge. Visible, never forbidden.
 
+## The engagement tracker (#163) — separate from the graph
+
+Stakeholder communication lives in its own model (`src/engagement/`), its
+own store instance, and its own IndexedDB record. It is **not** a third
+side of `ProjectGraph`, and that was a deliberate call: the people you owe
+a follow-up to are org-level, so the tracker is **workspace-scoped** — one
+record shared by every project, which does not switch when the active
+project switches. (The headline "everything I owe someone" view is
+worthless siloed per project.) Same store class (`SnapshotStore`), same
+immutable-mutation and commit/undo contract as the graph, separate history:
+⌘Z in the Agenda must not roll back a plan edit, so `App.tsx` routes
+undo/redo to whichever store the active section edits.
+
+Four nouns, each generalised rather than enumerated:
+
+- **`Person`** — a stakeholder. Deliberately *not* `Resource`: a resource
+  is a scheduling track, a stakeholder is someone you talk to, and most are
+  neither on the team nor consuming capacity. `away` ranges silence their
+  recency signal. Deleting someone with history is refused —
+  archive (`archivedAt`) instead, the same lesson `Resource.availableUntil`
+  encodes on the plan side.
+- **`Forum`** — a named contact channel with a cadence and an attendee set.
+  This subsumes both "a frequency of contact" and "a regular meeting": a
+  1-1 is a forum with one attendee, a steering group is a forum with five.
+  There is therefore **no per-person cadence field** — a person's expected
+  interval is the tightest cadence across the forums they sit in, and
+  someone in no forum is never chased.
+- **`Item`** — one type covering both a topic to raise and an action. They
+  differ only in *who owes the next move* (`ownerId`, null = me) and what
+  that move is (`state`: `to_raise` → `open` → `resolved`/`dropped`), the
+  same collapse that turned epics and stories into bare nested groups.
+  `target` is a person **or** a forum (some concerns belong to the room);
+  `parentId` threads follow-ups under the topic that spawned them;
+  `recurEveryDays` makes a standing concern that comes back every cycle
+  instead of closing; `link` is a **soft** `{projectId, nodeId, label}`
+  reference into a project graph — it crosses a store boundary, so it can
+  never be an edge and carries its own label to survive the target's
+  deletion.
+- **`Interaction`** — the append-only log, and the **only** writer of
+  recency and `lastRaisedAt`. No direction field: staleness is tracked by
+  who owes the next move, not who initiated the conversation.
+
+Derived, never stored: `recency.ts` (per-person/per-forum contact standing
+and per-item staleness, shaped like `concerns.ts` — Concerns watches the
+work, this watches the conversation) and `agenda.ts` (a forum's agenda =
+items targeting it **or** anyone attending it, split into standing /
+to-raise / chasing-them / I-owe-them). Logging a meeting is one
+`logInteraction` commit — record, stamps, and the actions agreed in the
+room — so a meeting is one undo step and cannot half-apply.
+
 ## Architecture decisions
 
 - **Views are pure projections of the graph and its settings.** Spec view
   reads the work side of `contains`; Planning reads the group side plus
   `assigned_to`; Graph reads everything; the Reporting sub-views (Timeline,
   Metrics, Assignees, Concerns, Coverage) derive from the scheduler /
-  rollup / concerns analysis. None store view-specific copies of data. Ephemeral
+  rollup / concerns analysis; the Engagement sub-views (Agenda, People)
+  are the one section reading a different store entirely (see above), but
+  follow the same projection rule against it. None store view-specific
+  copies of data. Ephemeral
   view-narrowing state — global search/filter, per-side depth caps, the
   Graph view's sort mode and infer-chains toggle, and the current
   section/sub-view (mirrored to the URL hash for navigation, see below) —
@@ -157,8 +210,11 @@ nothing rolls up from assigned spec items.
 - **Dependency-free core.** No zustand, no immer (also: sandbox npm was
   blocked when built). Mutations in `src/model/graph.ts` are immutable
   with structural sharing; undo/redo is a snapshot stack in
-  `src/store/projectStore.ts`, a framework-free class kept separate from
-  its React binding (`src/store/appStore.ts`, `useSyncExternalStore`) so
+  `src/store/snapshotStore.ts` — a framework-free, state-generic class
+  (`ProjectStore` and the engagement tracker's `EngagementStore` are both
+  thin subclasses that supply defaults only, so undo/coalescing/
+  notification exist once) kept separate from its React binding
+  (`src/store/appStore.ts`, `useSyncExternalStore`) so
   the store itself is testable under the Node runner without React. One
   `store.commit(fn)` = one atomic undo step; throwing mutations leave
   state and history untouched. Because the graph is immutable with a
@@ -175,7 +231,12 @@ nothing rolls up from assigned spec items.
   `planning-tool`, store `project`), so loading from either goes through
   the same validation/migration. Autosave is a debounced (300 ms)
   subscriber, deduped by state reference, flushed on visibilitychange;
-  `main.tsx` loads before first render. Import confirms before replacing
+  `main.tsx` loads before first render. The engagement tracker (#163)
+  rides the same `createAutosaver` and the same DB under its own
+  `engagement` key, with its own envelope + version
+  (`src/engagement/serialize.ts`) — one record, not one per project — and
+  its own `engagement-unrecovered` backup slot for the same
+  never-silently-discard rule. Import confirms before replacing
   a non-empty project; `store.reset` clears undo history by design. If an
   autosave fails to deserialize (corrupt, or from an unsupported
   version), `main.tsx` never just falls back to an empty project
@@ -210,7 +271,8 @@ nothing rolls up from assigned spec items.
   IndexedDB. `assigned_to`/baselines/everything else about a project
   is untouched by any of this — it's purely which graph is loaded.
 - Navigation is hash-routed (`src/ui/route.ts`, pure + tested): the active
-  top-level section (Spec / Planning / Graph / Reporting / Settings) and
+  top-level section (Spec / Planning / Graph / Reporting / Engagement /
+  Settings) and
   its sub-view are mirrored into the location hash (`#/reporting/metrics`)
   so browser back/forward/refresh and the cross-view "reveal" jump behave
   like a real app. Hash-based rather than path-based so it works on static
@@ -361,6 +423,11 @@ nothing rolls up from assigned spec items.
   all, at any depth, as a nested list so an uncovered subtree can still
   contain a covered "island"). Settings is a full-page tab (two-column
   card layout), not a header popover — it outgrew that.
+- The Engagement section (#163) groups two sub-views behind one tab:
+  Agenda (per-forum, the working surface — generate what to raise, tick
+  what you covered, capture the actions, log it in one step) and People
+  (the roster, away dates, and forum membership). Unlike every other
+  section it reads the engagement workspace, not the project graph.
 
 ## Conventions & environment
 

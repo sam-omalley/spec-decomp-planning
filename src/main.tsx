@@ -7,11 +7,16 @@ import {
   createAutosaver,
   createProjectId,
   listProjects,
+  loadEngagementText,
   resolveStartupProject,
+  saveEngagementText,
   saveProjectText,
+  saveUnrecoveredEngagementText,
   saveUnrecoveredText,
   setCurrentProjectId,
 } from './persist/persistence.ts';
+import { engagementStore } from './engagement/store.ts';
+import { deserializeWorkspace, serializeWorkspace } from './engagement/serialize.ts';
 import { setPendingLoadRepairs } from './persist/loadReport.ts';
 import './styles.css';
 
@@ -60,6 +65,25 @@ async function init(): Promise<void> {
   projectRegistry.setActive(activeId);
   projectRegistry.setProjects(await listProjects().catch(() => []));
 
+  // The engagement tracker (#163) is workspace-scoped: one record, loaded
+  // once, independent of which project is active. Same
+  // back-up-rather-than-discard rule as the project autosave — an
+  // unreadable record is kept under its own key instead of being replaced
+  // by the next save of an empty tracker.
+  try {
+    const text = await loadEngagementText();
+    if (text !== undefined) {
+      try {
+        engagementStore.reset(deserializeWorkspace(text));
+      } catch (parseError) {
+        await saveUnrecoveredEngagementText(text).catch(() => {});
+        console.warn('Could not load the engagement tracker:', parseError);
+      }
+    }
+  } catch (error) {
+    console.warn('Could not load the engagement tracker:', error);
+  }
+
   const autosaver = createAutosaver({
     subscribe: store.subscribe,
     getState: store.getState,
@@ -67,10 +91,20 @@ async function init(): Promise<void> {
     save: (text) => saveProjectText(projectRegistry.getActiveId(), text),
     onError: (error) => console.warn('Autosave failed:', error),
   });
+  const engagementAutosaver = createAutosaver({
+    subscribe: engagementStore.subscribe,
+    getState: engagementStore.getState,
+    serialize: (workspace) => serializeWorkspace(workspace),
+    save: (text) => saveEngagementText(text),
+    onError: (error) => console.warn('Engagement autosave failed:', error),
+  });
   // Debounce means the last ~300ms could be unsaved when the tab goes
   // away; flush while the page can still complete an IndexedDB write.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') autosaver.flush();
+    if (document.visibilityState === 'hidden') {
+      autosaver.flush();
+      engagementAutosaver.flush();
+    }
   });
 
   createRoot(document.getElementById('root')!).render(
