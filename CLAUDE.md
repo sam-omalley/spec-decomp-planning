@@ -174,6 +174,11 @@ Four nouns, each generalised rather than enumerated:
   that move is (`state`: `to_raise` → `open` → `resolved`/`dropped`), the
   same collapse that turned epics and stories into bare nested groups.
   `target` is a person **or** a forum (some concerns belong to the room);
+  `details` is the "what I actually want to say" note behind the one-line
+  title, edited inline from the ≡ indicator on an Agenda/Actions row —
+  same Things3 shape *and* same coalescing contract as the outliner's
+  details card, toggling included (`ItemControls` breaks coalescing
+  explicitly, because the textarea's blur doesn't fire on unmount);
   `parentId` threads follow-ups under the topic that spawned them;
   `recurEveryDays` makes a standing concern that comes back every cycle
   instead of closing; `link` is a **soft** `{projectId, nodeId, label}`
