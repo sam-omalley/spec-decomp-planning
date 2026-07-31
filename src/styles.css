@@ -3683,3 +3683,426 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
     display: inline-flex;
   }
 }
+
+/* --------------------------- engagement tracker --------------------------- */
+/* Stakeholder comms (#163). Severity is never carried by colour alone: every
+   standing chip states the number of days in words next to its dot, and the
+   dots differ in shape (filled square → filled circle → hollow ring → small
+   dot) as well as hue, so the ordering survives any colour vision. */
+
+.engagement-setup,
+.agenda-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px;
+}
+.engagement-empty {
+  padding: 24px;
+  text-align: center;
+}
+.engagement-empty .metric-hint {
+  max-width: 46em;
+  margin: 0 auto;
+}
+
+.engagement-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  display: inline-block;
+  border-radius: 50%;
+  border: 2px solid var(--bullet);
+  background: transparent;
+}
+.engagement-dot-badly_overdue {
+  border-radius: 2px;
+  border-color: #b3261e;
+  background: #b3261e;
+}
+.engagement-dot-overdue {
+  border-color: #b3261e;
+  background: #b3261e;
+}
+.engagement-dot-due_soon {
+  border-color: #b06f0a;
+  background: transparent;
+}
+.engagement-dot-ok {
+  width: 7px;
+  height: 7px;
+  border-color: var(--bullet);
+}
+
+.engagement-standing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.engagement-standing-overdue,
+.engagement-standing-badly_overdue {
+  color: #b3261e;
+}
+.engagement-standing-badly_overdue {
+  font-weight: 600;
+}
+.engagement-standing-due_soon {
+  color: #b06f0a;
+}
+
+.engagement-add {
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.engagement-add:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+.engagement-add:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* roster */
+.engagement-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.engagement-person {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.engagement-person:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.engagement-person-archived {
+  opacity: 0.55;
+}
+.engagement-person-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.engagement-person-name {
+  flex: 1 1 12ch;
+  min-width: 10ch;
+  font-weight: 600;
+}
+.engagement-person-role {
+  flex: 1 1 12ch;
+  min-width: 8ch;
+}
+.engagement-away {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 2px;
+}
+
+/* forums */
+.engagement-forum {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.engagement-forum:last-child {
+  border-bottom: none;
+}
+.engagement-forum-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.engagement-forum-name {
+  flex: 1 1 14ch;
+  min-width: 10ch;
+  font-weight: 600;
+}
+/* "Every N days" reads as one phrase, so the field lays out inline rather
+   than stacking its label above the input like the column-shaped
+   .meta-field it borrows from. */
+.engagement-cadence {
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.engagement-cadence .meta-input {
+  width: 6ch;
+}
+.engagement-attendees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.engagement-attendee {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.engagement-attendee-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* agenda */
+.agenda-forums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agenda-forum-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.agenda-forum-pill:hover {
+  border-color: var(--muted);
+}
+.agenda-forum-pill-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.agenda-forum-late {
+  font-size: 11px;
+  color: #b3261e;
+}
+.agenda-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.agenda-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.agenda-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.agenda-attendees {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  margin-left: auto;
+}
+.agenda-attendee-standing {
+  color: var(--muted);
+}
+.agenda-nothing {
+  padding: 8px 2px;
+}
+.agenda-section h3 {
+  margin: 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agenda-section-count {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.agenda-section .metric-hint {
+  margin: 2px 0 6px;
+}
+.agenda-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+.agenda-row:hover {
+  background: var(--accent-soft);
+}
+/* Overdue rows carry a left rule as well as their note text, so the
+   emphasis isn't hue-only. */
+.agenda-row-overdue {
+  border-left: 3px solid #b3261e;
+  padding-left: 6px;
+}
+.agenda-raise {
+  display: inline-flex;
+  align-items: center;
+}
+.agenda-row-title {
+  flex: 1 1 20ch;
+  min-width: 12ch;
+}
+.agenda-row-owner {
+  flex: none;
+  max-width: 14ch;
+}
+.agenda-row-due {
+  flex: none;
+}
+.agenda-row-note {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.agenda-row-overdue .agenda-row-note {
+  color: #b3261e;
+}
+.agenda-tag {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+.agenda-tag-link {
+  border-style: dashed;
+}
+.agenda-row-btn {
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.agenda-row-btn:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.agenda-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agenda-add-input {
+  flex: 1 1 24ch;
+}
+.agenda-recurs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.agenda-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.agenda-log h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.agenda-log .metric-hint {
+  margin: 0;
+}
+.agenda-log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.agenda-log-participants {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.agenda-log-note {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.agenda-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.agenda-draft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.agenda-draft .meta-input:first-child {
+  flex: 1 1 20ch;
+}
+.agenda-log-submit {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.agenda-log-submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+.agenda-log-submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

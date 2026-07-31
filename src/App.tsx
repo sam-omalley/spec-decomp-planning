@@ -28,13 +28,24 @@ import { shortcutsFor } from './ui/shortcuts.ts';
 import { TimelineView } from './ui/TimelineView.tsx';
 import { FilterFacets, type FacetValue } from './ui/FilterFacets.tsx';
 import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
-import { hashFor, parseHash, type PlanMode, type ReportMode, type Section } from './ui/route.ts';
+import { EngagementAgenda } from './ui/EngagementAgenda.tsx';
+import { EngagementPeople } from './ui/EngagementPeople.tsx';
+import { engagementStore, useWorkspace } from './engagement/store.ts';
+import {
+  hashFor,
+  parseHash,
+  type EngagementMode,
+  type PlanMode,
+  type ReportMode,
+  type Section,
+} from './ui/route.ts';
 
 const SECTION_LABELS: Record<Section, string> = {
   spec: 'Spec',
   planning: 'Planning',
   graph: 'Graph',
   reporting: 'Reporting',
+  engagement: 'Engagement',
   settings: 'Settings',
 };
 
@@ -43,6 +54,11 @@ const GITHUB_URL = 'https://github.com/sam-omalley/spec-decomp-planning';
 
 export function App() {
   const graph = useProjectGraph();
+  // The engagement tracker (#163) is a second store with its own undo
+  // history — ⌘Z in the Agenda must not roll back an edit to the plan.
+  // Subscribing here keeps the header's undo/redo enablement honest for
+  // whichever store the active section is editing (`historyStore` below).
+  useWorkspace();
   // Navigation state is mirrored to the location hash (see the sync effect
   // below) so back/forward/refresh work; seed it from the hash on load.
   const initialRoute = parseHash(window.location.hash);
@@ -53,6 +69,11 @@ export function App() {
   const [planMode, setPlanMode] = useState<PlanMode>(initialRoute?.planMode ?? 'outline');
   const [graphMode, setGraphMode] = useState<GraphMode>(initialRoute?.graphMode ?? 'map');
   const [reportMode, setReportMode] = useState<ReportMode>(initialRoute?.reportMode ?? 'timeline');
+  const [engagementMode, setEngagementMode] = useState<EngagementMode>(
+    initialRoute?.engagementMode ?? 'agenda',
+  );
+  /** Which store undo/redo drives — the section you're looking at owns it. */
+  const historyStore = section === 'engagement' ? engagementStore : store;
   // Global filter/search — view state only; never enters the graph, undo,
   // or autosave. Shared across the Spec / Planning / Graph tabs.
   const [filterText, setFilterText] = useState('');
@@ -250,13 +271,13 @@ export function App() {
   // by the time state catches up the hash already matches — no extra push.
   const firstSync = useRef(true);
   useEffect(() => {
-    const hash = hashFor({ section, planMode, graphMode, reportMode });
+    const hash = hashFor({ section, planMode, graphMode, reportMode, engagementMode });
     if (window.location.hash !== hash) {
       if (firstSync.current) window.history.replaceState(null, '', hash);
       else window.history.pushState(null, '', hash);
     }
     firstSync.current = false;
-  }, [section, planMode, graphMode, reportMode]);
+  }, [section, planMode, graphMode, reportMode, engagementMode]);
 
   // Back/forward: re-derive the view from the hash. Only the active section's
   // sub-view is encoded, so the others keep their last value.
@@ -268,6 +289,7 @@ export function App() {
       if (route.planMode) setPlanMode(route.planMode);
       if (route.graphMode) setGraphMode(route.graphMode);
       if (route.reportMode) setReportMode(route.reportMode);
+      if (route.engagementMode) setEngagementMode(route.engagementMode);
     }
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -279,11 +301,11 @@ export function App() {
         const key = event.key.toLowerCase();
         if (key === 'z') {
           event.preventDefault();
-          if (event.shiftKey) store.redo();
-          else store.undo();
+          if (event.shiftKey) historyStore.redo();
+          else historyStore.undo();
         } else if (key === 'y') {
           event.preventDefault();
-          store.redo();
+          historyStore.redo();
         }
         return;
       }
@@ -300,7 +322,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [historyStore]);
 
   return (
     <div className="app">
@@ -351,8 +373,8 @@ export function App() {
           />
           <button
             className="header-btn-icon"
-            disabled={!store.canUndo}
-            onClick={() => store.undo()}
+            disabled={!historyStore.canUndo}
+            onClick={() => historyStore.undo()}
             title="Undo (⌘Z)"
             aria-label="Undo"
           >
@@ -360,8 +382,8 @@ export function App() {
           </button>
           <button
             className="header-btn-icon"
-            disabled={!store.canRedo}
-            onClick={() => store.redo()}
+            disabled={!historyStore.canRedo}
+            onClick={() => historyStore.redo()}
             title="Redo (⇧⌘Z)"
             aria-label="Redo"
           >
@@ -395,7 +417,11 @@ export function App() {
           </HeaderMenu>
         </div>
       </header>
-      {(section === 'spec' || section === 'planning' || section === 'graph' || section === 'reporting') && (
+      {(section === 'spec' ||
+        section === 'planning' ||
+        section === 'graph' ||
+        section === 'reporting' ||
+        section === 'engagement') && (
         <div className="app-subheader">
           {section === 'planning' && (
             <SubTabs
@@ -432,6 +458,17 @@ export function App() {
               ]}
               active={reportMode}
               onSelect={setReportMode}
+            />
+          )}
+          {section === 'engagement' && (
+            <SubTabs
+              label="Engagement view"
+              options={[
+                ['agenda', 'Agenda'],
+                ['people', 'People'],
+              ]}
+              active={engagementMode}
+              onSelect={setEngagementMode}
             />
           )}
           {searchable && (
@@ -555,6 +592,8 @@ export function App() {
         {section === 'reporting' && reportMode === 'assignees' && <AssigneeMetricsView />}
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}
         {section === 'reporting' && reportMode === 'coverage' && <CoverageView onReveal={reveal} />}
+        {section === 'engagement' && engagementMode === 'agenda' && <EngagementAgenda />}
+        {section === 'engagement' && engagementMode === 'people' && <EngagementPeople />}
         {section === 'settings' && <SettingsView />}
       </main>
       <footer className="app-hints">
@@ -605,6 +644,14 @@ export function App() {
         {section === 'reporting' && reportMode === 'coverage' && (
           <>Spec subtrees no group addresses, directly or via an ancestor · click an item to open
             it in the spec outliner</>
+        )}
+        {section === 'engagement' && engagementMode === 'agenda' && (
+          <>What to raise with each forum · tick what you covered, capture the actions, and
+            log it — one step · stakeholders are shared across every project</>
+        )}
+        {section === 'engagement' && engagementMode === 'people' && (
+          <>Stakeholders &amp; the forums they sit in · a forum's cadence is what recency is
+            measured against · away dates silence the nag</>
         )}
         {section === 'settings' && (
           <>Project &amp; scheduling settings · dates, team, capacity, conversion &amp; locks · every

@@ -7,6 +7,7 @@ const base: RouteState = {
   planMode: 'outline',
   graphMode: 'map',
   reportMode: 'timeline',
+  engagementMode: 'agenda',
 };
 
 describe('hashFor', () => {
@@ -17,6 +18,10 @@ describe('hashFor', () => {
     assert.equal(hashFor({ ...base, section: 'planning', planMode: 'markdown' }), '#/planning/markdown');
     assert.equal(hashFor({ ...base, section: 'graph', graphMode: 'dep' }), '#/graph/dep');
     assert.equal(hashFor({ ...base, section: 'reporting', reportMode: 'assignees' }), '#/reporting/assignees');
+    assert.equal(
+      hashFor({ ...base, section: 'engagement', engagementMode: 'people' }),
+      '#/engagement/people',
+    );
   });
   it('only reflects the sub for the *current* section', () => {
     // planMode is table but we're on graph → hash shows graph's sub, not table.
@@ -38,6 +43,7 @@ describe('parseHash', () => {
       { ...base, section: 'planning', planMode: 'table' },
       { ...base, section: 'graph', graphMode: 'dep' },
       { ...base, section: 'reporting', reportMode: 'metrics' },
+      { ...base, section: 'engagement', engagementMode: 'people' },
     ];
     for (const s of states) {
       const p = parseHash(hashFor(s));
