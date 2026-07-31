@@ -142,8 +142,8 @@ describe('analyzeConcerns — project-level signals', () => {
   it('flags thin WIP when work waits below capacity', () => {
     let g = base({
       resources: [
-        { id: 'r1', name: 'A', fte: 1, leave: [] },
-        { id: 'r2', name: 'B', fte: 1, leave: [] },
+        { id: 'r1', name: 'A', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+        { id: 'r2', name: 'B', fte: 1, leave: [], availableFrom: null, availableUntil: null },
       ],
     });
     g = group(g, 'a', 3); // not started
@@ -205,7 +205,12 @@ describe('analyzeConcerns — project-level signals', () => {
   });
 
   it('is empty for a clean, on-track plan', () => {
-    let g = base({ targetDate: '2024-12-31', resources: [{ id: 'r1', name: 'A', fte: 1, leave: [] }] });
+    let g = base({
+      targetDate: '2024-12-31',
+      resources: [
+        { id: 'r1', name: 'A', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+      ],
+    });
     g = group(g, 'a', 3);
     g = assignResource(g, 'a', 'r1');
     g = setActualDates(g, 'a', { actualStart: '2024-01-01' }); // in progress, on time
@@ -243,5 +248,74 @@ describe('filterConcernsBySeverity', () => {
   it('returns everything when all severities are active', () => {
     const all = new Set<Severity>(['high', 'medium', 'low']);
     assert.equal(filterConcernsBySeverity(list, all).length, list.length);
+  });
+});
+
+describe('analyzeConcerns — resource availability (#161)', () => {
+  /** Ada is gone after Jan 5; Bo is still around. */
+  function team() {
+    return [
+      { id: 'ada', name: 'Ada', fte: 1, leave: [], availableFrom: null, availableUntil: '2024-01-05' },
+      { id: 'bo', name: 'Bo', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+    ];
+  }
+
+  it('flags future work still pinned to someone who has left', () => {
+    let g = base({ resources: team() });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'ada');
+    const c = analyzeConcerns(g, '2024-01-08').find((x) => x.kind === 'owner_unavailable');
+    assert.ok(c);
+    assert.equal(c!.id, 'a');
+    assert.equal(c!.severity, 'medium');
+    assert.match(c!.detail, /Ada/);
+    assert.match(c!.detail, /left 2024-01-05/);
+  });
+
+  it('says nothing about work that person already finished', () => {
+    let g = base({ resources: team() });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'ada');
+    g = setActualDates(g, 'a', { actualStart: '2024-01-02', actualFinish: '2024-01-04' });
+    assert.equal(kinds(g, '2024-01-08').includes('owner_unavailable'), false);
+  });
+
+  it('says nothing while the owner is still on the team', () => {
+    let g = base({ resources: team() });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'bo');
+    assert.equal(kinds(g, '2024-01-08').includes('owner_unavailable'), false);
+  });
+
+  it('counts only the people on the team today as capacity', () => {
+    let g = base({ resources: team() });
+    g = group(g, 'a', 3);
+    g = setActualDates(g, 'a', { actualStart: '2024-01-08' }); // 1 in progress
+    g = group(g, 'b', 3); // 1 waiting
+    // Capacity is Bo alone now, and one thing is already underway — with Ada
+    // still counted it would look like the team was sitting idle.
+    assert.equal(kinds(g, '2024-01-08').includes('thin_wip'), false);
+    assert.ok(kinds(g, '2024-01-01').includes('thin_wip'), 'both on the team: room for more');
+  });
+
+  it('stops nagging about unowned work once nobody is left to own it', () => {
+    let g = base({
+      resources: [
+        { id: 'ada', name: 'Ada', fte: 1, leave: [], availableFrom: null, availableUntil: '2024-01-05' },
+      ],
+    });
+    g = group(g, 'a', 3); // unassigned
+    assert.ok(kinds(g, '2024-01-01').includes('unassigned'), 'while Ada is here');
+    assert.equal(kinds(g, '2024-01-08').includes('unassigned'), false);
+  });
+
+  it('still counts a future joiner as a team worth assigning work to', () => {
+    let g = base({
+      resources: [
+        { id: 'new', name: 'New', fte: 1, leave: [], availableFrom: '2024-02-01', availableUntil: null },
+      ],
+    });
+    g = group(g, 'a', 3);
+    assert.ok(kinds(g, '2024-01-01').includes('unassigned'));
   });
 });

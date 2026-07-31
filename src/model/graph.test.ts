@@ -424,7 +424,7 @@ describe('serialization', () => {
     g = addExternalRef(g, 'login', { system: 'jira', key: 'PT-1', url: 'http://x/PT-1' });
     g = updateSettings(g, {
       resources: [
-        { id: 'r1', name: 'Ada', fte: 0.8, leave: [{ start: '2026-08-01', end: '2026-08-14' }] },
+        { id: 'r1', name: 'Ada', fte: 0.8, leave: [{ start: '2026-08-01', end: '2026-08-14' }], availableFrom: null, availableUntil: null },
       ],
       speedMultiplier: 1.5,
       targetDate: '2026-12-01',
@@ -516,6 +516,51 @@ describe('serialization', () => {
     const g = deserializeProject(JSON.stringify(v11));
     assert.equal(g.nodes['a']!.milestoneId, null);
     assert.deepEqual(g.settings.milestones, []);
+  });
+
+  it('migrates a v12 file by backfilling the resource availability window (#161)', () => {
+    const v12 = {
+      version: 12,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerWeek: 38, speedMultiplier: 1, specLockDepth: 0, planLockDepth: 0,
+          milestones: [], holidays: [],
+          resources: [{ id: 'r1', name: 'Ada', fte: 1, leave: [] }],
+        },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(v12));
+    // null/null = "always on the team", which is how they already behaved.
+    assert.deepEqual(g.settings.resources, [
+      { id: 'r1', name: 'Ada', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+    ]);
+  });
+
+  it('drops a persisted availability window that ends before it starts', () => {
+    const file = {
+      version: 13,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      graph: {
+        nodes: {}, edges: {}, rootOrder: [], groupRootOrder: [],
+        settings: {
+          startDate: '2026-01-01', targetDate: null, pointsPerDay: 1,
+          hoursPerWeek: 38, speedMultiplier: 1, specLockDepth: 0, planLockDepth: 0,
+          milestones: [], holidays: [],
+          resources: [
+            {
+              id: 'r1', name: 'Ada', fte: 1, leave: [],
+              availableFrom: '2026-06-01', availableUntil: '2026-03-01',
+            },
+          ],
+        },
+      },
+    };
+    const g = deserializeProject(JSON.stringify(file));
+    assert.equal(g.settings.resources[0]!.availableFrom, '2026-06-01');
+    assert.equal(g.settings.resources[0]!.availableUntil, null);
   });
 
   it('drops an invalid persisted milestone (bad/crossed dates, duplicate id)', () => {
@@ -921,6 +966,35 @@ describe('external refs and settings', () => {
     assert.equal(g.settings.resources.length, 1);
     assert.equal(g.nodes['login']!.resourceId, null);
     assert.throws(() => removeResource(g, 'r1'), /No resource/);
+  });
+
+  it('sets a resource availability window, and rejects a reversed one (#161)', () => {
+    let g = fixture();
+    g = addResource(g, { id: 'r1', name: 'Ada' });
+    assert.equal(g.settings.resources[0]!.availableFrom, null);
+    assert.equal(g.settings.resources[0]!.availableUntil, null);
+
+    g = updateResource(g, 'r1', { availableFrom: '2026-01-01', availableUntil: '2026-06-30' });
+    assert.equal(g.settings.resources[0]!.availableFrom, '2026-01-01');
+    assert.equal(g.settings.resources[0]!.availableUntil, '2026-06-30');
+
+    assert.throws(
+      () => updateResource(g, 'r1', { availableUntil: '2025-12-31' }),
+      /available-from/,
+    );
+    // Either end can be reopened independently.
+    assert.equal(updateResource(g, 'r1', { availableFrom: null }).settings.resources[0]!.availableFrom, null);
+  });
+
+  it('keeps a departed resource assigned to the work they finished (#161)', () => {
+    let g = fixture();
+    g = addResource(g, { id: 'r1', name: 'Ada' });
+    g = assignResource(g, 'login', 'r1');
+    // Taking Ada off the team leaves the assignment alone — that is the
+    // whole difference from removeResource, which clears it.
+    g = updateResource(g, 'r1', { availableUntil: '2026-06-30' });
+    assert.equal(g.nodes['login']!.resourceId, 'r1');
+    assert.equal(g.settings.resources.length, 1);
   });
 });
 

@@ -1,7 +1,8 @@
 /**
  * Concerns view: a monitoring board of the things a delivery lead should
  * watch — overdue work, blocked items, dependency cycles, unestimated or
- * unassigned units, thin WIP, releases projected past their window, and a
+ * unassigned units, work still pinned to someone off the team, thin WIP,
+ * releases projected past their window, and a
  * projection past the project target date. All
  * figures come from the pure `concerns.ts`; this is a read-only projection
  * with a jump-to-definition (`onReveal`) affordance per node-level concern.
@@ -25,6 +26,7 @@ const KIND_LABEL: Record<ConcernKind, string> = {
   cycle: 'Dependency cycle',
   unestimated: 'Unestimated',
   unassigned: 'Unassigned',
+  owner_unavailable: 'Owner off the team',
   thin_wip: 'Low WIP',
   milestone_late: 'Milestone at risk',
   past_target: 'Behind target',

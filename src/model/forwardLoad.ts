@@ -11,9 +11,12 @@
  * (`schedule.ts`), so a slower resource's calendar can still show as fully
  * booked — FTE affects throughput, not how many days they're on the
  * calendar. A day counts as available when it isn't a weekend, a project
- * holiday, or that resource's own leave; committed when some scheduling
+ * holiday, that resource's own leave, or a day they aren't on the team at
+ * all (#161 — before joining, after leaving); committed when some scheduling
  * unit placed on that resource's track (`ScheduledGroup.trackResourceId`)
- * spans it. Utilization is therefore always ≤ 100% by construction, since
+ * spans it. A former member therefore reports zero capacity going forward
+ * while staying on the roster, which is the point of the window: the work
+ * they already finished keeps their name on it. Utilization is therefore always ≤ 100% by construction, since
  * the scheduler never double-books a single track — the useful signal is
  * *how close* to full a resource is, not overbooking.
  */
@@ -21,6 +24,7 @@
 import type { DateRange, ProjectGraph } from './types.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
 import { weekStart } from './assigneeMetrics.ts';
+import { isAvailableOn } from './resources.ts';
 
 const DAY_MS = 86_400_000;
 
@@ -92,6 +96,9 @@ export function forwardLoad(
       for (let d = 0; d < 5; d++) {
         const date = addDaysIso(ws, d);
         if (inRanges(date, graph.settings.holidays) || inRanges(date, r.leave)) continue;
+        // Off the team that day (#161) — before they join or after they
+        // leave — is no capacity at all, not idle capacity going spare.
+        if (!isAvailableOn(r, date)) continue;
         capacityDays++;
         if (isCommitted(date, r.id)) committedDays++;
       }

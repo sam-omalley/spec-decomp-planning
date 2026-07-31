@@ -62,6 +62,12 @@
  * either field, and the project-level behind-target concern still fires —
  * so this is a pure no-op until a release is defined. No data loss.
  *
+ * v12 → v13: resource availability windows (#161). Each `Resource` gains
+ * `availableFrom` / `availableUntil` (ISO dates, see `Resource` in types.ts),
+ * backfilled to `null` — "always on the team", which is exactly how every
+ * existing resource already behaved, so this is a pure no-op until a window
+ * is set. No data loss.
+ *
  * Every mutation in graph.ts enforces the 'contains'/'assigned_to'
  * invariants (see graph.ts's top comment), but the file/autosave path is
  * the one entrance that bypasses them — a hand-edited file, a bug in a
@@ -86,7 +92,7 @@ import type {
 } from './types.ts';
 import { GraphError, createId, defaultSettings } from './graph.ts';
 
-export const FILE_VERSION = 12;
+export const FILE_VERSION = 13;
 
 export interface ProjectFile {
   version: typeof FILE_VERSION;
@@ -94,7 +100,9 @@ export interface ProjectFile {
   graph: ProjectGraph;
 }
 
-const SUPPORTED_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, FILE_VERSION];
+const SUPPORTED_VERSIONS: readonly number[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, FILE_VERSION,
+];
 
 /** Shape of the graph payload in v1/v2 files. */
 interface LegacyGraph {
@@ -267,11 +275,25 @@ function normalizeResources(provided: unknown): Resource[] | null {
     const r = item as Record<string, unknown>;
     if (typeof r.id !== 'string' || r.id === '' || seen.has(r.id)) continue;
     const fte = typeof r.fte === 'number' && r.fte > 0 ? r.fte : 1;
+    // Availability window (#161): absent/invalid reads as "always on the
+    // team", the pre-v13 behaviour. A reversed pair would fail
+    // `updateSettings`' validation, so drop the end rather than the file.
+    const availableFrom = typeof r.availableFrom === 'string' && r.availableFrom !== ''
+      ? r.availableFrom
+      : null;
+    let availableUntil = typeof r.availableUntil === 'string' && r.availableUntil !== ''
+      ? r.availableUntil
+      : null;
+    if (availableFrom !== null && availableUntil !== null && availableFrom > availableUntil) {
+      availableUntil = null;
+    }
     out.push({
       id: r.id,
       name: typeof r.name === 'string' ? r.name : '',
       fte,
       leave: normalizeRanges(r.leave),
+      availableFrom,
+      availableUntil,
     });
     seen.add(r.id);
   }
@@ -335,6 +357,8 @@ function normalizeSettings(provided: unknown): ProjectSettings {
             name: `Resource ${i + 1}`,
             fte: 1,
             leave: [],
+            availableFrom: null,
+            availableUntil: null,
           }))
         : [];
   }

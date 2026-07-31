@@ -63,8 +63,8 @@ describe('buildTimeline', () => {
     g = updateSettings(g, {
       startDate: '2024-01-01',
       resources: [
-        { id: 'r0', name: 'R0', fte: 1, leave: [] },
-        { id: 'r1', name: 'R1', fte: 1, leave: [] },
+        { id: 'r0', name: 'R0', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+        { id: 'r1', name: 'R1', fte: 1, leave: [], availableFrom: null, availableUntil: null },
       ],
     });
     g = createGroup(g, { id: 'a', title: 'A' });
