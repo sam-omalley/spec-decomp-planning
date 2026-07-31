@@ -806,6 +806,13 @@ export function updateSettings(
     seen.add(r.id);
     if (!(r.fte > 0)) throw new GraphError('resource fte must be greater than 0');
     validateRanges(r.leave, 'resource leave');
+    if (
+      r.availableFrom !== null &&
+      r.availableUntil !== null &&
+      r.availableFrom > r.availableUntil
+    ) {
+      throw new GraphError("resource's available-from must not be after available-until");
+    }
   }
   if (!Array.isArray(settings.milestones)) {
     throw new GraphError('milestones must be an array');
@@ -849,17 +856,36 @@ export function addResource(
 ): ProjectGraph {
   const name = input.name.trim();
   const fte = input.fte ?? 1;
-  const resource: Resource = { id: input.id, name, fte, leave: [] };
+  const resource: Resource = {
+    id: input.id,
+    name,
+    fte,
+    leave: [],
+    availableFrom: null,
+    availableUntil: null,
+  };
   return updateSettings(graph, {
     resources: [...graph.settings.resources, resource],
   });
 }
 
-/** Patches a resource's name, fte and/or leave; validation runs in updateSettings. */
+/**
+ * Patches a resource's name, fte, leave and/or availability window (#161);
+ * validation runs in updateSettings. Setting `availableUntil` is the
+ * non-destructive way to take someone off the team: unlike `removeResource`
+ * it leaves every `resourceId` pointing at them intact, so the work they
+ * finished keeps its assignee.
+ */
 export function updateResource(
   graph: ProjectGraph,
   id: string,
-  patch: { name?: string; fte?: number; leave?: DateRange[] },
+  patch: {
+    name?: string;
+    fte?: number;
+    leave?: DateRange[];
+    availableFrom?: string | null;
+    availableUntil?: string | null;
+  },
 ): ProjectGraph {
   if (!graph.settings.resources.some((r) => r.id === id)) {
     throw new GraphError(`No resource with id ${id}`);
@@ -871,6 +897,8 @@ export function updateResource(
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.fte !== undefined ? { fte: patch.fte } : {}),
           ...(patch.leave !== undefined ? { leave: patch.leave } : {}),
+          ...(patch.availableFrom !== undefined ? { availableFrom: patch.availableFrom } : {}),
+          ...(patch.availableUntil !== undefined ? { availableUntil: patch.availableUntil } : {}),
         }
       : r,
   );

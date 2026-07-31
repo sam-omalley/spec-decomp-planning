@@ -1592,6 +1592,24 @@ body {
   align-items: center;
   gap: 8px;
 }
+/* When a resource is on the team (#161) — two dates, either open-ended. */
+.resource-window {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.resource-window .meta-label {
+  flex: 0 0 auto;
+}
+.resource-window .meta-input {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.resource-window-sep {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
 .resource-leave .meta-label {
   flex: 0 0 auto;
 }
@@ -2691,6 +2709,17 @@ button.asg-row:disabled {
   font-size: 11px;
   color: var(--muted);
   font-weight: 400;
+}
+/* "left 2026-08-01" / "joins 2026-09-01" (#161): a text tag, not a colour
+   cue, so it reads the same to everyone. */
+.asg-standing {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  white-space: nowrap;
 }
 .asg-num {
   text-align: right;

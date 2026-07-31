@@ -35,7 +35,12 @@ export function ScenarioPanel({ value, onChange, baseSettings }: ScenarioPanelPr
   function addResource() {
     if (!value) return;
     patch({
-      resources: [...value.resources, { id: createId(), name: '', fte: 1, leave: [] }],
+      resources: [
+        ...value.resources,
+        // A hypothetical hire is on the team for the whole projection — a
+        // scenario asks "what if we had one more", not "when do they start".
+        { id: createId(), name: '', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+      ],
     });
   }
   function renameResource(id: string, name: string) {

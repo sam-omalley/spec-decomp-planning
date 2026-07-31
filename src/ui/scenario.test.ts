@@ -10,7 +10,7 @@ describe('scenarioFrom', () => {
     g = updateSettings(g, { speedMultiplier: 1.5 });
     const scenario = scenarioFrom(g.settings);
     assert.deepEqual(scenario, {
-      resources: [{ id: 'r1', name: 'Ada', fte: 1, leave: [] }],
+      resources: [{ id: 'r1', name: 'Ada', fte: 1, leave: [], availableFrom: null, availableUntil: null }],
       speedMultiplier: 1.5,
     });
   });
@@ -35,7 +35,7 @@ describe('applyScenario', () => {
     g = addResource(g, { id: 'r1', name: 'Ada', fte: 1 });
     const scenario = scenarioFrom(g.settings);
     scenario.speedMultiplier = 2;
-    scenario.resources.push({ id: 'r2', name: 'Bo', fte: 1, leave: [] });
+    scenario.resources.push({ id: 'r2', name: 'Bo', fte: 1, leave: [], availableFrom: null, availableUntil: null });
     const overlaid = applyScenario(g, scenario);
     assert.equal(overlaid.nodes, g.nodes);
     assert.equal(overlaid.edges, g.edges);

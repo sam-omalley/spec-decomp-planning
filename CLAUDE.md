@@ -85,13 +85,23 @@ Single `ProjectGraph` = `nodes` + `edges` + two root-order arrays + project
   `targetDate`, `pointsPerDay`, `hoursPerWeek`, `speedMultiplier`,
   `holidays` (project-wide non-working date ranges — public holidays,
   office closures — baked into the shared calendar on top of weekends),
-  and `resources` — the delivery **team** (`{ id, name, fte, leave }`,
-  `leave` being that individual's own time off, applied only to their own
-  track). Capacity is one scheduling track per resource (an empty team is
+  and `resources` — the delivery **team**
+  (`{ id, name, fte, leave, availableFrom, availableUntil }`, `leave` being
+  that individual's own time off, applied only to their own track).
+  Capacity is one scheduling track per resource (an empty team is
   a single implicit full-time track); a group's `resourceId` pins its
   scheduling unit to that resource's track, and FTE stretches duration
   (`durationEstimate / (speedMultiplier × fte)` — a 0.8-FTE resource's
-  work takes `1 / 0.8` longer). Editing locks: `specLockDepth` /
+  work takes `1 / 0.8` longer). `availableFrom`/`availableUntil` (#161,
+  either nullable = open-ended) say **when** someone is on the team: a
+  track opens no earlier than the join date and takes no projected work
+  starting after the leaving date, and only people on the team count
+  toward capacity in `forwardLoad`/`analyzeConcerns`. It gates projection
+  only — a done or in-progress unit keeps its own dates *and* its
+  `resourceId` whatever the roster says now, which is the point: setting a
+  leaving date is the non-destructive alternative to `removeResource`,
+  which clears the departed person off everything they ever finished.
+  Helpers live in `src/model/resources.ts`. Editing locks: `specLockDepth` /
   `planLockDepth` — how many top levels of each side are frozen against
   accidental edits (0 = unlocked; see the Locks bullet below). Locks are a
   *config value*, not a graph invariant: they gate the editing UI, not the
@@ -260,7 +270,11 @@ nothing rolls up from assigned spec items.
   blending in actuals: a done unit uses its real dates (frees no future
   capacity; dependents start the next working day); an in-progress unit
   uses its real start plus a projected remainder; everything else is
-  fully projected. Dependency cycles are tolerated during scheduling too
+  fully projected. A track only exists inside its resource's availability
+  window (#161): a not-started unit pinned to someone who isn't on the
+  team when it would run is re-placed onto an open track (Concerns then
+  raises `owner_unavailable` so the stale pin gets resolved by a human),
+  while anything with real dates keeps the track it actually ran on. Dependency cycles are tolerated during scheduling too
   — when nothing is dependency-ready, the lowest sibling-order unit is
   placed anyway, so a cyclic SCC drains as a batch instead of hanging the
   scheduler.
@@ -337,7 +351,8 @@ nothing rolls up from assigned spec items.
   P50-P80 range), Assignees (per-resource estimate-vs-actual, points/day,
   weekly completions), Concerns (`src/model/concerns.ts`'s
   `analyzeConcerns`: per-unit overdue/blocked/cycle/unestimated/
-  unassigned flags, plus project-level thin-WIP, milestone-at-risk and
+  unassigned/owner-unavailable flags, plus project-level thin-WIP,
+  milestone-at-risk and
   behind-target signals, severity-sorted — date commitments are
   milestone-driven once any release exists, with the project-wide
   behind-target signal as the fallback for a plan that defines none, so

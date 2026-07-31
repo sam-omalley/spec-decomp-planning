@@ -16,6 +16,18 @@
  * resource FTE stretches it (fte < 1 ⇒ proportionally longer) — on a
  * skip-weekends calendar anchored at `settings.startDate`.
  *
+ * A track only exists while its resource is on the team (#161): it opens no
+ * earlier than `availableFrom` and takes no projected work that would start
+ * after `availableUntil`. A not-started unit pinned to a resource who isn't
+ * around then is placed on an open track instead — the projection says what
+ * will actually happen, and `analyzeConcerns` raises `owner_unavailable` so
+ * the stale pin gets reassigned deliberately rather than silently. Work that
+ * already has real dates is never re-homed: a done or in-progress unit keeps
+ * its own resource's track, since it demonstrably happened. Availability is
+ * checked at a unit's *start* only — a unit that runs past its owner's last
+ * day is left alone rather than split or bumped, the same deliberate
+ * coarseness as the rest of this scheduler's day-granular placement.
+ *
  * Actuals blend over the projection: a done group (has `actualFinish`)
  * uses its real dates; an in-progress group (has `actualStart`) starts on
  * its real start and projects the remainder; everything else is fully
@@ -364,9 +376,24 @@ export function scheduleProject(
   // an unassigned unit still lands on *some* resource's track, so this
   // applies regardless of whether the unit was explicitly pinned.
   const trackLeave: DateRange[][] = resources.length > 0 ? resources.map((r) => r.leave) : [[]];
+  // Availability windows (#161). The last day is compared as an ISO date
+  // rather than converted to an offset, so an end that lands on a weekend
+  // or holiday can't be rounded forward into an extra open working day.
+  const trackUntil: (string | null)[] =
+    resources.length > 0 ? resources.map((r) => r.availableUntil) : [null];
   const resourceTrack = new Map<string, number>();
   resources.forEach((r, i) => resourceTrack.set(r.id, i));
-  const tracks = new Array<number>(trackFte.length).fill(0); // free working-day offset
+  // Free working-day offset per track — a track that starts later opens at
+  // its join date, so work pinned to a future joiner simply waits for them.
+  const tracks: number[] =
+    resources.length > 0
+      ? resources.map((r) => (r.availableFrom !== null ? cal.offsetOf(r.availableFrom) : 0))
+      : [0];
+  /** Is `track` still on the team on the working day at offset `at`? */
+  const isOpenAt = (track: number, at: number): boolean => {
+    const until = trackUntil[track]!;
+    return until === null || cal.isoAt(Math.floor(at)) <= until;
+  };
   const finishOffset = new Map<string, number>(); // exclusive: next free day
   const startOffset = new Map<string, number>(); // where each unit begins
   const groups = new Map<string, ScheduledGroup>();
@@ -393,15 +420,42 @@ export function scheduleProject(
 
     const node = graph.nodes[u]!;
 
+    // FS (default) gates on the prereq's finish; SS gates on its start
+    // instead (#132) — either way, `lagDays` (negative = lead) shifts the
+    // constraint point before comparing. Computed before the track is
+    // chosen, since when a unit could start decides which tracks are still
+    // open to it (#161).
+    let prereqFinish = 0;
+    for (const c of unitPrereqs.get(u)!) {
+      const base = c.depKind === 'SS' ? startOffset.get(c.prereqId) : finishOffset.get(c.prereqId);
+      if (base !== undefined) prereqFinish = Math.max(prereqFinish, base + c.lagDays);
+    }
+    /** Earliest `track` could begin this unit, before leave (which only ever
+     *  pushes it later, so it can never reopen a closed track). */
+    const earliestOn = (track: number): number => Math.max(tracks[track]!, prereqFinish, nowOffset);
+
     // Track: pinned to the assigned resource when it maps to one, else the
     // earliest-free track (any resource may pick up unassigned work).
+    // A pin only holds while its owner is on the team then — except for
+    // work with real dates, which keeps its owner whatever the roster says
+    // now, because it already happened.
     const pinned = node.resourceId !== null ? resourceTrack.get(node.resourceId) : undefined;
+    const hasRealDates = node.actualStart !== null || node.actualFinish !== null;
     let track: number;
-    if (pinned !== undefined) {
+    if (pinned !== undefined && (hasRealDates || isOpenAt(pinned, earliestOn(pinned)))) {
       track = pinned;
     } else {
+      // Earliest-free open track; if nobody is on the team then, fall back
+      // to the earliest-free track of all, so a plan that outlives its whole
+      // roster still gets a projection (Concerns is where that gets said).
       track = 0;
       for (let k = 1; k < tracks.length; k++) if (tracks[k]! < tracks[track]!) track = k;
+      let open: number | null = null;
+      for (let k = 0; k < tracks.length; k++) {
+        if (!isOpenAt(k, earliestOn(k))) continue;
+        if (open === null || tracks[k]! < tracks[open]!) open = k;
+      }
+      if (open !== null) track = open;
     }
     if (trackLastUnit[track] !== null) capacityPrereqs.set(u, trackLastUnit[track]!);
     trackLastUnit[track] = u;
@@ -413,15 +467,6 @@ export function scheduleProject(
     // Surfaced on the schedule so a view can explain a longer-than-estimate
     // span; omitted when there's nothing to explain (a 1× no-op).
     const stretch = speed * fte !== 1 ? { speedMultiplier: speed, fte } : undefined;
-
-    // FS (default) gates on the prereq's finish; SS gates on its start
-    // instead (#132) — either way, `lagDays` (negative = lead) shifts the
-    // constraint point before comparing.
-    let prereqFinish = 0;
-    for (const c of unitPrereqs.get(u)!) {
-      const base = c.depKind === 'SS' ? startOffset.get(c.prereqId) : finishOffset.get(c.prereqId);
-      if (base !== undefined) prereqFinish = Math.max(prereqFinish, base + c.lagDays);
-    }
 
     if (node.actualFinish !== null) {
       // Done: real dates win; a past unit frees no future capacity.

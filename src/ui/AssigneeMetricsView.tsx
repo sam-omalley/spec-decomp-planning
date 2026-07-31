@@ -11,6 +11,7 @@ import { useProjectGraph } from '../store/appStore.ts';
 import { assigneeMetrics, type AssigneeMetrics } from '../model/assigneeMetrics.ts';
 import { forwardLoad, type ForwardLoadModel } from '../model/forwardLoad.ts';
 import { todayIso } from '../model/graph.ts';
+import { standingLabel } from '../model/resources.ts';
 import { GROUP_COLORS } from './colors.ts';
 import { InfoDot } from './InfoDot.tsx';
 import { formatDays } from './format.ts';
@@ -43,6 +44,18 @@ export function AssigneeMetricsView() {
   const graph = useProjectGraph();
   const m = useMemo(() => assigneeMetrics(graph), [graph]);
   const forward = useMemo(() => forwardLoad(graph, todayIso()), [graph]);
+  // "left 2026-08-01" / "joins 2026-09-01" for anyone not on the team today
+  // (#161). A former member keeps their history rows here — the tag is what
+  // says the numbers are a record, not a forecast.
+  const standings = useMemo(() => {
+    const today = todayIso();
+    const map = new Map<string, string>();
+    for (const r of graph.settings.resources) {
+      const label = standingLabel(r, today);
+      if (label !== null) map.set(r.id, label);
+    }
+    return map;
+  }, [graph.settings.resources]);
   const [mode, setMode] = useState<'points' | 'issues'>('points');
   // Which assignee the histogram is filtered to (#49); null = all. The id may
   // itself be null (the Unassigned bucket), so the "all" state is the outer
@@ -116,6 +129,9 @@ export function AssigneeMetricsView() {
                   {r.name}
                   {r.fte !== null && r.fte !== 1 && (
                     <span className="asg-fte">{r.fte} FTE</span>
+                  )}
+                  {r.id !== null && standings.has(r.id) && (
+                    <span className="asg-standing">{standings.get(r.id)}</span>
                   )}
                 </span>
                 <span className="asg-num">{r.completedCount}</span>
@@ -215,14 +231,21 @@ export function AssigneeMetricsView() {
           <h3>
             Forward capacity <InfoDot text={HELP.forward} align="start" />
           </h3>
-          <ForwardCapacity model={forward} />
+          <ForwardCapacity model={forward} standings={standings} />
         </section>
       )}
     </div>
   );
 }
 
-function ForwardCapacity({ model }: { model: ForwardLoadModel }) {
+function ForwardCapacity({
+  model,
+  standings,
+}: {
+  model: ForwardLoadModel;
+  /** Per-resource "left …"/"joins …" tag, for anyone off the team today. */
+  standings: Map<string, string>;
+}) {
   return (
     <div className="fwd-table">
       <div className="fwd-row fwd-head">
@@ -238,6 +261,7 @@ function ForwardCapacity({ model }: { model: ForwardLoadModel }) {
           <span className="fwd-name">
             {r.name}
             {r.fte !== 1 && <span className="asg-fte">{r.fte} FTE</span>}
+            {standings.has(r.id) && <span className="asg-standing">{standings.get(r.id)}</span>}
           </span>
           {r.weeks.map((w) => {
             const pct = Math.round(w.utilization * 100);
