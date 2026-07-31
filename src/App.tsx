@@ -33,6 +33,7 @@ import { EngagementAgenda } from './ui/EngagementAgenda.tsx';
 import { EngagementLog } from './ui/EngagementLog.tsx';
 import { EngagementPeople } from './ui/EngagementPeople.tsx';
 import { engagementStore, useWorkspace } from './engagement/store.ts';
+import { datedFilename, downloadFile } from './ui/download.ts';
 import {
   hashFor,
   parseHash,
@@ -170,39 +171,21 @@ export function App() {
     }).length;
   }, [filterActive, searchable, graph, filter, section, planMode]);
 
-  function downloadFile(text: string, filename: string, mime: string) {
-    const blob = new Blob([text], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
   function exportProject() {
     downloadFile(
       serializeProject(store.getState()),
-      `planning-${new Date().toISOString().slice(0, 10)}.json`,
+      datedFilename('planning', 'json'),
       'application/json',
     );
   }
 
   function exportCsv() {
-    downloadFile(
-      projectToCsv(store.getState()),
-      `planning-${new Date().toISOString().slice(0, 10)}.csv`,
-      'text/csv',
-    );
+    downloadFile(projectToCsv(store.getState()), datedFilename('planning', 'csv'), 'text/csv');
   }
 
   function downloadBackup() {
     if (!backupText) return;
-    downloadFile(
-      backupText,
-      `planning-backup-${new Date().toISOString().slice(0, 10)}.json`,
-      'application/json',
-    );
+    downloadFile(backupText, datedFilename('planning-backup', 'json'), 'application/json');
   }
 
   function discardBackup() {

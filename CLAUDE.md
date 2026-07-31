@@ -436,9 +436,14 @@ room — so a meeting is one undo step and cannot half-apply.
   it also owns **ad-hoc** contact capture, since a corridor conversation
   resets recency exactly like a meeting and without it the nag would fire
   on people you spoke to yesterday), and People (the roster, away dates,
-  forum membership, and a per-stakeholder dossier disclosed from each row
-  — standing, live items, recent contact). Unlike every other section they
-  read the engagement workspace, not the project graph.
+  forum membership, a per-stakeholder dossier disclosed from each row —
+  standing, live items, recent contact — and export/import of the whole
+  workspace, which it needs its own copy of because the tracker is not
+  inside any project file the header's Save/Open would carry). Unlike
+  every other section they read the engagement workspace, not the project
+  graph. The Agenda also copies itself as Markdown
+  (`src/engagement/agendaMarkdown.ts`, derived from the same `agendaFor`
+  the view draws, so the paste and the screen can't disagree).
 
 ## Conventions & environment
 

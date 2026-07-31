@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { engagementStore, useWorkspace } from '../engagement/store.ts';
 import { addItem, createId, logInteraction, todayIso, updateItem } from '../engagement/workspace.ts';
 import { agendaFor, type AgendaSectionKind } from '../engagement/agenda.ts';
+import { agendaMarkdown } from '../engagement/agendaMarkdown.ts';
 import { contactStatuses, forumStatuses } from '../engagement/recency.ts';
 import type { Item, Workspace } from '../engagement/types.ts';
 import type { NewItem } from '../engagement/workspace.ts';
@@ -69,7 +70,13 @@ export function EngagementAgenda() {
   const [drafts, setDrafts] = useState<DraftAction[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newRecurs, setNewRecurs] = useState(false);
+  // Momentary "Copied ✓" on the agenda copy button; cleared whenever the
+  // agenda changes underneath it (below), since what's on the clipboard is
+  // then no longer what's on screen.
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const { run, error, dismiss } = useEngagementRun();
+  const banner = error ?? copyError;
 
   // Switching forum resets the in-progress meeting: the ticks, participants
   // and drafts all belonged to the room you just left.
@@ -84,6 +91,12 @@ export function EngagementAgenda() {
     () => (activeForumId === null ? [] : agendaFor(workspace, activeForumId, today)),
     [workspace, activeForumId, today],
   );
+
+  // The clipboard holds a snapshot; once the agenda moves on, stop
+  // claiming it's copied.
+  useEffect(() => {
+    setCopied(false);
+  }, [sections]);
 
   function toggle(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
     const next = new Set(set);
@@ -154,10 +167,17 @@ export function EngagementAgenda() {
 
   return (
     <div className="agenda-wrap">
-      {error && (
+      {banner && (
         <div className="app-banner" role="alert">
-          {error}
-          <button onClick={dismiss}>Dismiss</button>
+          {banner}
+          <button
+            onClick={() => {
+              dismiss();
+              setCopyError(null);
+            }}
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -183,6 +203,30 @@ export function EngagementAgenda() {
             every {forum.cadenceDays}d · last held {standing.lastHeldAt ?? 'never'} · next due{' '}
             {standing.dueAt}
           </span>
+          <button
+            className="engagement-add"
+            title="Copy this agenda as Markdown, to paste into the invite or an email"
+            onClick={() => {
+              const md = agendaMarkdown(workspace, forum.id, today);
+              void navigator.clipboard.writeText(md).then(
+                () => {
+                  setCopied(true);
+                  setCopyError(null);
+                },
+                () => {
+                  // A blocked clipboard must not look like a successful
+                  // copy — you'd paste the previous contents into the
+                  // invite and never know.
+                  setCopied(false);
+                  setCopyError(
+                    'The browser blocked the clipboard, so the agenda was not copied.',
+                  );
+                },
+              );
+            }}
+          >
+            {copied ? 'Copied ✓' : 'Copy agenda'}
+          </button>
           <ul className="agenda-attendees">
             {attendeeContacts.map((c) => (
               <li key={c.personId} className={`engagement-standing engagement-standing-${c.severity}`}>
