@@ -17,6 +17,7 @@ import { useWorkspace } from '../engagement/store.ts';
 import { todayIso, updateItem } from '../engagement/workspace.ts';
 import { openActions, type ActionEntry } from '../engagement/queries.ts';
 import type { NagKind } from '../engagement/recency.ts';
+import type { ProjectLink } from '../engagement/types.ts';
 import { ItemControls } from './ItemControls.tsx';
 import { useEngagementRun } from './useEngagementRun.ts';
 import { engagementStore } from '../engagement/store.ts';
@@ -27,7 +28,9 @@ const NAG_LABEL: Record<NagKind, string> = {
   overdue_action: 'past due',
 };
 
-export function EngagementActions() {
+export function EngagementActions({
+  onOpenLink,
+}: { onOpenLink?: (link: ProjectLink) => void } = {}) {
   const workspace = useWorkspace();
   const today = todayIso();
   const { run, error, dismiss } = useEngagementRun();
@@ -86,6 +89,7 @@ export function EngagementActions() {
         empty={staleOnly ? 'Nothing of mine is overdue.' : 'Nothing on me.'}
         run={run}
         workspace={workspace}
+        onOpenLink={onOpenLink}
       />
       <ActionList
         title="Waiting on others"
@@ -94,6 +98,7 @@ export function EngagementActions() {
         empty={staleOnly ? "Nobody's overdue." : 'Nothing outstanding with anyone else.'}
         run={run}
         workspace={workspace}
+        onOpenLink={onOpenLink}
       />
     </div>
   );
@@ -106,6 +111,7 @@ function ActionList({
   empty,
   run,
   workspace,
+  onOpenLink,
 }: {
   title: string;
   hint: string;
@@ -113,6 +119,7 @@ function ActionList({
   empty: string;
   run: ReturnType<typeof useEngagementRun>['run'];
   workspace: ReturnType<typeof useWorkspace>;
+  onOpenLink?: (link: ProjectLink) => void;
 }) {
   return (
     <section className="settings-card">
@@ -156,9 +163,14 @@ function ActionList({
                 </span>
               )}
               {entry.item.link && (
-                <span className="agenda-tag agenda-tag-link" title={`Linked to ${entry.item.link.label}`}>
+                <button
+                  className="agenda-tag agenda-tag-link"
+                  title={`Open “${entry.item.link.label}” in the plan`}
+                  onClick={() => onOpenLink?.(entry.item.link!)}
+                  disabled={!onOpenLink}
+                >
                   ⧉ {entry.item.link.label}
-                </span>
+                </button>
               )}
               <ItemControls item={entry.item} workspace={workspace} run={run} />
               <span className="agenda-row-note">

@@ -2318,7 +2318,8 @@ body {
 }
 .concern-row {
   display: grid;
-  grid-template-columns: auto auto minmax(120px, 1fr) minmax(0, 2fr);
+  /* Trailing `auto` is the "Raise…" action (#163). */
+  grid-template-columns: auto auto minmax(120px, 1fr) minmax(0, 2fr) auto;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
@@ -4272,4 +4273,27 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
 .engagement-backup {
   display: flex;
   gap: 8px;
+}
+
+/* "Raise…" on a concern row, and the clickable link chip an item shows
+   when it came from (or points at) a plan node. */
+.concern-raise {
+  justify-self: end;
+}
+.raise-picker {
+  max-width: 22ch;
+}
+button.agenda-tag-link {
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--accent);
+}
+button.agenda-tag-link:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+button.agenda-tag-link:disabled {
+  color: var(--muted);
+  cursor: default;
 }
