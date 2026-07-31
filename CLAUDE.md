@@ -179,7 +179,13 @@ Four nouns, each generalised rather than enumerated:
   instead of closing; `link` is a **soft** `{projectId, nodeId, label}`
   reference into a project graph — it crosses a store boundary, so it can
   never be an edge and carries its own label to survive the target's
-  deletion.
+  deletion. Links are **authored from the Concerns view** (`RaiseTopic` —
+  the one place a view deliberately writes to the *other* store, because
+  most concerns are resolved by talking to someone rather than by editing
+  the plan) and **followed** from the item's chip via `App`'s
+  `openProjectLink`, which switches project first when the link points
+  into a different one. Either end may have been deleted since, so
+  following one checks and says so rather than assuming.
 - **`Interaction`** — the append-only log, and the **only** writer of
   recency and `lastRaisedAt`. No direction field: staleness is tracked by
   who owes the next move, not who initiated the conversation.
