@@ -26,6 +26,13 @@ const INDEX_KEY = 'index';
  *  app falls back to an empty project and the next edit's autosave
  *  overwrites `current`; see `saveUnrecoveredText` below. */
 const UNRECOVERED_KEY = 'unrecovered';
+/** The engagement tracker's workspace record (#163). One key, not one per
+ *  project: stakeholders, forums and the comms log are workspace-scoped and
+ *  deliberately do not switch when the active project does. */
+const ENGAGEMENT_KEY = 'engagement';
+/** Same backup-rather-than-discard slot as UNRECOVERED_KEY, for the
+ *  engagement record. */
+const ENGAGEMENT_UNRECOVERED_KEY = 'engagement-unrecovered';
 
 function projectKey(id: string): string {
   return `project:${id}`;
@@ -201,6 +208,20 @@ export function loadUnrecoveredText(): Promise<string | undefined> {
 
 export function clearUnrecoveredText(): Promise<unknown> {
   return withStore('readwrite', (store) => store.delete(UNRECOVERED_KEY));
+}
+
+/* --------------------------- engagement tracker -------------------------- */
+
+export function loadEngagementText(): Promise<string | undefined> {
+  return withStore<string | undefined>('readonly', (store) => store.get(ENGAGEMENT_KEY));
+}
+
+export function saveEngagementText(text: string): Promise<unknown> {
+  return withStore('readwrite', (store) => store.put(text, ENGAGEMENT_KEY));
+}
+
+export function saveUnrecoveredEngagementText(text: string): Promise<unknown> {
+  return withStore('readwrite', (store) => store.put(text, ENGAGEMENT_UNRECOVERED_KEY));
 }
 
 export interface AutosaverOptions<S> {

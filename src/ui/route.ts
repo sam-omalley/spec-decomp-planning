@@ -9,9 +9,12 @@
 
 import type { GraphMode } from './GraphView.tsx';
 
-export type Section = 'spec' | 'planning' | 'graph' | 'reporting' | 'settings';
+export type Section = 'spec' | 'planning' | 'graph' | 'reporting' | 'engagement' | 'settings';
 export type PlanMode = 'outline' | 'table' | 'markdown';
 export type ReportMode = 'timeline' | 'metrics' | 'assignees' | 'concerns' | 'coverage';
+/** Engagement tracker sub-views (#163): the meeting agenda, and the roster
+ *  of people and forums behind it. */
+export type EngagementMode = 'agenda' | 'people';
 export type { GraphMode };
 
 /** The full navigation state the URL encodes. */
@@ -20,6 +23,7 @@ export interface RouteState {
   planMode: PlanMode;
   graphMode: GraphMode;
   reportMode: ReportMode;
+  engagementMode: EngagementMode;
 }
 
 /** A section plus (when valid) the one sub-view that section owns. */
@@ -28,9 +32,17 @@ export interface RoutePatch {
   planMode?: PlanMode;
   graphMode?: GraphMode;
   reportMode?: ReportMode;
+  engagementMode?: EngagementMode;
 }
 
-const SECTIONS: readonly Section[] = ['spec', 'planning', 'graph', 'reporting', 'settings'];
+const SECTIONS: readonly Section[] = [
+  'spec',
+  'planning',
+  'graph',
+  'reporting',
+  'engagement',
+  'settings',
+];
 const PLAN_MODES: readonly PlanMode[] = ['outline', 'table', 'markdown'];
 const GRAPH_MODES: readonly GraphMode[] = ['map', 'dep'];
 const REPORT_MODES: readonly ReportMode[] = [
@@ -40,6 +52,7 @@ const REPORT_MODES: readonly ReportMode[] = [
   'concerns',
   'coverage',
 ];
+const ENGAGEMENT_MODES: readonly EngagementMode[] = ['agenda', 'people'];
 
 /** The active sub-view for a section, or null for a section with none (Spec). */
 export function subOf(state: RouteState): string | null {
@@ -50,6 +63,8 @@ export function subOf(state: RouteState): string | null {
       return state.graphMode;
     case 'reporting':
       return state.reportMode;
+    case 'engagement':
+      return state.engagementMode;
     default:
       return null;
   }
@@ -78,6 +93,8 @@ export function parseHash(hash: string): RoutePatch | null {
     patch.graphMode = sub as GraphMode;
   } else if (section === 'reporting' && REPORT_MODES.includes(sub as ReportMode)) {
     patch.reportMode = sub as ReportMode;
+  } else if (section === 'engagement' && ENGAGEMENT_MODES.includes(sub as EngagementMode)) {
+    patch.engagementMode = sub as EngagementMode;
   }
   return patch;
 }

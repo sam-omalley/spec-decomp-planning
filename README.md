@@ -20,13 +20,14 @@ There is deliberately no rigid "plan / epic / block" hierarchy — just groups n
 
 ## Views
 
-Every view is a pure projection of the same graph, kept in sync:
+Every view is a pure projection of the same graph, kept in sync (the Engagement tracker is the one deliberate exception — see below):
 
 - **Spec outliner** — decompose the specification. Keyboard-first (`Enter` = sibling, `Tab` = indent), Things-style inline detail cards (`⌘↩`). Purely structural: no estimates, no dependencies — just what must be built.
 - **Planning view** — the delivery forest (outline or table), the thing you actually estimate, track, and sequence. Drag spec rows onto groups to assign; coverage and overlap are shown as chips and badges.
 - **Graph view** — the whole graph at once: spec forest left-to-right, delivery forest mirrored right-to-left, with `assigned_to` edges bridging the two (Map mode) or the delivery groups' dependency graph, lag/lead and start-to-start included (Dependency mode, with Tarjan cycle detection — cycles are visualized, never forbidden).
 - **Markdown view** — the delivery plan rendered as copyable Markdown for export.
 - **Reporting** — Timeline (Gantt, with a P80 uncertainty whisker and a lane per release window), Metrics (projected finish, burn-up, estimate-vs-actual, a sampled P50/P80 projection range), Assignees (per-resource stats), Concerns (overdue/blocked/cycle/unestimated/unassigned flags, work still owned by someone off the team, plus releases projected to miss their target), and Coverage (spec items no group addresses).
+- **Engagement** — the stakeholder tracker: Agenda (pick a forum — a 1-1, a steering group, any regular contact — and it generates what to raise from the live items, then logs the meeting, stamps what you covered and captures the actions agreed, in one undoable step) and People (the roster, their away dates, and the forums they sit in, whose cadence drives the recency check). Deliberately **not** part of the project graph: stakeholders, forums and the comms log are workspace-scoped and shared across every project, in their own store with its own undo history.
 - **Settings** — schedule (start/target dates, holidays), the delivery team (FTE, individual leave, and when each person joined/left the project), releases (authored start→target windows that groups commit to, inherited down the plan tree), points↔days conversion, editing locks, and named baselines to diff the current plan against.
 
 Plus a resource-constrained **scheduler** (skip-weekends calendar, capacity per team member, tracks that open and close as people join and leave), **what-if scenarios** (preview a team/speed change without touching the plan), any number of **local projects** with a header switcher, CSV export, and full **undo/redo**.
