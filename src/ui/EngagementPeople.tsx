@@ -19,10 +19,13 @@
  * than in a fifth tab.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DateRangeEditor } from './DateRangeEditor.tsx';
 import { engagementStore, useWorkspace } from '../engagement/store.ts';
+import { deserializeWorkspace, serializeWorkspace } from '../engagement/serialize.ts';
+import { datedFilename, downloadFile } from './download.ts';
 import {
+  EngagementError,
   addForum,
   addPerson,
   createId,
@@ -315,7 +318,91 @@ export function EngagementPeople() {
           );
         })}
       </section>
+
+      <BackupCard />
     </div>
+  );
+}
+
+/**
+ * Export/import for the whole tracker. The project side has had Save/Open
+ * since the beginning; without the same here the record of what you owe
+ * real people would live in exactly one browser profile with no way out —
+ * which matters more for this data than for a plan you can rebuild.
+ *
+ * Import replaces everything (there is one workspace, not a list of them),
+ * so it confirms first when there's anything to lose, and `reset` clears
+ * undo history by design — the same contract as opening a project file.
+ */
+function BackupCard() {
+  const workspace = useWorkspace();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const populated =
+    workspace.people.length > 0 ||
+    workspace.forums.length > 0 ||
+    Object.keys(workspace.items).length > 0;
+
+  async function importFile(file: File) {
+    try {
+      const incoming = deserializeWorkspace(await file.text());
+      if (
+        populated &&
+        !window.confirm(
+          `Replace the whole tracker with “${file.name}”? ` +
+            'Every stakeholder, forum, item and logged conversation is replaced, ' +
+            'and the undo history is discarded.',
+        )
+      ) {
+        return;
+      }
+      engagementStore.reset(incoming);
+    } catch (e) {
+      window.alert(
+        e instanceof EngagementError
+          ? `Could not open that file: ${e.message}`
+          : 'Could not open that file.',
+      );
+    }
+  }
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card-title">
+        <span>Backup &amp; transfer</span>
+      </div>
+      <p className="metric-hint">
+        The tracker autosaves to this browser only, and is shared across every project rather than
+        stored inside one. Export it to move it to another machine or keep a copy.
+      </p>
+      <div className="engagement-backup">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void importFile(file);
+          }}
+        />
+        <button
+          className="engagement-add"
+          onClick={() =>
+            downloadFile(
+              serializeWorkspace(engagementStore.getState()),
+              datedFilename('stakeholders', 'json'),
+              'application/json',
+            )
+          }
+        >
+          Export…
+        </button>
+        <button className="engagement-add" onClick={() => fileRef.current?.click()}>
+          Import…
+        </button>
+      </div>
+    </section>
   );
 }
 

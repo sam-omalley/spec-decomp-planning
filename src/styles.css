@@ -4267,3 +4267,9 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   white-space: nowrap;
   max-width: 24ch;
 }
+
+/* Export/import buttons on the engagement People tab. */
+.engagement-backup {
+  display: flex;
+  gap: 8px;
+}
