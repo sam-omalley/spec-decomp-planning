@@ -18,7 +18,7 @@ import { todayIso, updateItem } from '../engagement/workspace.ts';
 import { openActions, type ActionEntry } from '../engagement/queries.ts';
 import type { NagKind } from '../engagement/recency.ts';
 import type { ProjectLink } from '../engagement/types.ts';
-import { ItemControls } from './ItemControls.tsx';
+import { ItemControls, ItemDetailsEditor } from './ItemControls.tsx';
 import { useEngagementRun } from './useEngagementRun.ts';
 import { engagementStore } from '../engagement/store.ts';
 
@@ -38,6 +38,8 @@ export function EngagementActions({
   // Nagging items only — the same "what should I be worrying about" filter
   // Concerns offers on the plan side. View state, never stored.
   const [staleOnly, setStaleOnly] = useState(false);
+  // Which row's details are open — one at a time across both lists.
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
 
   const shown = staleOnly ? entries.filter((e) => e.nag !== null) : entries;
   const mine = shown.filter((e) => e.item.ownerId === null);
@@ -90,6 +92,8 @@ export function EngagementActions({
         run={run}
         workspace={workspace}
         onOpenLink={onOpenLink}
+        detailsFor={detailsFor}
+        onToggleDetails={(id) => setDetailsFor(detailsFor === id ? null : id)}
       />
       <ActionList
         title="Waiting on others"
@@ -99,6 +103,8 @@ export function EngagementActions({
         run={run}
         workspace={workspace}
         onOpenLink={onOpenLink}
+        detailsFor={detailsFor}
+        onToggleDetails={(id) => setDetailsFor(detailsFor === id ? null : id)}
       />
     </div>
   );
@@ -112,6 +118,8 @@ function ActionList({
   run,
   workspace,
   onOpenLink,
+  detailsFor,
+  onToggleDetails,
 }: {
   title: string;
   hint: string;
@@ -120,6 +128,8 @@ function ActionList({
   run: ReturnType<typeof useEngagementRun>['run'];
   workspace: ReturnType<typeof useWorkspace>;
   onOpenLink?: (link: ProjectLink) => void;
+  detailsFor: string | null;
+  onToggleDetails: (id: string) => void;
 }) {
   return (
     <section className="settings-card">
@@ -172,7 +182,13 @@ function ActionList({
                   ⧉ {entry.item.link.label}
                 </button>
               )}
-              <ItemControls item={entry.item} workspace={workspace} run={run} />
+              <ItemControls
+                item={entry.item}
+                workspace={workspace}
+                run={run}
+                detailsOpen={detailsFor === entry.item.id}
+                onToggleDetails={() => onToggleDetails(entry.item.id)}
+              />
               <span className="agenda-row-note">
                 {entry.overdueDays > 0
                   ? `due ${entry.overdueDays}d ago`
@@ -180,6 +196,7 @@ function ActionList({
                     ? `${NAG_LABEL[entry.nag]} · ${entry.staleDays}d`
                     : `${entry.staleDays}d old`}
               </span>
+              {detailsFor === entry.item.id && <ItemDetailsEditor item={entry.item} run={run} />}
             </li>
           ))}
         </ul>

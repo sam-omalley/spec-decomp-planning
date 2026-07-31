@@ -4297,3 +4297,28 @@ button.agenda-tag-link:disabled {
   color: var(--muted);
   cursor: default;
 }
+
+/* Item details (#163): a ≡ indicator that fills in once there's something
+   to read, and the inline editor it opens on its own line of the row —
+   the same Things3 shape the outliner uses. */
+.item-details-toggle {
+  flex: none;
+  opacity: 0.45;
+}
+.item-details-toggle:hover,
+.item-details-toggle[aria-expanded='true'] {
+  opacity: 1;
+}
+.item-details-toggle-set {
+  opacity: 1;
+  color: var(--accent);
+}
+.settings-card .agenda-row .item-details,
+.item-details {
+  flex: 1 1 100%;
+  width: 100%;
+  margin: 4px 0 2px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+}

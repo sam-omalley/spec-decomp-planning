@@ -22,7 +22,7 @@ import { contactStatuses, forumStatuses } from '../engagement/recency.ts';
 import type { Item, ProjectLink, Workspace } from '../engagement/types.ts';
 import type { NewItem } from '../engagement/workspace.ts';
 import { standingText } from './EngagementPeople.tsx';
-import { ItemControls } from './ItemControls.tsx';
+import { ItemControls, ItemDetailsEditor } from './ItemControls.tsx';
 import { useEngagementRun, type EngagementRun } from './useEngagementRun.ts';
 
 const SECTION_LABEL: Record<AgendaSectionKind, string> = {
@@ -74,6 +74,9 @@ export function EngagementAgenda({ onOpenLink }: { onOpenLink?: (link: ProjectLi
   // agenda changes underneath it (below), since what's on the clipboard is
   // then no longer what's on screen.
   const [copied, setCopied] = useState(false);
+  // Which row's details are open — one at a time, like the outliner's
+  // details card. View state; never stored.
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const { run, error, dismiss } = useEngagementRun();
   const banner = error ?? copyError;
@@ -271,6 +274,10 @@ export function EngagementAgenda({ onOpenLink }: { onOpenLink?: (link: ProjectLi
                     ])
                   }
                   onOpenLink={onOpenLink}
+                  detailsOpen={detailsFor === entry.item.id}
+                  onToggleDetails={() =>
+                    setDetailsFor(detailsFor === entry.item.id ? null : entry.item.id)
+                  }
                   run={run}
                 />
               ))}
@@ -431,6 +438,8 @@ function AgendaRow({
   onToggleRaised,
   onAddAction,
   onOpenLink,
+  detailsOpen,
+  onToggleDetails,
   run,
 }: {
   item: Item;
@@ -441,6 +450,8 @@ function AgendaRow({
   onToggleRaised: () => void;
   onAddAction: () => void;
   onOpenLink?: (link: ProjectLink) => void;
+  detailsOpen: boolean;
+  onToggleDetails: () => void;
   run: EngagementRun['run'];
 }) {
   return (
@@ -476,8 +487,15 @@ function AgendaRow({
       <button className="agenda-row-btn" title="Add an action under this item" onClick={onAddAction}>
         +↳
       </button>
-      <ItemControls item={item} workspace={workspace} run={run} />
+      <ItemControls
+        item={item}
+        workspace={workspace}
+        run={run}
+        detailsOpen={detailsOpen}
+        onToggleDetails={onToggleDetails}
+      />
       {note && <span className="agenda-row-note">{note}</span>}
+      {detailsOpen && <ItemDetailsEditor item={item} run={run} />}
     </li>
   );
 }
