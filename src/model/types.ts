@@ -166,6 +166,24 @@ export interface Resource {
   /** Individual time off; only removes capacity from this resource's own
    *  scheduling track (see `scheduleProject` in `schedule.ts`). */
   leave: DateRange[];
+  /**
+   * First day this resource is on the team (ISO date); null = always has
+   * been. The open end of the availability window (#161) — the same idea as
+   * `leave` (calendar availability), but for joining and leaving rather than
+   * a gap in the middle, so a team can change over the life of a project
+   * without anyone being deleted from the roster.
+   *
+   * Availability gates **projected placement only**: the resource's track
+   * takes no projected work outside the window, but a unit with real dates
+   * (done or in progress) keeps both its dates and its `resourceId` — it
+   * demonstrably happened, so the record of who did it survives a departure.
+   * That is the point of the window over deleting the resource, which would
+   * strip `resourceId` from everything they ever finished.
+   */
+  availableFrom: string | null;
+  /** Last day on the team (ISO date, inclusive); null = still on it. Must
+   *  not be before `availableFrom`. See `availableFrom` for the semantics. */
+  availableUntil: string | null;
 }
 
 /**

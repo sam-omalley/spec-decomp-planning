@@ -34,6 +34,7 @@ import {
   updateSettings,
 } from '../model/graph.ts';
 import { milestoneSummaries } from '../model/milestones.ts';
+import { availableResources, standingLabel } from '../model/resources.ts';
 import type { DateRange, ProjectSettings } from '../model/types.ts';
 import { store, useActiveProjectId, useProjectGraph, useProjects } from '../store/appStore.ts';
 import type { ProjectIndexEntry } from '../persist/persistence.ts';
@@ -168,6 +169,24 @@ export function SettingsView() {
   }
   function removeResourceLeave(id: string, current: DateRange[], index: number) {
     store.commit((g) => updateResource(g, id, { leave: current.filter((_, i) => i !== index) }));
+  }
+  /** Sets one end of a resource's time on the team (#161); empty = open.
+   *  A reversed window would throw in `updateSettings`, so it's dropped
+   *  here instead — the same pre-validation the numeric fields do. */
+  function setResourceWindow(
+    id: string,
+    field: 'availableFrom' | 'availableUntil',
+    raw: string,
+  ) {
+    const resource = s.resources.find((r) => r.id === id);
+    if (!resource) return;
+    const value = raw === '' ? null : raw;
+    const from = field === 'availableFrom' ? value : resource.availableFrom;
+    const until = field === 'availableUntil' ? value : resource.availableUntil;
+    if (from !== null && until !== null && from > until) return;
+    store.commit((g) =>
+      updateResource(g, id, field === 'availableFrom' ? { availableFrom: value } : { availableUntil: value }),
+    );
   }
 
   /** A new release opens today (or at the project start, whichever is
@@ -356,9 +375,14 @@ export function SettingsView() {
               Capacity:{' '}
               {s.resources.length === 0
                 ? '1 full-time track'
-                : `${s.resources.length} resource${s.resources.length === 1 ? '' : 's'}`}{' '}
+                : (() => {
+                    const onTeam = availableResources(s, todayIso()).length;
+                    const off = s.resources.length - onTeam;
+                    return `${onTeam} resource${onTeam === 1 ? '' : 's'} on the team today${off > 0 ? ` (${off} outside their window)` : ''}`;
+                  })()}{' '}
               · durations ÷ speed, then ÷ each resource's FTE. Weekends,
-              holidays, and a resource's own leave are all skipped.
+              holidays, a resource's own leave, and any day they're off the
+              team are all skipped.
             </p>
           </section>
 
@@ -448,9 +472,39 @@ export function SettingsView() {
                         onRemove={(i) => removeResourceLeave(r.id, r.leave, i)}
                       />
                     </div>
+                    <div className="resource-window">
+                      <span className="meta-label">On team</span>
+                      <input
+                        className="meta-input"
+                        type="date"
+                        title="First day on the team — empty means they always have been"
+                        value={r.availableFrom ?? ''}
+                        onChange={(e) => setResourceWindow(r.id, 'availableFrom', e.target.value)}
+                      />
+                      <span className="resource-window-sep">→</span>
+                      <input
+                        className="meta-input"
+                        type="date"
+                        title="Last day on the team — empty means ongoing"
+                        value={r.availableUntil ?? ''}
+                        onChange={(e) => setResourceWindow(r.id, 'availableUntil', e.target.value)}
+                      />
+                      {standingLabel(r, todayIso()) !== null && (
+                        <span className="asg-standing">{standingLabel(r, todayIso())}</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
+            )}
+            {s.resources.length > 0 && (
+              <p className="settings-note">
+                When someone joins or leaves, set their <strong>On team</strong>{' '}
+                dates: they keep their name on everything they already
+                finished, and count for capacity, scheduling and Concerns only
+                inside that window. × removes them from the project outright
+                and clears them off past work too.
+              </p>
             )}
             <button className="resource-add" onClick={addTeamResource}>
               + Add resource

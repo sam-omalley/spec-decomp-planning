@@ -26,10 +26,10 @@ Every view is a pure projection of the same graph, kept in sync:
 - **Planning view** — the delivery forest (outline or table), the thing you actually estimate, track, and sequence. Drag spec rows onto groups to assign; coverage and overlap are shown as chips and badges.
 - **Graph view** — the whole graph at once: spec forest left-to-right, delivery forest mirrored right-to-left, with `assigned_to` edges bridging the two (Map mode) or the delivery groups' dependency graph, lag/lead and start-to-start included (Dependency mode, with Tarjan cycle detection — cycles are visualized, never forbidden).
 - **Markdown view** — the delivery plan rendered as copyable Markdown for export.
-- **Reporting** — Timeline (Gantt, with a P80 uncertainty whisker and a lane per release window), Metrics (projected finish, burn-up, estimate-vs-actual, a sampled P50/P80 projection range), Assignees (per-resource stats), Concerns (overdue/blocked/cycle/unestimated/unassigned flags, plus releases projected to miss their target), and Coverage (spec items no group addresses).
-- **Settings** — schedule (start/target dates, holidays), the delivery team (FTE, individual leave), releases (authored start→target windows that groups commit to, inherited down the plan tree), points↔days conversion, editing locks, and named baselines to diff the current plan against.
+- **Reporting** — Timeline (Gantt, with a P80 uncertainty whisker and a lane per release window), Metrics (projected finish, burn-up, estimate-vs-actual, a sampled P50/P80 projection range), Assignees (per-resource stats), Concerns (overdue/blocked/cycle/unestimated/unassigned flags, work still owned by someone off the team, plus releases projected to miss their target), and Coverage (spec items no group addresses).
+- **Settings** — schedule (start/target dates, holidays), the delivery team (FTE, individual leave, and when each person joined/left the project), releases (authored start→target windows that groups commit to, inherited down the plan tree), points↔days conversion, editing locks, and named baselines to diff the current plan against.
 
-Plus a resource-constrained **scheduler** (skip-weekends calendar, capacity per team member), **what-if scenarios** (preview a team/speed change without touching the plan), any number of **local projects** with a header switcher, CSV export, and full **undo/redo**.
+Plus a resource-constrained **scheduler** (skip-weekends calendar, capacity per team member, tracks that open and close as people join and leave), **what-if scenarios** (preview a team/speed change without touching the plan), any number of **local projects** with a header switcher, CSV export, and full **undo/redo**.
 
 ## Tech
 

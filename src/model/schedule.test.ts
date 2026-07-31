@@ -23,7 +23,14 @@ function base(overrides: Partial<Parameters<typeof updateSettings>[1]> = {}): Pr
 
 /** N full-time tracks, ids r0..r(N-1) — capacity is one track per resource. */
 function tracks(n: number, fte = 1) {
-  return Array.from({ length: n }, (_, i) => ({ id: `r${i}`, name: `R${i}`, fte, leave: [] }));
+  return Array.from({ length: n }, (_, i) => ({
+    id: `r${i}`,
+    name: `R${i}`,
+    fte,
+    leave: [],
+    availableFrom: null,
+    availableUntil: null,
+  }));
 }
 
 function group(g: ProjectGraph, id: string, days: number | null, parent?: string): ProjectGraph {
@@ -143,7 +150,7 @@ describe('scheduleProject — capacity', () => {
 
 describe('scheduleProject — resourcing', () => {
   it('stretches a duration by the assigned resource FTE', () => {
-    let g = base({ resources: [{ id: 'r0', name: 'Half', fte: 0.5, leave: [] }] });
+    let g = base({ resources: [{ id: 'r0', name: 'Half', fte: 0.5, leave: [], availableFrom: null, availableUntil: null }] });
     g = group(g, 'a', 2); // 2 / (1 × 0.5) = 4 working days → Mon..Thu
     g = assignResource(g, 'a', 'r0');
     const s = scheduleProject(g);
@@ -209,7 +216,7 @@ describe('scheduleProject — calendar exceptions (holidays & leave)', () => {
 
   it("extends a unit's finish past a mid-span leave day on its own resource's track", () => {
     let g = base({
-      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-03', end: '2024-01-03' }] }],
+      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-03', end: '2024-01-03' }], availableFrom: null, availableUntil: null }],
     });
     g = group(g, 'a', 3); // naively Mon..Wed
     g = assignResource(g, 'a', 'r0');
@@ -220,7 +227,7 @@ describe('scheduleProject — calendar exceptions (holidays & leave)', () => {
 
   it("pushes a unit's start forward when it would otherwise begin on its resource's leave", () => {
     let g = base({
-      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-01', end: '2024-01-01' }] }],
+      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-01', end: '2024-01-01' }], availableFrom: null, availableUntil: null }],
     });
     g = group(g, 'a', 1);
     g = assignResource(g, 'a', 'r0');
@@ -232,8 +239,8 @@ describe('scheduleProject — calendar exceptions (holidays & leave)', () => {
   it("only affects the leave-taking resource's own track, not a parallel one", () => {
     let g = base({
       resources: [
-        { id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-02', end: '2024-01-03' }] },
-        { id: 'r1', name: 'Bo', fte: 1, leave: [] },
+        { id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-02', end: '2024-01-03' }], availableFrom: null, availableUntil: null },
+        { id: 'r1', name: 'Bo', fte: 1, leave: [], availableFrom: null, availableUntil: null },
       ],
     });
     g = group(g, 'a', 3);
@@ -247,7 +254,7 @@ describe('scheduleProject — calendar exceptions (holidays & leave)', () => {
 
   it('never moves an in-progress unit\'s real start, only extends its projected remainder', () => {
     let g = base({
-      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-03', end: '2024-01-03' }] }],
+      resources: [{ id: 'r0', name: 'Ada', fte: 1, leave: [{ start: '2024-01-03', end: '2024-01-03' }], availableFrom: null, availableUntil: null }],
     });
     g = group(g, 'a', 4); // 4-day estimate
     g = assignResource(g, 'a', 'r0');
@@ -570,5 +577,104 @@ describe('scheduleProject — durationOverrides (#133)', () => {
     g = group(g, 'b', 2);
     g = addEdge(g, { type: 'depends_on', from: 'b', to: 'a', lagDays: 1 });
     assert.deepEqual(scheduleProject(g, undefined, new Map()), scheduleProject(g));
+  });
+});
+
+describe('scheduleProject — availability windows (#161)', () => {
+  /** Ada leaves after Fri Jan 5; Bo stays. */
+  function team(adaUntil: string | null, adaFrom: string | null = null) {
+    return [
+      { id: 'r0', name: 'Ada', fte: 1, leave: [], availableFrom: adaFrom, availableUntil: adaUntil },
+      { id: 'r1', name: 'Bo', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+    ];
+  }
+
+  it('re-places a not-started unit pinned to someone who has left', () => {
+    let g = base({ resources: team('2024-01-05') });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    const s = scheduleProject(g, '2024-01-08'); // Ada left last week
+    assert.equal(s.groups.get('a')!.trackResourceId, 'r1');
+    assert.equal(s.groups.get('a')!.start, '2024-01-08'); // Bo is free
+  });
+
+  it('keeps a done unit on its own resource, whatever the roster says now', () => {
+    let g = base({ resources: team('2024-01-05') });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    g = setActualDates(g, 'a', { actualStart: '2024-01-02', actualFinish: '2024-01-04' });
+    const s = scheduleProject(g, '2024-01-08');
+    assert.equal(s.groups.get('a')!.trackResourceId, 'r0'); // Ada did it; she keeps it
+    assert.deepEqual(
+      { start: s.groups.get('a')!.start, finish: s.groups.get('a')!.finish },
+      { start: '2024-01-02', finish: '2024-01-04' },
+    );
+  });
+
+  it('keeps an in-progress unit on its own resource too', () => {
+    let g = base({ resources: team('2024-01-05') });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    g = setActualDates(g, 'a', { actualStart: '2024-01-04', actualFinish: null });
+    const s = scheduleProject(g, '2024-01-08');
+    assert.equal(s.groups.get('a')!.trackResourceId, 'r0');
+    assert.equal(s.groups.get('a')!.start, '2024-01-04'); // its real start, unmoved
+  });
+
+  it('does not count the working day after a weekend departure as still on the team', () => {
+    // Ada's last day is Sat Jan 6: the next working day (Mon Jan 8) is out,
+    // even though snapping that date forward would land exactly on it.
+    let g = base({ resources: team('2024-01-06') });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    const s = scheduleProject(g, '2024-01-08');
+    assert.equal(s.groups.get('a')!.trackResourceId, 'r1');
+  });
+
+  it('opens a track no earlier than its join date, so work waits for a new hire', () => {
+    let g = base({
+      resources: [
+        { id: 'r0', name: 'Ada', fte: 1, leave: [], availableFrom: '2024-01-08', availableUntil: null },
+      ],
+    });
+    g = group(g, 'a', 3);
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.start, '2024-01-08'); // not Jan 1
+    assert.equal(s.groups.get('a')!.trackResourceId, 'r0');
+  });
+
+  it('leaves a unit pinned to a future joiner on their own track, waiting', () => {
+    let g = base({ resources: team(null, '2024-01-08') });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    const s = scheduleProject(g);
+    assert.equal(s.groups.get('a')!.trackResourceId, 'r0');
+    assert.equal(s.groups.get('a')!.start, '2024-01-08');
+  });
+
+  it('still projects a plan whose whole team has left, rather than dropping units', () => {
+    let g = base({
+      resources: [
+        { id: 'r0', name: 'Ada', fte: 1, leave: [], availableFrom: null, availableUntil: '2024-01-05' },
+      ],
+    });
+    g = group(g, 'a', 3);
+    g = assignResource(g, 'a', 'r0');
+    const s = scheduleProject(g, '2024-01-08');
+    assert.equal(s.groups.get('a')!.start, '2024-01-08');
+    assert.equal(s.projectFinish, '2024-01-10');
+  });
+
+  it('is a no-op for a roster with no windows set', () => {
+    let g = base({ resources: tracks(2) });
+    g = group(g, 'a', 3);
+    g = group(g, 'b', 2);
+    const withWindows = updateSettings(g, {
+      resources: [
+        { id: 'r0', name: 'R0', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+        { id: 'r1', name: 'R1', fte: 1, leave: [], availableFrom: null, availableUntil: null },
+      ],
+    });
+    assert.deepEqual(scheduleProject(withWindows), scheduleProject(g));
   });
 });

@@ -14,6 +14,7 @@ import {
   assignResource,
   setActualDates,
   setEstimate,
+  todayIso,
   updateNode,
 } from '../model/graph.ts';
 import { milestoneOf } from '../model/milestones.ts';
@@ -22,6 +23,7 @@ import { store, useProjectGraph } from '../store/appStore.ts';
 import { ActualDateInput } from './ActualDateInput.tsx';
 import { InfoDot } from './InfoDot.tsx';
 import { KeyEditor } from './KeyEditor.tsx';
+import { ResourceOptions } from './ResourceOptions.tsx';
 
 const STATUSES: Status[] = ['not_started', 'in_progress', 'blocked', 'done'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'critical'];
@@ -152,11 +154,7 @@ export function NodeMetaEditor({ id }: NodeMetaEditorProps) {
             }
           >
             <option value="">Unassigned</option>
-            {graph.settings.resources.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name.trim() || 'Unnamed'}
-              </option>
-            ))}
+            <ResourceOptions resources={graph.settings.resources} on={todayIso()} />
           </select>
         </label>
         {graph.settings.milestones.length > 0 && (

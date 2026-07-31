@@ -6,8 +6,8 @@
  * projection like `metrics.ts`.
  *
  * Two families of concern:
- * - per-unit: a specific group is late, blocked, unestimated, cycling, or
- *   unassigned.
+ * - per-unit: a specific group is late, blocked, unestimated, cycling,
+ *   unassigned, or owned by someone off the team when it's scheduled.
  * - project-level (`id: null`): a release window (#159) won't be met, the
  *   whole plan is behind target, or the team is under-utilised (not enough
  *   work in progress).
@@ -20,10 +20,16 @@
  *
  * A parking-lot group (#155) and its subtree never raise a concern — being
  * parked out of the schedule is deliberate, not a signal to chase.
+ *
+ * Team-shaped signals count only the people actually on the team on `now`
+ * (#161) — capacity is who can pull work today, not who ever could. A former
+ * member keeps their completed history in `assigneeMetrics`; what they no
+ * longer do is inflate capacity or make the plan look owned.
  */
 
 import type { ProjectGraph } from './types.ts';
 import { childrenOf, isParked } from './graph.ts';
+import { availableResources, isAvailableEverAfter, standingLabel } from './resources.ts';
 import { cycleIndexOf } from './analysis.ts';
 import { scheduleProject, schedulingUnits } from './schedule.ts';
 import { milestoneSummaries } from './milestones.ts';
@@ -36,6 +42,7 @@ export type ConcernKind =
   | 'cycle' // in a dependency cycle
   | 'unestimated' // leaf group with no duration → not scheduled
   | 'unassigned' // no resource (team defined); medium once started, low otherwise
+  | 'owner_unavailable' // assigned to someone off the team when it's scheduled
   | 'thin_wip' // fewer items in progress than capacity
   | 'milestone_late' // a release's committed work is projected past its target
   | 'past_target'; // projected finish beyond the target date
@@ -60,9 +67,10 @@ const KIND_RANK: Record<ConcernKind, number> = {
   overdue: 2,
   cycle: 3,
   blocked: 4,
-  thin_wip: 5,
-  unassigned: 6,
-  unestimated: 7,
+  owner_unavailable: 5,
+  thin_wip: 6,
+  unassigned: 7,
+  unestimated: 8,
 };
 
 function titleOf(graph: ProjectGraph, id: string): string {
@@ -87,7 +95,13 @@ export function analyzeConcerns(
   const units = schedulingUnits(graph);
   const schedule = scheduleProject(graph, now);
   const cycles = cycleIndexOf(graph);
-  const teamDefined = graph.settings.resources.length > 0;
+  // Only people still on the team (or joining later) count as a team (#161):
+  // a roster of nothing but former members can't own anything, so nagging
+  // about unowned work against it would be noise. The departed still appear
+  // in `assigneeMetrics`' history — this is about who can be given work.
+  const roster = graph.settings.resources;
+  const teamDefined = roster.some((r) => isAvailableEverAfter(r, now));
+  const byId = new Map(roster.map((r) => [r.id, r]));
 
   let inProgress = 0;
   let notStarted = 0;
@@ -127,6 +141,23 @@ export function analyzeConcerns(
     // done (someone is or was doing the work with nothing to attribute it
     // to), low while it's still not started (less urgent — plenty of time
     // to assign before it matters).
+    // Pinned to someone who isn't on the team when the work is scheduled
+    // (#161) — they left, or haven't joined by then. The scheduler has
+    // already re-homed it onto an open track (that's how this is detected:
+    // the track it landed on isn't the one it asked for), so the projection
+    // is honest; what's left is a stale pin only a human can resolve.
+    const owner = node.resourceId !== null ? byId.get(node.resourceId) : undefined;
+    if (!done && owner && scheduled && scheduled.trackResourceId !== owner.id) {
+      const standing = standingLabel(owner, scheduled.start) ?? 'is not on the team then';
+      concerns.push({
+        kind: 'owner_unavailable',
+        severity: 'medium',
+        id,
+        title: titleOf(graph, id),
+        detail: `Assigned to ${owner.name.trim() || 'Unnamed'}, who ${standing} — scheduled from ${scheduled.start} on someone else's track. Reassign it to make the plan say who.`,
+      });
+    }
+
     if (teamDefined && node.resourceId === null) {
       const underway = started || done;
       concerns.push({
@@ -176,7 +207,7 @@ export function analyzeConcerns(
 
   // Team under-utilised: work waiting but fewer items in progress than the
   // capacity to run them.
-  const capacity = Math.max(1, graph.settings.resources.length);
+  const capacity = Math.max(1, availableResources(graph.settings, now).length);
   if (notStarted > 0 && inProgress < capacity) {
     concerns.push({
       kind: 'thin_wip',

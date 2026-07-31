@@ -18,6 +18,7 @@ import {
   assignResource,
   setActualDates,
   setEstimate,
+  todayIso,
   updateNode,
 } from '../model/graph.ts';
 import { milestoneOf } from '../model/milestones.ts';
@@ -28,6 +29,7 @@ import { ActualDateInput } from './ActualDateInput.tsx';
 import { EMPTY_FILTER, isFilterActive, matchesFilter, type FilterState } from './filter.ts';
 import { KeyEditor } from './KeyEditor.tsx';
 import { isLocked } from './locks.ts';
+import { ResourceOptions } from './ResourceOptions.tsx';
 import { treeDepth, visibleRows } from './outline.ts';
 import { useMultiSelect } from './useMultiSelect.ts';
 
@@ -328,11 +330,7 @@ export function PlanTable({
                     }
                   >
                     <option value="">—</option>
-                    {graph.settings.resources.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name.trim() || 'Unnamed'}
-                      </option>
-                    ))}
+                    <ResourceOptions resources={graph.settings.resources} on={todayIso()} />
                   </select>
                 </td>
                 {hasMilestones && (
