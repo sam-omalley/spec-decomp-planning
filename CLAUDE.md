@@ -186,9 +186,13 @@ Four nouns, each generalised rather than enumerated:
 
 Derived, never stored: `recency.ts` (per-person/per-forum contact standing
 and per-item staleness, shaped like `concerns.ts` — Concerns watches the
-work, this watches the conversation) and `agenda.ts` (a forum's agenda =
+work, this watches the conversation), `agenda.ts` (a forum's agenda =
 items targeting it **or** anyone attending it, split into standing /
-to-raise / chasing-them / I-owe-them). Logging a meeting is one
+to-raise / chasing-them / I-owe-them), and `queries.ts` (the cross-forum
+reads: `openActions` — note a `to_raise` item owned by me *is* an action
+on me, so follow-up reminders and assigned actions share one sorted list,
+partitioned by owner rather than computed twice; `logEntries`;
+`personDossier`). Logging a meeting is one
 `logInteraction` commit — record, stamps, and the actions agreed in the
 room — so a meeting is one undo step and cannot half-apply.
 
@@ -423,11 +427,18 @@ room — so a meeting is one undo step and cannot half-apply.
   all, at any depth, as a nested list so an uncovered subtree can still
   contain a covered "island"). Settings is a full-page tab (two-column
   card layout), not a header popover — it outgrew that.
-- The Engagement section (#163) groups two sub-views behind one tab:
+- The Engagement section (#163) groups four sub-views behind one tab:
   Agenda (per-forum, the working surface — generate what to raise, tick
-  what you covered, capture the actions, log it in one step) and People
-  (the roster, away dates, and forum membership). Unlike every other
-  section it reads the engagement workspace, not the project graph.
+  what you covered, capture the actions, log it in one step), Actions
+  (everything outstanding across every forum, split into what I owe and
+  what I'm waiting on — the view the per-meeting Agenda can't give you),
+  Log (every logged contact, newest first, filterable by person or forum;
+  it also owns **ad-hoc** contact capture, since a corridor conversation
+  resets recency exactly like a meeting and without it the nag would fire
+  on people you spoke to yesterday), and People (the roster, away dates,
+  forum membership, and a per-stakeholder dossier disclosed from each row
+  — standing, live items, recent contact). Unlike every other section they
+  read the engagement workspace, not the project graph.
 
 ## Conventions & environment
 

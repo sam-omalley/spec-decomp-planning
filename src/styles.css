@@ -4106,3 +4106,164 @@ h6.md-heading { font-size: 14px; color: var(--muted); }
   opacity: 0.45;
   cursor: default;
 }
+
+/* Engagement → Actions / Log / per-person dossier (#163). */
+/* Item rows inside a .settings-card (the Actions lists) must keep their own
+   sizing: the card's `.meta-input { width: 100% }` is meant for stacked
+   settings fields and would put every control on its own line here. */
+.settings-card .agenda-row .meta-input {
+  width: auto;
+}
+.settings-card .agenda-row .agenda-row-title {
+  flex: 1 1 18ch;
+  min-width: 12ch;
+}
+.agenda-row-due {
+  width: 14ch;
+}
+
+.actions-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0 4px;
+}
+.actions-tally {
+  font-size: 13px;
+  color: var(--muted);
+}
+.actions-tally strong {
+  font-size: 18px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  margin-right: 4px;
+}
+
+/* Same reason as .settings-card .agenda-row above: these read as inline
+   controls, not as stacked settings fields, so they keep their own size
+   rather than the card's full-width default. */
+.log-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.log-filters .meta-field {
+  flex: 0 1 22ch;
+}
+.settings-card .log-filters .meta-input,
+.settings-card .agenda-log-row .meta-input {
+  width: 100%;
+  max-width: 22ch;
+}
+.log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.log-entry {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.log-entry:last-child {
+  border-bottom: none;
+}
+.log-entry-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.log-date {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+}
+.log-forum {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.log-people {
+  font-size: 12px;
+  color: var(--muted);
+}
+.log-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.log-items {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Per-stakeholder detail, disclosed from a roster row. */
+.engagement-disclose {
+  flex: none;
+  font-size: 11px;
+}
+.person-dossier {
+  margin: 6px 0 2px 22px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--border);
+  background: var(--bg);
+  border-radius: 0 8px 8px 0;
+}
+.person-dossier .metric-hint {
+  margin: 0 0 6px;
+}
+.person-dossier-cols {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.person-dossier-cols > div {
+  flex: 1 1 22ch;
+  min-width: 20ch;
+}
+.person-dossier h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.person-dossier-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+}
+.person-dossier-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.person-dossier-note {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 24ch;
+}
