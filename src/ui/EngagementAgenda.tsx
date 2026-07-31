@@ -15,22 +15,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { engagementStore, useWorkspace } from '../engagement/store.ts';
-import {
-  EngagementError,
-  addItem,
-  createId,
-  logInteraction,
-  ownerLabel,
-  removeItem,
-  resolveItem,
-  todayIso,
-  updateItem,
-} from '../engagement/workspace.ts';
+import { addItem, createId, logInteraction, todayIso, updateItem } from '../engagement/workspace.ts';
 import { agendaFor, type AgendaSectionKind } from '../engagement/agenda.ts';
 import { contactStatuses, forumStatuses } from '../engagement/recency.ts';
 import type { Item, Workspace } from '../engagement/types.ts';
 import type { NewItem } from '../engagement/workspace.ts';
 import { standingText } from './EngagementPeople.tsx';
+import { ItemControls } from './ItemControls.tsx';
+import { useEngagementRun, type EngagementRun } from './useEngagementRun.ts';
 
 const SECTION_LABEL: Record<AgendaSectionKind, string> = {
   standing: 'Standing items',
@@ -77,7 +69,7 @@ export function EngagementAgenda() {
   const [drafts, setDrafts] = useState<DraftAction[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newRecurs, setNewRecurs] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { run, error, dismiss } = useEngagementRun();
 
   // Switching forum resets the in-progress meeting: the ticks, participants
   // and drafts all belonged to the room you just left.
@@ -92,20 +84,6 @@ export function EngagementAgenda() {
     () => (activeForumId === null ? [] : agendaFor(workspace, activeForumId, today)),
     [workspace, activeForumId, today],
   );
-
-  function run(mutate: (ws: Workspace) => Workspace, coalesce?: string): boolean {
-    try {
-      engagementStore.commit(mutate, coalesce ? { coalesce } : undefined);
-      setError(null);
-      return true;
-    } catch (e) {
-      if (e instanceof EngagementError) {
-        setError(e.message);
-        return false;
-      }
-      throw e;
-    }
-  }
 
   function toggle(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
     const next = new Set(set);
@@ -179,7 +157,7 @@ export function EngagementAgenda() {
       {error && (
         <div className="app-banner" role="alert">
           {error}
-          <button onClick={() => setError(null)}>Dismiss</button>
+          <button onClick={dismiss}>Dismiss</button>
         </div>
       )}
 
@@ -416,7 +394,7 @@ function AgendaRow({
   raised: boolean;
   onToggleRaised: () => void;
   onAddAction: () => void;
-  run: (mutate: (ws: Workspace) => Workspace, coalesce?: string) => boolean;
+  run: EngagementRun['run'];
 }) {
   return (
     <li className={`agenda-row${overdue ? ' agenda-row-overdue' : ''}`}>
@@ -443,55 +421,11 @@ function AgendaRow({
           ⧉ {item.link.label}
         </span>
       )}
-      <select
-        className="meta-input agenda-row-owner"
-        aria-label="Owner"
-        value={item.ownerId ?? ''}
-        title={`Owed by ${ownerLabel(workspace, item)}`}
-        onChange={(e) => run((ws) => updateItem(ws, item.id, { ownerId: e.target.value || null }))}
-      >
-        <option value="">Me</option>
-        {workspace.people
-          .filter((p) => p.archivedAt === null)
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-      </select>
-      <input
-        className="meta-input agenda-row-due"
-        type="date"
-        aria-label="Due"
-        value={item.dueDate ?? ''}
-        onChange={(e) => run((ws) => updateItem(ws, item.id, { dueDate: e.target.value || null }))}
-      />
-      {note && <span className="agenda-row-note">{note}</span>}
       <button className="agenda-row-btn" title="Add an action under this item" onClick={onAddAction}>
         +↳
       </button>
-      <button
-        className="agenda-row-btn"
-        title="Resolve with an outcome"
-        onClick={() => {
-          const resolution = window.prompt(`Outcome for “${item.title}”`, '');
-          if (resolution === null) return;
-          run((ws) => resolveItem(ws, item.id, resolution));
-        }}
-      >
-        ✓
-      </button>
-      <button
-        className="project-remove"
-        title="Delete this item and anything under it"
-        onClick={() => {
-          if (window.confirm(`Delete “${item.title}” and anything threaded under it?`)) {
-            run((ws) => removeItem(ws, item.id));
-          }
-        }}
-      >
-        ×
-      </button>
+      <ItemControls item={item} workspace={workspace} run={run} />
+      {note && <span className="agenda-row-note">{note}</span>}
     </li>
   );
 }
