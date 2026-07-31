@@ -28,7 +28,9 @@ import { shortcutsFor } from './ui/shortcuts.ts';
 import { TimelineView } from './ui/TimelineView.tsx';
 import { FilterFacets, type FacetValue } from './ui/FilterFacets.tsx';
 import { isFilterActive, matchesFilter, type FilterState } from './ui/filter.ts';
+import { EngagementActions } from './ui/EngagementActions.tsx';
 import { EngagementAgenda } from './ui/EngagementAgenda.tsx';
+import { EngagementLog } from './ui/EngagementLog.tsx';
 import { EngagementPeople } from './ui/EngagementPeople.tsx';
 import { engagementStore, useWorkspace } from './engagement/store.ts';
 import {
@@ -465,6 +467,8 @@ export function App() {
               label="Engagement view"
               options={[
                 ['agenda', 'Agenda'],
+                ['actions', 'Actions'],
+                ['log', 'Log'],
                 ['people', 'People'],
               ]}
               active={engagementMode}
@@ -593,6 +597,8 @@ export function App() {
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}
         {section === 'reporting' && reportMode === 'coverage' && <CoverageView onReveal={reveal} />}
         {section === 'engagement' && engagementMode === 'agenda' && <EngagementAgenda />}
+        {section === 'engagement' && engagementMode === 'actions' && <EngagementActions />}
+        {section === 'engagement' && engagementMode === 'log' && <EngagementLog />}
         {section === 'engagement' && engagementMode === 'people' && <EngagementPeople />}
         {section === 'settings' && <SettingsView />}
       </main>
@@ -648,6 +654,14 @@ export function App() {
         {section === 'engagement' && engagementMode === 'agenda' && (
           <>What to raise with each forum · tick what you covered, capture the actions, and
             log it — one step · stakeholders are shared across every project</>
+        )}
+        {section === 'engagement' && engagementMode === 'actions' && (
+          <>Everything outstanding across every forum · what I owe, and what I'm waiting on ·
+            a topic not yet raised counts as mine</>
+        )}
+        {section === 'engagement' && engagementMode === 'log' && (
+          <>Every logged contact, newest first · filter by person or forum · record an ad-hoc
+            conversation here, a meeting from the Agenda</>
         )}
         {section === 'engagement' && engagementMode === 'people' && (
           <>Stakeholders &amp; the forums they sit in · a forum's cadence is what recency is

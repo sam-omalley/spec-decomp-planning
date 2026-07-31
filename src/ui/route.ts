@@ -12,9 +12,10 @@ import type { GraphMode } from './GraphView.tsx';
 export type Section = 'spec' | 'planning' | 'graph' | 'reporting' | 'engagement' | 'settings';
 export type PlanMode = 'outline' | 'table' | 'markdown';
 export type ReportMode = 'timeline' | 'metrics' | 'assignees' | 'concerns' | 'coverage';
-/** Engagement tracker sub-views (#163): the meeting agenda, and the roster
- *  of people and forums behind it. */
-export type EngagementMode = 'agenda' | 'people';
+/** Engagement tracker sub-views (#163): the meeting agenda, everything
+ *  outstanding across every forum, the comms log, and the roster of people
+ *  and forums behind them. */
+export type EngagementMode = 'agenda' | 'actions' | 'log' | 'people';
 export type { GraphMode };
 
 /** The full navigation state the URL encodes. */
@@ -52,7 +53,7 @@ const REPORT_MODES: readonly ReportMode[] = [
   'concerns',
   'coverage',
 ];
-const ENGAGEMENT_MODES: readonly EngagementMode[] = ['agenda', 'people'];
+const ENGAGEMENT_MODES: readonly EngagementMode[] = ['agenda', 'actions', 'log', 'people'];
 
 /** The active sub-view for a section, or null for a section with none (Spec). */
 export function subOf(state: RouteState): string | null {

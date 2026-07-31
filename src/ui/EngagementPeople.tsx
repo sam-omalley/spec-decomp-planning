@@ -9,15 +9,20 @@
  *
  * Everything here commits through `engagementStore.commit`, so each edit is
  * undoable and autosaved exactly like a graph edit. The mutations throw on
- * invalid input and a throwing commit would propagate, so inputs are
- * pre-validated at the edge here — same rule `SettingsView` follows.
+ * invalid input and a throwing commit would propagate, so commits go
+ * through `useEngagementRun`, which surfaces the message instead of
+ * failing silently.
+ *
+ * Each row also opens a **dossier** — their standing, everything live that
+ * concerns them, and their own contact history. That's the issue's
+ * "per-stakeholder view", and it belongs on the row it describes rather
+ * than in a fifth tab.
  */
 
 import { useState } from 'react';
 import { DateRangeEditor } from './DateRangeEditor.tsx';
 import { engagementStore, useWorkspace } from '../engagement/store.ts';
 import {
-  EngagementError,
   addForum,
   addPerson,
   createId,
@@ -31,7 +36,9 @@ import {
 } from '../engagement/workspace.ts';
 import { contactStatuses, forumStatuses } from '../engagement/recency.ts';
 import { todayIso } from '../engagement/workspace.ts';
+import { personDossier } from '../engagement/queries.ts';
 import type { DateRange, Person, Workspace } from '../engagement/types.ts';
+import { useEngagementRun } from './useEngagementRun.ts';
 
 /** Human phrase for a contact standing, so severity never rides on colour
  *  alone (the dot is a redundant cue, not the message). */
@@ -47,20 +54,9 @@ export function EngagementPeople() {
   const today = todayIso();
   const statuses = contactStatuses(workspace, today);
   const forumStanding = forumStatuses(workspace, today);
-  const [error, setError] = useState<string | null>(null);
-
-  /** Runs a mutation, surfacing an `EngagementError` as a banner instead of
-   *  letting it throw through the commit (which would fail silently to the
-   *  user). `coalesce` collapses a run of keystrokes into one undo step. */
-  function run(mutate: (ws: Workspace) => Workspace, coalesce?: string): void {
-    try {
-      engagementStore.commit(mutate, coalesce ? { coalesce } : undefined);
-      setError(null);
-    } catch (e) {
-      if (e instanceof EngagementError) setError(e.message);
-      else throw e;
-    }
-  }
+  const { run, error, dismiss } = useEngagementRun();
+  /** Which person's dossier is open; one at a time, view state only. */
+  const [openId, setOpenId] = useState<string | null>(null);
 
   /** Both adds drop in an empty row to type into, rather than a modal
    *  prompt — same pattern as the delivery team in Settings. */
@@ -96,7 +92,7 @@ export function EngagementPeople() {
       {error && (
         <div className="app-banner" role="alert">
           {error}
-          <button onClick={() => setError(null)}>Dismiss</button>
+          <button onClick={dismiss}>Dismiss</button>
         </div>
       )}
 
@@ -124,6 +120,14 @@ export function EngagementPeople() {
                   className={`engagement-person${archived ? ' engagement-person-archived' : ''}`}
                 >
                   <div className="engagement-person-main">
+                    <button
+                      className="agenda-row-btn engagement-disclose"
+                      aria-expanded={openId === person.id}
+                      title={openId === person.id ? 'Hide their detail' : 'Open items and history'}
+                      onClick={() => setOpenId(openId === person.id ? null : person.id)}
+                    >
+                      {openId === person.id ? '▾' : '▸'}
+                    </button>
                     <input
                       className="meta-input engagement-person-name"
                       type="text"
@@ -203,6 +207,7 @@ export function EngagementPeople() {
                       }
                     />
                   </label>
+                  {openId === person.id && <Dossier workspace={workspace} personId={person.id} today={today} />}
                 </li>
               );
             })}
@@ -310,6 +315,87 @@ export function EngagementPeople() {
           );
         })}
       </section>
+    </div>
+  );
+}
+
+/**
+ * One stakeholder's detail: what's live with them and when you last spoke.
+ * Read-only — editing an item belongs on the Agenda (in the context of the
+ * meeting you'd raise it at) or the Actions list, not buried in a roster
+ * row.
+ */
+function Dossier({
+  workspace,
+  personId,
+  today,
+}: {
+  workspace: Workspace;
+  personId: string;
+  today: string;
+}) {
+  const dossier = personDossier(workspace, personId, today);
+  if (dossier === null) return null;
+  const { status, actions, log } = dossier;
+  const mine = actions.filter((entry) => entry.item.ownerId === null);
+  const theirs = actions.filter((entry) => entry.item.ownerId !== null);
+
+  return (
+    <div className="person-dossier">
+      <p className="metric-hint">
+        {status.cadenceDays === null
+          ? 'In no forum — no contact cadence expected.'
+          : `Every ${status.cadenceDays}d · last contact ${status.lastContactAt?.slice(0, 10) ?? 'never'} · next due ${status.dueAt}`}
+      </p>
+      <div className="person-dossier-cols">
+        <div>
+          <h4>
+            Open with them <span className="agenda-section-count">{actions.length}</span>
+          </h4>
+          {actions.length === 0 ? (
+            <p className="metric-hint">Nothing outstanding.</p>
+          ) : (
+            <ul className="person-dossier-list">
+              {[...mine, ...theirs].map((entry) => (
+                <li key={entry.item.id}>
+                  <span
+                    className={`engagement-dot engagement-dot-${entry.severity}`}
+                    aria-hidden="true"
+                  />
+                  {entry.item.title}
+                  <span className="agenda-tag">
+                    {entry.item.ownerId === null
+                      ? entry.kind === 'to_raise'
+                        ? 'to raise'
+                        : 'mine'
+                      : 'theirs'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <h4>
+            Recent contact <span className="agenda-section-count">{log.length}</span>
+          </h4>
+          {log.length === 0 ? (
+            <p className="metric-hint">Never logged.</p>
+          ) : (
+            <ul className="person-dossier-list">
+              {log.slice(0, 5).map((entry) => (
+                <li key={entry.interaction.id}>
+                  <span className="log-date">{entry.interaction.at.slice(0, 10)}</span>
+                  <span className="log-forum">{entry.forumName ?? 'Ad-hoc'}</span>
+                  {entry.interaction.note && (
+                    <span className="person-dossier-note">{entry.interaction.note}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
