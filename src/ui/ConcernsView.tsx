@@ -9,7 +9,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useProjectGraph } from '../store/appStore.ts';
+import { useActiveProjectId, useProjectGraph } from '../store/appStore.ts';
+import { RaiseTopic } from './RaiseTopic.tsx';
 import { todayIso } from '../model/graph.ts';
 import {
   analyzeConcerns,
@@ -45,6 +46,9 @@ interface ConcernsViewProps {
 
 export function ConcernsView({ onReveal }: ConcernsViewProps = {}) {
   const graph = useProjectGraph();
+  // Stamped onto any topic raised from here, so the item can point back at
+  // the node even after you've switched project.
+  const activeProjectId = useActiveProjectId();
   const concerns = useMemo(() => analyzeConcerns(graph, todayIso()), [graph]);
 
   // Which severities are shown; all on by default. A pure projection over the
@@ -117,6 +121,20 @@ export function ConcernsView({ onReveal }: ConcernsViewProps = {}) {
               <span className="concern-kind">{KIND_LABEL[c.kind]}</span>
               <span className="concern-title">{c.title}</span>
               <span className="concern-detail">{c.detail}</span>
+              {/* Most of these are resolved by talking to someone, not by
+                  editing the plan — so hand it straight to the tracker.
+                  stopPropagation: the row itself navigates. */}
+              <span className="concern-raise" onClick={(e) => e.stopPropagation()}>
+                <RaiseTopic
+                  title={c.id === null ? `${KIND_LABEL[c.kind]}: ${c.title}` : c.title}
+                  details={`${KIND_LABEL[c.kind]} — ${c.detail}`}
+                  link={
+                    c.id === null
+                      ? null
+                      : { projectId: activeProjectId, nodeId: c.id, label: c.title }
+                  }
+                />
+              </span>
             </li>
           );
         })}

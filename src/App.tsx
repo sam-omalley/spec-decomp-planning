@@ -33,6 +33,9 @@ import { EngagementAgenda } from './ui/EngagementAgenda.tsx';
 import { EngagementLog } from './ui/EngagementLog.tsx';
 import { EngagementPeople } from './ui/EngagementPeople.tsx';
 import { engagementStore, useWorkspace } from './engagement/store.ts';
+import type { ProjectLink } from './engagement/types.ts';
+import { projectRegistry } from './store/appStore.ts';
+import { switchProject } from './store/projectActions.ts';
 import { datedFilename, downloadFile } from './ui/download.ts';
 import {
   hashFor,
@@ -233,6 +236,39 @@ export function App() {
     } else {
       setSection('spec');
     }
+  }
+
+  /**
+   * Follow an engagement item's soft project link (#163) back to the node
+   * it came from. The link crosses a store boundary and may point into a
+   * different project, so this may have to switch project first — and
+   * either end may have been deleted since, which is exactly why the link
+   * carries its own label and this reports rather than assumes.
+   */
+  async function openProjectLink(link: ProjectLink) {
+    if (link.projectId !== projectRegistry.getActiveId()) {
+      const known = projectRegistry.getProjects().some((p) => p.id === link.projectId);
+      if (!known) {
+        window.alert(`“${link.label}” is in a project that no longer exists.`);
+        return;
+      }
+      if (
+        !window.confirm(`“${link.label}” is in another project. Switch to it?`)
+      ) {
+        return;
+      }
+      try {
+        await switchProject(link.projectId);
+      } catch {
+        window.alert('Could not open that project.');
+        return;
+      }
+    }
+    if (!store.getState().nodes[link.nodeId]) {
+      window.alert(`“${link.label}” no longer exists in that project.`);
+      return;
+    }
+    reveal(link.nodeId);
   }
 
   // Selection is view state; heal it when the node disappears
@@ -579,8 +615,12 @@ export function App() {
         {section === 'reporting' && reportMode === 'assignees' && <AssigneeMetricsView />}
         {section === 'reporting' && reportMode === 'concerns' && <ConcernsView onReveal={reveal} />}
         {section === 'reporting' && reportMode === 'coverage' && <CoverageView onReveal={reveal} />}
-        {section === 'engagement' && engagementMode === 'agenda' && <EngagementAgenda />}
-        {section === 'engagement' && engagementMode === 'actions' && <EngagementActions />}
+        {section === 'engagement' && engagementMode === 'agenda' && (
+          <EngagementAgenda onOpenLink={openProjectLink} />
+        )}
+        {section === 'engagement' && engagementMode === 'actions' && (
+          <EngagementActions onOpenLink={openProjectLink} />
+        )}
         {section === 'engagement' && engagementMode === 'log' && <EngagementLog />}
         {section === 'engagement' && engagementMode === 'people' && <EngagementPeople />}
         {section === 'settings' && <SettingsView />}

@@ -19,7 +19,7 @@ import { addItem, createId, logInteraction, todayIso, updateItem } from '../enga
 import { agendaFor, type AgendaSectionKind } from '../engagement/agenda.ts';
 import { agendaMarkdown } from '../engagement/agendaMarkdown.ts';
 import { contactStatuses, forumStatuses } from '../engagement/recency.ts';
-import type { Item, Workspace } from '../engagement/types.ts';
+import type { Item, ProjectLink, Workspace } from '../engagement/types.ts';
 import type { NewItem } from '../engagement/workspace.ts';
 import { standingText } from './EngagementPeople.tsx';
 import { ItemControls } from './ItemControls.tsx';
@@ -48,7 +48,7 @@ interface DraftAction {
   parentId: string | null;
 }
 
-export function EngagementAgenda() {
+export function EngagementAgenda({ onOpenLink }: { onOpenLink?: (link: ProjectLink) => void } = {}) {
   const workspace = useWorkspace();
   const today = todayIso();
   const forumStanding = useMemo(() => forumStatuses(workspace, today), [workspace, today]);
@@ -270,6 +270,7 @@ export function EngagementAgenda() {
                       { key: createId(), title: '', ownerId: null, parentId: entry.item.id },
                     ])
                   }
+                  onOpenLink={onOpenLink}
                   run={run}
                 />
               ))}
@@ -429,6 +430,7 @@ function AgendaRow({
   raised,
   onToggleRaised,
   onAddAction,
+  onOpenLink,
   run,
 }: {
   item: Item;
@@ -438,6 +440,7 @@ function AgendaRow({
   raised: boolean;
   onToggleRaised: () => void;
   onAddAction: () => void;
+  onOpenLink?: (link: ProjectLink) => void;
   run: EngagementRun['run'];
 }) {
   return (
@@ -461,9 +464,14 @@ function AgendaRow({
         </span>
       )}
       {item.link && (
-        <span className="agenda-tag agenda-tag-link" title={`Linked to ${item.link.label}`}>
+        <button
+          className="agenda-tag agenda-tag-link"
+          title={`Open “${item.link.label}” in the plan`}
+          onClick={() => onOpenLink?.(item.link!)}
+          disabled={!onOpenLink}
+        >
           ⧉ {item.link.label}
-        </span>
+        </button>
       )}
       <button className="agenda-row-btn" title="Add an action under this item" onClick={onAddAction}>
         +↳
